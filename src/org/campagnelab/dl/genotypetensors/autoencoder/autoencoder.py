@@ -16,7 +16,7 @@ class AutoEncoder(nn.Module):
         encoder_list += [ nn.Linear(encoder_input_size, encoded_size) ]
         # Constrain the code towards a binary 1/0 code using a sigmoid:
         encoder_list += [ nn.Sigmoid()]
-        encoder = nn.Sequential(*encoder_list)
+        self.encoder = nn.Sequential(*encoder_list)
 
         decoder_list = []
         decoder_input_size = encoded_size
@@ -29,12 +29,14 @@ class AutoEncoder(nn.Module):
 
         decoder_list += [ nn.Linear(decoder_input_size,input_size), nn.ReLU()]
 
-        decoder = nn.Sequential(*decoder_list)
+        self.decoder = nn.Sequential(*decoder_list)
 
-        self.autoencoder = nn.Sequential( encoder,  decoder)
+
 
     def forward(self, input):
-        return self.autoencoder(input)
+        encoded=self.encoder(input)
+        decoded=self.decoder(encoded)
+        return decoded
 
 
 def create_autoencoder_model(model_name, problem, encoded_size=32):

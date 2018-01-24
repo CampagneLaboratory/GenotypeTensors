@@ -31,6 +31,7 @@ import torch
 # SOFTWARE.
 from org.campagnelab.dl.genotypetensors.autoencoder.Trainer_AE import Trainer_AE
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
+from org.campagnelab.dl.genotypetensors.autoencoder.sbi_classifier import create_classifier_model
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 
 if __name__ == '__main__':
@@ -69,7 +70,7 @@ if __name__ == '__main__':
                         help='The model to instantiate. One of VGG16,	ResNet18, ResNet50, ResNet101,ResNeXt29, ResNeXt29, DenseNet121, PreActResNet18, DPN92')
     parser.add_argument('--problem', default="genotyping:basename", type=str,
                         help='The genotyping problem dataset name. basename is used to locate file named basename-train.vec, basename-validation.vec, basename-unlabeled.vec')
-    parser.add_argument('--mode', help='Training mode: supervised',
+    parser.add_argument('--mode', help='Training mode: autoencoder, supervised_somatic',
                         default="supervised")
     parser.add_argument("--reset-lr-every-n-epochs", type=int,
                         help='Reset learning rate to initial value every n epochs.')
@@ -116,20 +117,25 @@ if __name__ == '__main__':
     def train_once(args, problem, use_cuda):
         problem.describe()
 
-        if args.mode == "supervised":
-            args.split = None
-
         model_trainer = Trainer_AE(args=args, problem=problem, use_cuda=use_cuda)
         torch.manual_seed(args.seed)
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
 
-        model_trainer.init_model(create_model_function=
-                                 (lambda model_name, problem: create_autoencoder_model(model_name,
-                                                                                       problem, encoded_size=args.encoded_size)))
 
-        if args.mode == "supervised":
+        if args.mode == "autoencoder":
+            model_trainer.init_model(create_model_function=
+                                     (lambda model_name, problem: create_autoencoder_model(model_name,
+                                                                                           problem,
+                                                                                           encoded_size=args.encoded_size)))
             return model_trainer.training_supervised()
+        elif args.mode == "supervised_somatic":
+            model_trainer.init_model(create_model_function=
+                                     (lambda model_name, problem: create_classifier_model(model_name,
+                                                                                           problem,
+                                                                                           encoded_size=args.encoded_size)))
+            return model_trainer.training_supervised()
+
         else:
             print("unknown mode specified: " + args.mode)
             exit(1)
