@@ -4,7 +4,6 @@ import sys
 
 from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorPropertiesReader
 from org.campagnelab.dl.genotypetensors.VectorReaderText import VectorReaderText
-from operator import itemgetter
 
 import os
 
@@ -20,8 +19,8 @@ class VectorReader:
         properties_path = "{}.vecp".format(path_to_vector.split(os.extsep)[0])
         self.vector_reader_properties = VectorPropertiesReader(properties_path)
         self.sample_id = sample_id
-        self.vector_ids = list(map(itemgetter(0), filter(lambda x: x[1]["vectorName"] in vector_names,
-                                                         enumerate(self.vector_reader_properties.get_vectors()))))
+        self.vector_ids = [self.vector_reader_properties.get_vector_idx_from_name(vector_name)
+                           for vector_name in vector_names]
         self.assert_example_ids = assert_example_ids
         self.return_example_id = return_example_id
         self.curr_example = None

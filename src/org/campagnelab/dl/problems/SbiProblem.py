@@ -17,16 +17,10 @@ class SbiGenotypingProblem(Problem):
         return "genotyping:" + self.basename
 
     def input_size(self, input_name):
-        # TODO: implement for input_name = vector_name
-        #vector_index = self.meta_data.get
-        #self.meta_data.get_vector_dimensions_idx()
-        return (361)
+        return self.meta_data.get_vector_dimensions_from_name(input_name)
 
     def output_size(self, output_name):
-        # TODO: implement for output_name = vector_name
-        #vector_index = self.meta_data.get
-        #self.meta_data.get_vector_dimensions_idx()
-        return (5)
+        return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
         return GenotypeDataset(self.basename + "-train.vec", vector_names=["input", "softmaxGenotype"])
