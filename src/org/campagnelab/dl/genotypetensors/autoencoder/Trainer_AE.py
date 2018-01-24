@@ -162,13 +162,14 @@ class Trainer_AE:
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
 
-        for batch_idx, (inputs, targets) in enumerate(train_loader_subset):
+        for batch_idx, dict in enumerate(train_loader_subset):
+            inputs=dict["input"]
             num_batches += 1
 
             if self.use_cuda:
-                inputs, targets = inputs.cuda(), targets.cuda()
+                inputs, targets = inputs.cuda()
 
-            inputs, targets = Variable(inputs), Variable(targets, requires_grad=False)
+            inputs, targets = Variable(inputs), Variable(inputs, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
             self.net.train()
@@ -210,19 +211,18 @@ class Trainer_AE:
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
 
-        for batch_idx, (inputs, targets) in enumerate(self.problem.test_loader_range(0, self.args.num_validation)):
-
+        for batch_idx, dict in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
+            inputs=dict["input"]
             if self.use_cuda:
-                inputs, targets = inputs.cuda(), targets.cuda()
-            inputs, targets = Variable(inputs, volatile=True), Variable(targets, volatile=True)
+                inputs, targets = inputs.cuda()
+            inputs, targets = Variable(inputs, volatile=True), Variable(inputs, volatile=True)
             outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
 
             performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", loss.data[0], outputs, targets)
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", loss.data[0], outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_loss", "test_accuracy"]))
+                         performance_estimators.progress_message(["test_loss"]))
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break

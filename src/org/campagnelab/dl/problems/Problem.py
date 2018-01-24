@@ -1,6 +1,8 @@
 import numpy
 import torch
 
+from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import SmallerDataset
+
 
 class Problem:
     def __init__(self, mini_batch_size=128):
@@ -54,7 +56,10 @@ class Problem:
     def train_loader_subset_range(self, start, end):
         """Returns the torch dataloader over the training set, shuffled,
         but limited to the example range start-end."""
-        return self.train_loader_subset(range(start, end))
+        if start==0:
+            return self.loader_for_dataset(SmallerDataset(delegate=self.train_set(), new_size=end))
+        else:
+            return self.train_loader_subset(range(start, end))
 
     def train_loader_subset(self, indices):
         """Returns the torch dataloader over the training set, shuffled,
@@ -73,7 +78,10 @@ class Problem:
     def validation_loader_range(self, start, end):
         """Returns the torch dataloader over the test set, limiting to the examples
         identified by the indices. """
-        return self.validation_loader_subset(range(start,end))
+        if start==0:
+            return self.loader_for_dataset(SmallerDataset(delegate=self.validation_set(), new_size=end))
+        else:
+            return self.validation_loader_subset(range(start,end))
 
     def unlabeled_loader(self):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
