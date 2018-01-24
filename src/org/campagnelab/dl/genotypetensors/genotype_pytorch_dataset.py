@@ -1,7 +1,7 @@
 
 from torchnet.dataset.dataset import Dataset
 
-from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
+from org.campagnelab.dl.genotypetensors import VectorReader
 
 
 class GenotypeDataset(Dataset):
