@@ -167,7 +167,7 @@ class Trainer_AE:
             num_batches += 1
 
             if self.use_cuda:
-                inputs, targets = inputs.cuda()
+                inputs = inputs.cuda()
 
             inputs, targets = Variable(inputs), Variable(inputs, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
@@ -214,7 +214,8 @@ class Trainer_AE:
         for batch_idx, dict in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
             inputs=dict["input"]
             if self.use_cuda:
-                inputs, targets = inputs.cuda()
+                inputs = inputs.cuda()
+
             inputs, targets = Variable(inputs, volatile=True), Variable(inputs, volatile=True)
             outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
