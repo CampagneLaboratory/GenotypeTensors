@@ -43,7 +43,7 @@ class Trainer_AE:
         :param use_cuda When True, use the GPU.
          """
 
-        self.max_regularization_examples = args.num_shaving if hasattr(args, "num_unlabeled") else 0
+        self.max_regularization_examples = args.num_unlabeled if hasattr(args, "num_unlabeled") else 0
         self.max_validation_examples = args.num_validation if hasattr(args, "num_validation") else 0
         self.max_training_examples = args.num_training if hasattr(args, "num_training") else 0
         max_examples_per_epoch = args.max_examples_per_epoch if hasattr(args, 'max_examples_per_epoch') else None
@@ -59,9 +59,9 @@ class Trainer_AE:
         self.net = None
         self.optimizer_training = None
         self.scheduler_train = None
-        self.unsuploader = self.problem.reg_loader()
+        self.unsuploader = self.problem.unlabeled_loader()
         self.trainloader = self.problem.train_loader()
-        self.testloader = self.problem.test_loader()
+        self.testloader = self.problem.validation_loader()
         self.is_parallel = False
         self.best_performance_metrics = None
         self.failed_to_improve = 0
@@ -83,17 +83,17 @@ class Trainer_AE:
         training_set_length = (len(self.problem.train_loader())) * mini_batch_size
         if hasattr(args, 'num_training') and args.num_training > training_set_length:
             args.num_training = training_set_length
-        unsup_set_length = (len(self.problem.reg_loader())) * mini_batch_size
+        unsup_set_length = (len(self.problem.unlabeled_loader())) * mini_batch_size
         if hasattr(args, 'num_shaving') and args.num_shaving > unsup_set_length:
             args.num_shaving = unsup_set_length
-        test_set_length = (len(self.problem.test_loader())) * mini_batch_size
+        test_set_length = (len(self.problem.validation_loader())) * mini_batch_size
         if hasattr(args, 'num_validation') and args.num_validation > test_set_length:
             args.num_validation = test_set_length
 
         self.max_regularization_examples = args.num_shaving if hasattr(args, 'num_shaving') else 0
         self.max_validation_examples = args.num_validation if hasattr(args, 'num_validation') else 0
         self.max_training_examples = args.num_training if hasattr(args, 'num_training') else 0
-        self.unsuploader = self.problem.reg_loader()
+        self.unsuploader = self.problem.unlabeled_loader()
         model_built = False
         self.best_performance_metrics = None
         self.best_model = None

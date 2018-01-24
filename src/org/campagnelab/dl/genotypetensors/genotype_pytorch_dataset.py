@@ -2,6 +2,12 @@ from torchnet.dataset.dataset import Dataset
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 
+class EmptyDataset(Dataset):
+    def __len__(self):
+        return 0
+
+    def __getitem__(self, idx):
+        pass
 
 class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""

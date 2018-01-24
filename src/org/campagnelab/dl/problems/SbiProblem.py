@@ -1,7 +1,9 @@
+from pathlib import Path
+
 import torch
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
-from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset
+from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset
 from org.campagnelab.dl.problems.Problem import Problem
 
 
@@ -12,7 +14,7 @@ class SbiGenotypingProblem(Problem):
     """
 
     def name(self):
-        return "sbi:" + self.basename
+        return "genotyping:" + self.basename
 
     def input_size(self, input_name):
         # TODO: implement for input_name = vector_name
@@ -30,16 +32,22 @@ class SbiGenotypingProblem(Problem):
         return GenotypeDataset(self.basename + "-train.vec", "input", "softmaxGenotype")
 
     def unlabeled_set(self):
-        return GenotypeDataset(self.basename + "-unlabeled.vec", "input", "softmaxGenotype")
+        if self.file_exists(self.basename + "-unlabeled.vec"):
+            return GenotypeDataset(self.basename + "-unlabeled.vec", "input", "softmaxGenotype")
+        else:
+            return EmptyDataset()
 
     def validation_set(self):
-        return GenotypeDataset(self.basename + "-validation.vec", "input", "softmaxGenotype")
+        if self.file_exists(self.basename + "-validation.vec"):
+            return GenotypeDataset(self.basename + "-validation.vec", "input", "softmaxGenotype")
+        else:
+            return EmptyDataset()
 
     def __init__(self, mini_batch_size, code, num_workers=0):
         super().__init__(mini_batch_size)
-        self.basename = code[len("sbi:"):]
+        self.basename = code[len("genotyping:"):]
         self.num_workers = num_workers
-        self.meta_data = VectorReader(self.basename + "-train.vec").vector_reader_properties
+        self.meta_data = VectorReader(self.basename + "-train.vec", False,[]).vector_reader_properties
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
@@ -80,3 +88,6 @@ class SbiGenotypingProblem(Problem):
 
     def loss_function(self, output_name):
         return torch.nn.CrossEntropyLoss()
+
+    def file_exists(self, filename):
+        return Path(filename).is_file()
