@@ -39,6 +39,8 @@ class AutoEncoder(nn.Module):
 
 def create_autoencoder_model(model_name, problem, encoded_size=32):
     input_size = problem.input_size("input")
-    autoencoder = AutoEncoder(input_size=input_size, encoded_size=encoded_size)
+    assert len(input_size)==1, "AutoEncoders required 1D input features."
+
+    autoencoder = AutoEncoder(input_size=input_size[0], encoded_size=encoded_size)
     print("model" +str(autoencoder))
     return autoencoder

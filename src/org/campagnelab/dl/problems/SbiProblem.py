@@ -7,14 +7,9 @@ from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import Genotype
 from org.campagnelab.dl.problems.Problem import Problem
 
 
-class SbiGenotypingProblem(Problem):
-    """A problem that exposes a set of sbi files converted to .vec/.vecp format. Files must
-    be named using the convention: basename-train.vec, basename-validation.vec basename-unlabeled.vec
-    and have associated .vecp meta-data files.
-    """
-
-    def name(self):
-        return "genotyping:" + self.basename
+class SbiProblem(Problem):
+    def get_vector_names(self):
+        return []
 
     def input_size(self, input_name):
         return self.meta_data.get_vector_dimensions_from_name(input_name)
@@ -23,23 +18,23 @@ class SbiGenotypingProblem(Problem):
         return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
-        return GenotypeDataset(self.basename + "-train.vec", vector_names=["input", "softmaxGenotype"])
+        return GenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
 
     def unlabeled_set(self):
         if self.file_exists(self.basename + "-unlabeled.vec"):
-            return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=[ "input", "softmaxGenotype"])
+            return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
-            return GenotypeDataset(self.basename + "-validation.vec",  vector_names=["input", "softmaxGenotype"])
+            return GenotypeDataset(self.basename + "-validation.vec",  vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
 
     def __init__(self, mini_batch_size, code, num_workers=0):
         super().__init__(mini_batch_size)
-        self.basename = code[len("genotyping:"):]
+        self.basename = code[len(self.basename_prefix()):]
         self.num_workers = num_workers
         self.meta_data = VectorReader(self.basename + "-train.vec", False, vector_names=[]).vector_reader_properties
 
@@ -85,3 +80,34 @@ class SbiGenotypingProblem(Problem):
 
     def file_exists(self, filename):
         return Path(filename).is_file()
+
+    def basename_prefix(self):
+        return None
+
+class SbiSomaticProblem(SbiProblem):
+    def name(self):
+        return self.basename_prefix() + self.basename
+
+    def get_vector_names(self):
+        return ["input", "isBaseMutated", "somaticFrequency"]
+
+    def basename_prefix(self):
+        return "somatic:"
+
+
+class SbiGenotypingProblem(SbiProblem):
+    """A problem that exposes a set of sbi files converted to .vec/.vecp format. Files must
+    be named using the convention: basename-train.vec, basename-validation.vec basename-unlabeled.vec
+    and have associated .vecp meta-data files.
+    """
+
+    def name(self):
+        return self.basename_prefix() + self.basename
+
+    def basename_prefix(self):
+        return "genotyping:"
+
+    def get_vector_names(self):
+        return ["input", "softmaxGenotype"]
+
+

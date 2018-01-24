@@ -31,7 +31,7 @@ import torch
 # SOFTWARE.
 from org.campagnelab.dl.genotypetensors.autoencoder.Trainer_AE import Trainer_AE
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
-from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem
+from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 
 if __name__ == '__main__':
 
@@ -96,7 +96,11 @@ if __name__ == '__main__':
 
     if args.problem.startswith("genotyping:"):
         problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem)
+    elif args.problem.startswith("somatic:"):
+        problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem)
     else:
+
+
         print("Unsupported problem: " + args.problem)
         exit(1)
 
