@@ -7,7 +7,6 @@ import string
 import sys
 
 import torch
-from org.campagnelab.dl.pytorch.images.models import *
 
 # MIT License
 #
@@ -30,7 +29,7 @@ from org.campagnelab.dl.pytorch.images.models import *
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from org.campagnelab.dl.genotypetensors.autoencoder.TrainModelUnsupMixup import Trainer_AE
+from org.campagnelab.dl.genotypetensors.autoencoder.Trainer_AE import Trainer_AE
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem
 
@@ -95,8 +94,8 @@ if __name__ == '__main__':
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
-    if args.problem.startsWith("genotyping:"):
-        problem = SbiGenotypingProblem(args.mini_batch_size)
+    if args.problem.startswith("genotyping:"):
+        problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem)
     else:
         print("Unsupported problem: " + args.problem)
         exit(1)
@@ -120,8 +119,9 @@ if __name__ == '__main__':
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
 
-        model_trainer.init_model(create_model_function=(lambda model_name, problem: create_autoencoder_model(model_name,
-                                                                                                            problem, output_size=32)))
+        model_trainer.init_model(create_model_function=
+                                 (lambda model_name, problem: create_autoencoder_model(model_name,
+                                                                                       problem, encoded_size=32)))
 
         if args.mode == "supervised":
             return model_trainer.training_supervised()
@@ -129,7 +129,5 @@ if __name__ == '__main__':
             print("unknown mode specified: " + args.mode)
             exit(1)
 
-
-    if args.cross_validation_folds is None:
-        train_once(args, problem, use_cuda)
-        exit(0)
+    train_once(args, problem, use_cuda)
+    exit(0)

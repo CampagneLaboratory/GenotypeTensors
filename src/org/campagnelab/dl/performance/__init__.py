@@ -1,2 +1,2 @@
-import org.campagnelab.dl.performance.PerformanceEstimator.PerformanceEstimator
-import org.campagnelab.dl.performance.PerformanceEstimator.PerformanceList
+import org.campagnelab.dl.performance.PerformanceEstimator
+import org.campagnelab.dl.performance.PerformanceList
