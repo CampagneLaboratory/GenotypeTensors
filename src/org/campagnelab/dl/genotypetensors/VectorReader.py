@@ -6,6 +6,8 @@ from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorProp
 from org.campagnelab.dl.genotypetensors.VectorReaderText import VectorReaderText
 from operator import itemgetter
 
+import os
+
 
 class VectorReader:
     def __init__(self, path_to_vector, sample_id, vector_names, assert_example_ids=False, return_example_id=False):
@@ -15,7 +17,8 @@ class VectorReader:
         :param vector_names: names of vector VectorReader should read
         :param assert_example_ids: If True, test that example ids never repeat.
         """
-        self.vector_reader_properties = VectorPropertiesReader("{}p".format(path_to_vector))
+        properties_path = "{}.vecp".format(path_to_vector.split(os.extsep)[0])
+        self.vector_reader_properties = VectorPropertiesReader(properties_path)
         self.sample_id = sample_id
         self.vector_ids = list(map(itemgetter(0), filter(lambda x: x[1]["vectorName"] in vector_names,
                                                          enumerate(self.vector_reader_properties.get_vectors()))))
@@ -27,7 +30,8 @@ class VectorReader:
         version_number = self.vector_reader_properties.get_version_number()
         if version_number[0] == 0 and version_number[1] < 2:
             raise ValueError("Version number too low to be parsed by reader")
-        if self.vector_reader_properties.get_vector_file_type() == "text":
+        vector_file_type = self.vector_reader_properties.get_vector_file_type()
+        if vector_file_type == "text" or vector_file_type == "gzipped+text":
             self.vector_reader = VectorReaderText(path_to_vector, self.vector_reader_properties)
         else:
             raise NotImplementedError
@@ -40,13 +44,15 @@ class VectorReader:
             while True:
                 next_vector_line = self.vector_reader.get_next_vector_line()
                 if self.curr_example is None:
-                    self.curr_example = ExampleVectorLines(next_vector_line.line_example_id, self.vector_ids, self.sample_id)
+                    self.curr_example = ExampleVectorLines(next_vector_line.line_example_id, self.vector_ids,
+                                                           self.sample_id)
                 if self.curr_example.same_example(next_vector_line.line_example_id):
                     self.curr_example.add_vector_line(next_vector_line)
                 else:
                     if self.assert_example_ids:
                         if next_vector_line.line_example_id in self.processed_example_ids:
-                            raise RuntimeError("Example ID % already processed".format(next_vector_line.line_example_id))
+                            raise RuntimeError("Example ID % already processed".format(
+                                next_vector_line.line_example_id))
                         self.processed_example_ids.add(self.curr_example.example_id)
                     tuples = self.curr_example.get_tuples(self.return_example_id)
                     self.curr_example.add_vector_line(next_vector_line, clear=True,
@@ -112,7 +118,7 @@ if __name__ == "__main__":
 
 
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("-i", "--input", help=".vec file to read in", type=str, required=True)
+    arg_parser.add_argument("-i", "--input", help=".vec or .vec.gz file to read in", type=str, required=True)
     arg_parser.add_argument("-s", "--sample-id", help="sample ID to use", type=int, default=0)
     arg_parser.add_argument("-v", "--vector_names", help="vector names to use", type=str, nargs="+")
     arg_parser.add_argument("-l", "--limit", help="Maximum number of examples to print", type=int, default=sys.maxsize)

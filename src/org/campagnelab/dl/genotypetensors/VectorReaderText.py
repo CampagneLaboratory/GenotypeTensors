@@ -1,12 +1,16 @@
 from org.campagnelab.dl.genotypetensors.VectorReaderBase import VectorReaderBase, VectorLine
 
 import numpy as np
+import gzip
 
 
 class VectorReaderText(VectorReaderBase):
     def __init__(self, path_to_vector, vector_reader_properties):
         super().__init__(path_to_vector, vector_reader_properties)
-        self.vector_fp = open(path_to_vector)
+        if self.vector_properties.get_vector_file_type() == "gzipped+text":
+            self.vector_fp = gzip.open(self.path_to_vector, "rb")
+        else:
+            self.vector_fp = open(path_to_vector, "r")
         self.processed_example_ids = set([])
 
     def get_next_vector_line(self):
