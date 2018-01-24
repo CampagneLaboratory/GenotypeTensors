@@ -42,6 +42,9 @@ if __name__ == '__main__':
     parser.add_argument('--constant-learning-rates', action='store_true',
                         help='Use constant learning rates, not schedules.')
     parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=128)
+    parser.add_argument('--encoded-size', type=int,
+                        help='Size the auto-encoder compresses the input to. The number of floats used '
+                             'to represent the encoded data.', default=32)
     parser.add_argument('--num-epochs', '--max-epochs', type=int,
                         help='Number of epochs to run before stopping. Additional epochs when --resume.', default=200)
     parser.add_argument('--num-training', '-n', type=int, help='Maximum number of training examples to use.',
@@ -99,8 +102,6 @@ if __name__ == '__main__':
     elif args.problem.startswith("somatic:"):
         problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem)
     else:
-
-
         print("Unsupported problem: " + args.problem)
         exit(1)
 
@@ -125,13 +126,14 @@ if __name__ == '__main__':
 
         model_trainer.init_model(create_model_function=
                                  (lambda model_name, problem: create_autoencoder_model(model_name,
-                                                                                       problem, encoded_size=32)))
+                                                                                       problem, encoded_size=args.encoded_size)))
 
         if args.mode == "supervised":
             return model_trainer.training_supervised()
         else:
             print("unknown mode specified: " + args.mode)
             exit(1)
+
 
     train_once(args, problem, use_cuda)
     exit(0)
