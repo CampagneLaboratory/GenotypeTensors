@@ -70,4 +70,4 @@ bin/train-autoencoder.sh --mode supervised_somatic \
 Note that we changed both the mode (now supervised_somatic) and the the dataset, 
 now somatic:dataset2. Training a somatic supervised model requires specific outputs in 
 the .vec files, which are produced by somatic feature mappers in the variationanalysis 
-project (and by the DNANexus sbi to somatic vec app).
+project (and by the DNANexus **Convert Somatic .sbi to Tensors** app).
