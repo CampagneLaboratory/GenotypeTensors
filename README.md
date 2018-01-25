@@ -1,6 +1,6 @@
 # GenotypeTensors
-This project provides tools to load the vectorized genotype information files (.vec/.vecp) produced with goby3 
-and variation analysis. It also demonstrates how to train deep-learning models using information in these files 
+This project provides tools to load the vectorized genotype information files (.vec/.vecp) produced with [goby3](https://github.com/CampagneLaboratory/goby3)
+and [variationanalysis](https://github.com/CampagneLaboratory/). It also demonstrates how to train deep-learning models using information in these files
 with pytorch.
 
 # Installation
