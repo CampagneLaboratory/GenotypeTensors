@@ -5,6 +5,7 @@ import sys
 import itertools
 
 from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorPropertiesReader
+from org.campagnelab.dl.genotypetensors.VectorReaderBinary import VectorReaderBinary
 from org.campagnelab.dl.genotypetensors.VectorReaderText import VectorReaderText
 
 import os
@@ -36,6 +37,8 @@ class VectorReader:
         vector_file_type = self.vector_reader_properties.get_vector_file_type()
         if vector_file_type == "text" or vector_file_type == "gzipped+text":
             self.vector_reader = VectorReaderText(path_to_vector, self.vector_reader_properties)
+        elif vector_file_type == "binary":
+            self.vector_reader = VectorReaderBinary(path_to_vector, self.vector_reader_properties)
         else:
             raise NotImplementedError
 
