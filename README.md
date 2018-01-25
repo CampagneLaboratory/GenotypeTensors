@@ -1,6 +1,6 @@
-#GenotypeTensors
-This project provides tools to load the vectorized genotype information files (.vec/.vecp) produced with goby3 
-and variation analysis. It also demonstrates how to train deep-learning models using information in these files 
+# GenotypeTensors
+This project provides tools to load the vectorized genotype information files (.vec/.vecp) produced with [goby3](https://github.com/CampagneLaboratory/goby3)
+and [variationanalysis](https://github.com/CampagneLaboratory/). It also demonstrates how to train deep-learning models using information in these files
 with pytorch.
 
 # Installation
@@ -21,7 +21,6 @@ Common to all platforms:
 ````bash
 pip install torchvision
 pip install git+https://github.com/pytorch/tnt.git@master
-export UREG=<install-dir>/ureg/
 ````
 
 
@@ -41,10 +40,16 @@ bin/train-autoencoder.sh --mode autoencoder \
 ```
 
 The model will be trained for 20 epochs. 
-Best models are saved as checkpoints under the checkpoint directory.
-You can monitor the performance metrics during training in the files:
+Best models are saved as checkpoints under the checkpoint directory, using the provided --checkpoint-key.
+
+You can monitor the performance metrics during training with these files:
 - all-perfs-GENOTYPE_AUTOENCODER_1.tsv
 - best-perfs-GENOTYPE_AUTOENCODER_1.tsv (restricted to performance of best models, up to latest training epoch.)
+- args-GENOTYPE_AUTOENCODER_1 (contains exact command line used to train the model, useful for reproducing previous runs,
+    includes random seed)
+
+If you do not provide --checkpoint-key argument, a random one is generated and saved in args-*.
+This is convenient to perform hyperparameter searches.
 
 ## Training somatic models
 Instead of training an auto-encoder, the code base also supports training a model to call somatic mutations. 
@@ -65,4 +70,4 @@ bin/train-autoencoder.sh --mode supervised_somatic \
 Note that we changed both the mode (now supervised_somatic) and the the dataset, 
 now somatic:dataset2. Training a somatic supervised model requires specific outputs in 
 the .vec files, which are produced by somatic feature mappers in the variationanalysis 
-project (and by the DNANexus sbi to somatic vec app).
+project (and by the DNANexus **Convert Somatic .sbi to Tensors** app).

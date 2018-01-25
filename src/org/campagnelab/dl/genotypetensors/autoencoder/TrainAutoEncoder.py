@@ -29,9 +29,11 @@ import torch
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from org.campagnelab.dl.genotypetensors.autoencoder.Trainer_AE import Trainer_AE
+
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
+from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_trainer import GenotypingAutoEncoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.sbi_classifier import create_classifier_model
+from org.campagnelab.dl.genotypetensors.autoencoder.somatic_trainer import SomaticTrainer
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 
 if __name__ == '__main__':
@@ -97,7 +99,7 @@ if __name__ == '__main__':
     is_parallel = False
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-
+    problem=None
     if args.problem.startswith("genotyping:"):
         problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem)
     elif args.problem.startswith("somatic:"):
@@ -116,29 +118,38 @@ if __name__ == '__main__':
 
     def train_once(args, problem, use_cuda):
         problem.describe()
+        training_loop_method = None
+        testing_loop_method = None
+        if args.mode == "autoencoder":
 
-        model_trainer = Trainer_AE(args=args, problem=problem, use_cuda=use_cuda)
+            model_trainer = GenotypingAutoEncoderTrainer(args=args, problem=problem, use_cuda=use_cuda)
+            model_trainer.init_model(create_model_function=
+                                     (lambda model_name, problem: create_autoencoder_model(model_name,
+                                                                                           problem,
+                                                                                           encoded_size=args.encoded_size)))
+            training_loop_method = model_trainer.train_autoencoder
+            testing_loop_method = model_trainer.test_autoencoder
+
+        elif args.mode == "supervised_somatic":
+            model_trainer = SomaticTrainer(args=args, problem=problem, use_cuda=use_cuda)
+            model_trainer.init_model(create_model_function=
+                                     (lambda model_name, problem: create_classifier_model(model_name,
+                                                                                          problem,
+                                                                                          encoded_size=args.encoded_size)))
+            training_loop_method = model_trainer.train_autoencoder
+            testing_loop_method = model_trainer.test_somatic_classifer
+        else:
+            model_trainer=None
+            print("unknown mode specified: " + args.mode)
+            exit(1)
+
         torch.manual_seed(args.seed)
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
 
 
-        if args.mode == "autoencoder":
-            model_trainer.init_model(create_model_function=
-                                     (lambda model_name, problem: create_autoencoder_model(model_name,
-                                                                                           problem,
-                                                                                           encoded_size=args.encoded_size)))
-            return model_trainer.training_supervised()
-        elif args.mode == "supervised_somatic":
-            model_trainer.init_model(create_model_function=
-                                     (lambda model_name, problem: create_classifier_model(model_name,
-                                                                                           problem,
-                                                                                           encoded_size=args.encoded_size)))
-            return model_trainer.training_supervised()
-
-        else:
-            print("unknown mode specified: " + args.mode)
-            exit(1)
+        return model_trainer.training_loops(training_loop_method=training_loop_method,
+                                            testing_loop_method=testing_loop_method)
 
 
     train_once(args, problem, use_cuda)
