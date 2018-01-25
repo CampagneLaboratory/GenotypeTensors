@@ -1,5 +1,6 @@
 import os
 
+import sys
 import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
@@ -52,7 +53,7 @@ class Trainer_AE:
 
         self.args = args
         self.problem = problem
-        self.best_acc = 0
+        self.best_test_loss= sys.maxsize
         self.start_epoch = 0
         self.use_cuda = use_cuda
         self.mini_batch_size = problem.mini_batch_size()
@@ -114,7 +115,7 @@ class Trainer_AE:
             if checkpoint is not None:
 
                 self.net = checkpoint['net']
-                self.best_acc = checkpoint['acc']
+                self.best_test_loss = checkpoint['best_test_loss']
                 self.start_epoch = checkpoint['epoch']
                 self.best_model = checkpoint['best-model']
                 self.best_model_confusion_matrix = checkpoint['confusion-matrix']
@@ -354,7 +355,7 @@ class Trainer_AE:
         return performance_estimators
 
     def log_performance_header(self, performance_estimators, kind="perfs"):
-        global best_test_loss
+
         if (self.args.resume):
             return
 
@@ -388,32 +389,21 @@ class Trainer_AE:
         if self.best_performance_metrics is None:
             self.best_performance_metrics = performance_estimators
 
-        metric = performance_estimators.get_metric("test_accuracy")
-        if metric is not None and metric > self.best_acc:
+        metric = performance_estimators.get_metric("test_loss")
+        if metric is not None and metric < self.best_test_loss:
             self.failed_to_improve = 0
 
             with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write(" ".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
-        if metric is not None and metric >= self.best_acc:
+        if metric is not None and metric <= self.best_test_loss:
 
             self.save_checkpoint(epoch, metric)
             self.best_performance_metrics = performance_estimators
-            if self.args.mode == "mixup":
-                if self.args.two_models:
-                    # we load the best model we saved previously as a second model:
-                    self.best_model = self.load_checkpoint()
-                    if self.use_cuda:
-                        self.best_model = self.best_model.cuda(self.args.second_gpu_index)
-                else:
-                    self.best_model = self.net
+            self.best_model = self.net
 
-                self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
-                if self.use_cuda:
-                    self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda(self.args.second_gpu_index)
-
-        if metric is not None and metric <= self.best_acc:
+        if metric is not None and metric <= self.best_test_loss:
             self.failed_to_improve += 1
             if self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
@@ -425,7 +415,7 @@ class Trainer_AE:
 
         # Save checkpoint.
 
-        if acc > self.best_acc:
+        if acc < self.best_test_loss:
             print('Saving..')
             model = self.net
             model.eval()
@@ -433,13 +423,13 @@ class Trainer_AE:
             state = {
                 'net': model.module if self.is_parallel else model,
                 'best-model': self.best_model,
-                'acc': acc,
+                'best_test_loss': acc,
                 'epoch': epoch,
             }
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
             torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
-            self.best_acc = acc
+            self.best_test_loss = acc
 
     def load_checkpoint(self):
 
