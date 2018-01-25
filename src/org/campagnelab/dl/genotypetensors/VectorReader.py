@@ -2,6 +2,8 @@ import argparse
 
 import sys
 
+import itertools
+
 from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorPropertiesReader
 from org.campagnelab.dl.genotypetensors.VectorReaderText import VectorReaderText
 
@@ -23,7 +25,9 @@ class VectorReader:
                            for vector_name in vector_names]
         self.assert_example_ids = assert_example_ids
         self.return_example_id = return_example_id
-        self.curr_example = None
+        # All of the possible vector and sample ID combinations for a record
+        self.sample_vector_ids = set(itertools.product(range(len(self.vector_reader_properties.get_samples())),
+                                                       range(len(self.vector_reader_properties.get_vectors()))))
         if self.assert_example_ids:
             self.processed_example_ids = set([])
         version_number = self.vector_reader_properties.get_version_number()
@@ -39,31 +43,28 @@ class VectorReader:
         return self
 
     def __next__(self):
-        try:
-            while True:
-                next_vector_line = self.vector_reader.get_next_vector_line()
-                if self.curr_example is None:
-                    self.curr_example = ExampleVectorLines(next_vector_line.line_example_id, self.vector_ids,
-                                                           self.sample_id)
-                if self.curr_example.same_example(next_vector_line.line_example_id):
-                    self.curr_example.add_vector_line(next_vector_line)
-                else:
-                    if self.assert_example_ids:
-                        if next_vector_line.line_example_id in self.processed_example_ids:
-                            raise RuntimeError("Example ID % already processed".format(
+        curr_example = None
+        processed_vector_sample_ids = set()
+        for _ in range(len(self.sample_vector_ids)):
+            next_vector_line = self.vector_reader.get_next_vector_line()
+            if curr_example is None:
+                curr_example = ExampleVectorLines(next_vector_line.line_example_id, self.vector_ids, self.sample_id)
+                if self.assert_example_ids and curr_example.example_id in self.processed_example_ids:
+                    raise RuntimeError("Example ID % already processed".format(
                                 next_vector_line.line_example_id))
-                        self.processed_example_ids.add(self.curr_example.example_id)
-                    tuples = self.curr_example.get_tuples(self.return_example_id)
-                    self.curr_example.add_vector_line(next_vector_line, clear=True,
-                                                      new_example_id=next_vector_line.line_example_id)
-                    return tuples
-        except StopIteration:
-            if self.curr_example is not None:
-                tuples = self.curr_example.get_tuples(self.return_example_id)
-                self.curr_example = None
-                return tuples
+            if curr_example.same_example(next_vector_line.line_example_id):
+                curr_example.add_vector_line(next_vector_line)
+                processed_vector_sample_ids.add((next_vector_line.line_sample_id, next_vector_line.line_vector_id))
             else:
-                raise StopIteration
+                break
+        if not processed_vector_sample_ids == self.sample_vector_ids:
+            unprocessed_vector_sample_ids = self.sample_vector_ids - processed_vector_sample_ids
+            raise Exception("Missing vector index-sample index pairs for example {}: {}".format(
+                curr_example.example_id,
+                unprocessed_vector_sample_ids
+            ))
+        else:
+            return curr_example.get_tuples(self.return_example_id)
 
     def __enter__(self):
         return self
@@ -88,10 +89,7 @@ class ExampleVectorLines:
     def same_example(self, other_example_id):
         return self.example_id == other_example_id
 
-    def add_vector_line(self, vector_line, clear=False, new_example_id=None):
-        if clear:
-            self.example_id = new_example_id
-            self.vector_lines = {}
+    def add_vector_line(self, vector_line):
         if vector_line.line_sample_id == self.sample_id:
             self.vector_lines[vector_line.line_vector_id] = vector_line.line_vector_elements
 
