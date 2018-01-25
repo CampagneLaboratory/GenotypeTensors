@@ -32,9 +32,37 @@ dataset-2018-01-16-validation.vec*), you can run the following to train an auto-
 ```bash
 
 bin/train-autoencoder.sh --mode autoencoder \
-        --problem genotyping:dataset-2018-01-16
-        --lr 0.001
-        --L2 1E-6
-        --mini-batch-size 128 
-        --checkpoint-key GENOTYPE_AUTOENCODER_1
+        --problem genotyping:dataset-2018-01-16 \
+        --lr 0.001  \
+        --L2 1E-6   \
+        --mini-batch-size 128 \
+        --checkpoint-key GENOTYPE_AUTOENCODER_1 \
+        --max-epochs 20
 ```
+
+The model will be trained for 20 epochs. 
+Best models are saved as checkpoints under the checkpoint directory.
+You can monitor the performance metrics during training in the files:
+- all-perfs-GENOTYPE_AUTOENCODER_1.tsv
+- best-perfs-GENOTYPE_AUTOENCODER_1.tsv (restricted to performance of best models, up to latest training epoch.)
+
+## Training somatic models
+Instead of training an auto-encoder, the code base also supports training a model to call somatic mutations. 
+The vec files must have been created with a somatic feature mapper and in this case, you can do:
+
+
+```bash
+
+bin/train-autoencoder.sh --mode supervised_somatic \
+        --problem somatic:dataset2-2018-01-17 \
+        --lr 0.001  \
+        --L2 1E-6   \
+        --mini-batch-size 128 \
+        --checkpoint-key GENOTYPE_AUTOENCODER_1 \
+        --max-epochs 20
+```
+
+Note that we changed both the mode (now supervised_somatic) and the the dataset, 
+now somatic:dataset2. Training a somatic supervised model requires specific outputs in 
+the .vec files, which are produced by somatic feature mappers in the variationanalysis 
+project (and by the DNANexus sbi to somatic vec app).
