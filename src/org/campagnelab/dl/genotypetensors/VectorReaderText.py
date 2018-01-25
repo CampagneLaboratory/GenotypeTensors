@@ -23,3 +23,6 @@ class VectorReaderText(VectorReaderBase):
 
     def close(self):
         self.vector_fp.close()
+
+    def set_to_example_at_idx(self, idx):
+        raise TypeError("Operation invalid for text files")

@@ -78,6 +78,12 @@ class VectorReader:
     def close(self):
         self.vector_reader.close()
 
+    def set_to_example_at_idx(self, idx):
+        if self.vector_reader_properties.get_vector_file_type() != "binary":
+            raise ValueError("Operation only valid for binary files")
+        else:
+            self.vector_reader.set_to_example_at_idx(idx)
+
 
 class ExampleVectorLines:
     def __init__(self, example_id, vector_ids, sample_id):

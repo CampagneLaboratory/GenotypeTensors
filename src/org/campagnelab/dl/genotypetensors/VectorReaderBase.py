@@ -17,6 +17,10 @@ class VectorReaderBase(ABC):
     def close(self):
         pass
 
+    @abstractmethod
+    def set_to_example_at_idx(self, idx):
+        pass
+
 
 class VectorLine:
     def __init__(self, line_example_id, line_sample_id, line_vector_id, line_vector_elements):

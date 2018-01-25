@@ -46,8 +46,14 @@ class GenotypeDataset(Dataset):
     def __getitem__(self, idx):
         # get next example from .vec file and check that idx matches example index,
         # then return the features and outputs as tuple.
-        example_tuple = next(self.reader)
-        assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
+        if self.props.get_vector_file_type() == "text" or self.props.get_vector_file_type() == "gzipped+text":
+            example_tuple = next(self.reader)
+            assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
+        elif self.props.get_vector_file_type() == "binary":
+            self.reader.set_to_example_at_idx(idx)
+            example_tuple = next(self.reader)
+        else:
+            raise NotImplementedError
         result={}
         i=0
         for tensor in example_tuple[1:]:

@@ -34,6 +34,7 @@ class VectorReaderBinary(VectorReaderBase):
                 self.total_bytes_per_example,
                 self.num_bytes
             ))
+        self.num_examples = self.num_bytes / self.total_bytes_per_example
 
     def get_next_vector_line(self):
         if self.vector_fp.tell() == self.num_bytes:
@@ -63,6 +64,14 @@ class VectorReaderBinary(VectorReaderBase):
         if type(unpacked_value) != tuple or len(unpacked_value) > 1:
             raise ValueError("Error in reading in binary data")
         return dtype(unpacked_value[0])
+
+    def set_to_example_at_idx(self, idx):
+        if idx < 0:
+            raise ValueError("Index must be positive")
+        elif idx >= self.num_examples:
+            raise ValueError("Index greater than the maximum possible index, {}".format(self.num_examples - 1))
+        else:
+            self.vector_fp.seek(idx * self.total_bytes_per_example, 0)
 
     def close(self):
         self.vector_fp.close()
