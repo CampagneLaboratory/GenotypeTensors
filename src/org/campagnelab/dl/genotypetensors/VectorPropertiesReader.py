@@ -14,6 +14,8 @@ class VectorPropertiesReader:
             self.file_type = self.vector_properties["fileType"]
             self.samples = self.vector_properties["samples"]
             self.vectors = self.vector_properties["vectors"]
+            self.num_bytes_per_example = self.vector_properties["numBytesPerExample"]
+            self.header_size = self.vector_properties["headerSize"]
             for vector in self.vectors:
                 vector["vectorDimension"] = tuple(vector["vectorDimension"])
             self.num_records = self.vector_properties["numRecords"]
@@ -26,28 +28,6 @@ class VectorPropertiesReader:
         :return: (major_version, minor_version) tuple of ints
         """
         return self.major_version, self.minor_version
-
-    def get_vector_file_type(self):
-        """
-        Get vector file type- either text, gzipped+text, or binary
-        :return: vector file type
-        """
-        return self.file_type
-
-    def get_vectors(self):
-        """
-        Get list of vectors, as they appear in .vecp file
-        :return: list of vectors where each element is a Python dict containing vector info
-        """
-        return self.vectors
-
-    def get_vector_from_idx(self, idx):
-        """
-        Get a vector dict at a particular vector index
-        :param idx: index of vector in list of vectors from .vecp file
-        :return: Python dict containing vector info
-        """
-        return self.vectors[idx]
 
     def get_vector_from_name(self, vector_name):
         """
@@ -105,20 +85,21 @@ class VectorPropertiesReader:
         """
         return self.vector_names_to_idx[vector_name]
 
-    def get_samples(self):
+    def get_vector_elements_size_from_name(self, vector_name):
         """
-        Get list of samples, as they appear in .vecp file
-        :return: list of samples where each element is a Python dict containing sample info
+        Get the number of elements * element size for vector corresponding to given a vector name
+        :param vector_name: name of vector from .vecp file
+        :return: number of elements * element size for vector
         """
-        return self.samples
+        return self.vectors[self.vector_names_to_idx[vector_name]]["vectorNumBytesForElements"]
 
-    def get_sample_from_idx(self, idx):
+    def get_vector_elements_size_from_idx(self, idx):
         """
-        Get a sample dict at a particular sample index
-        :param idx: index of sample in list of samples from .vecp file
-        :return: Python dict containing sample info
+        Get the number of elements * element size for vector corresponding to given a vector idx
+        :param idx: index of vector in list of vectors from .vecp file
+        :return: number of elements * element size for vector
         """
-        return self.samples[idx]
+        return self.vectors[idx]["vectorNumBytesForElements"]
 
     def get_sample_from_name(self, sample_name):
         """
@@ -160,13 +141,6 @@ class VectorPropertiesReader:
         """
         return self.sample_names_to_idx[sample_name]
 
-    def get_num_records(self):
-        """
-        Get number of records stored in .vec file
-        :return: number of records
-        """
-        return self.num_records
-
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser()
@@ -175,7 +149,7 @@ if __name__ == "__main__":
     vec_properties_reader = VectorPropertiesReader(args.input)
     version_number = ".".join(map(str, vec_properties_reader.get_version_number()))
     print("Version number: {}".format(version_number))
-    print("File type: {}".format(vec_properties_reader.get_vector_file_type()))
+    print("File type: {}".format(vec_properties_reader.file_type))
     print("Sample 0 name: {}".format(vec_properties_reader.get_sample_name_from_idx(0)))
     print("Sample 0 type: {}".format(vec_properties_reader.get_sample_type_from_idx(0)))
     print("Vector 0 name: {}".format(vec_properties_reader.get_vector_name_from_idx(0)))
@@ -188,5 +162,5 @@ if __name__ == "__main__":
     print("Vector 0 idx from name: {}".format(vec_properties_reader.get_vector_idx_from_name(vector_0_name)))
     print("Vector 0 type from name: {}".format(vec_properties_reader.get_vector_type_from_name(vector_0_name)))
     print("Vector 0 dim from name: {}".format(vec_properties_reader.get_vector_dimensions_from_name(vector_0_name)))
-    print("All samples: {}".format(vec_properties_reader.get_samples()))
-    print("All vectors: {}".format(vec_properties_reader.get_vectors()))
+    print("All samples: {}".format(vec_properties_reader.samples))
+    print("All vectors: {}".format(vec_properties_reader.vectors))
