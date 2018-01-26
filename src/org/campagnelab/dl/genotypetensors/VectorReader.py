@@ -27,14 +27,14 @@ class VectorReader:
         self.assert_example_ids = assert_example_ids
         self.return_example_id = return_example_id
         # All of the possible vector and sample ID combinations for a record
-        self.sample_vector_ids = set(itertools.product(range(len(self.vector_reader_properties.get_samples())),
-                                                       range(len(self.vector_reader_properties.get_vectors()))))
+        self.sample_vector_ids = set(itertools.product(range(len(self.vector_reader_properties.samples)),
+                                                       range(len(self.vector_reader_properties.vectors))))
         if self.assert_example_ids:
             self.processed_example_ids = set([])
         version_number = self.vector_reader_properties.get_version_number()
         if version_number[0] == 0 and version_number[1] < 2:
             raise ValueError("Version number too low to be parsed by reader")
-        vector_file_type = self.vector_reader_properties.get_vector_file_type()
+        vector_file_type = self.vector_reader_properties.file_type
         if vector_file_type == "text" or vector_file_type == "gzipped+text":
             self.vector_reader = VectorReaderText(path_to_vector, self.vector_reader_properties)
         elif vector_file_type == "binary":
@@ -79,7 +79,7 @@ class VectorReader:
         self.vector_reader.close()
 
     def set_to_example_at_idx(self, idx):
-        if self.vector_reader_properties.get_vector_file_type() != "binary":
+        if self.vector_reader_properties.file_type != "binary":
             raise ValueError("Operation only valid for binary files")
         else:
             self.vector_reader.set_to_example_at_idx(idx)
