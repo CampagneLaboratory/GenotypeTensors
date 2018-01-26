@@ -1,5 +1,4 @@
 from torch.autograd import Variable
-from torch.nn import CrossEntropyLoss, MSELoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
@@ -97,7 +96,7 @@ class GenotypingAutoEncoderTrainer(CommonTrainer):
 
         # Apply learning rate schedule:
         test_accuracy = performance_estimators.get_metric("test_loss")
-        assert test_accuracy is not None, "test_accuracy must be found among estimated performance metrics"
+        assert test_accuracy is not None, "test_loss must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_accuracy, epoch)
         return performance_estimators

@@ -1,16 +1,13 @@
 import os
-
 import sys
+
 import torch
-from torch.autograd import Variable
 from torch.backends import cudnn
-from torch.nn import MSELoss, MultiLabelSoftMarginLoss, CrossEntropyLoss
-from org.campagnelab.dl.performance.FloatHelper import FloatHelper
+from torch.nn import MSELoss
+
 from org.campagnelab.dl.performance.LRHelper import LearningRateHelper
-from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.LRSchedules import construct_scheduler
-from org.campagnelab.dl.utils.utils import grad_norm, progress_bar
 
 
 def _format_nice(n):
@@ -45,6 +42,7 @@ class CommonTrainer:
         :param use_cuda When True, use the GPU.
          """
 
+        self.model_label = "best" # or latest
         self.max_regularization_examples = args.num_unlabeled if hasattr(args, "num_unlabeled") else 0
         self.max_validation_examples = args.num_validation if hasattr(args, "num_validation") else 0
         self.max_training_examples = args.num_training if hasattr(args, "num_training") else 0
@@ -107,19 +105,17 @@ class CommonTrainer:
 
             print('==> Resuming from checkpoint..')
 
-            assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
+            assert os.path.isdir('models'), 'Error: no models directory found!'
             checkpoint = None
             try:
-                checkpoint = torch.load('./checkpoint/ckpt_{}.t7'.format(args.checkpoint_key))
-            except                FileNotFoundError:
+                checkpoint = torch.load('./models/pytorch_{}_{}.t7'.format(args.checkpoint_key, self.model_label))
+            except FileNotFoundError:
                 pass
             if checkpoint is not None:
 
-                self.net = checkpoint['net']
+                self.net = checkpoint['model']
                 self.best_test_loss = checkpoint['best_test_loss']
                 self.start_epoch = checkpoint['epoch']
-                self.best_model = checkpoint['best-model']
-                self.best_model_confusion_matrix = checkpoint['confusion-matrix']
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
@@ -202,32 +198,38 @@ class CommonTrainer:
 
         return early_stop, self.best_performance_metrics
 
-    def save_checkpoint(self, epoch, acc):
+    def save_checkpoint(self, epoch, test_loss):
 
         # Save checkpoint.
 
-        if acc < self.best_test_loss:
+        if test_loss < self.best_test_loss:
             print('Saving..')
-            model = self.net
-            model.eval()
 
-            state = {
-                'net': model.module if self.is_parallel else model,
-                'best-model': self.best_model,
-                'best_test_loss': acc,
-                'epoch': epoch,
-            }
-            if not os.path.isdir('checkpoint'):
-                os.mkdir('checkpoint')
-            torch.save(state, './checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
-            self.best_test_loss = acc
+            self.save_model(test_loss, epoch, self.net,"latest")
+            if self.best_model is not None:
+                self.save_model(test_loss, epoch, self.best_model,"best")
+            else:
+                # not best model, latest is best:
+                self.save_model(test_loss, epoch, self.net, "best")
+            self.best_test_loss = test_loss
 
-    def load_checkpoint(self):
+    def save_model(self, acc, epoch, model, model_label):
+        model.eval()
+        state = {
+            'model': model.module if self.is_parallel else model,
+            'best_test_loss': acc,
+            'epoch': epoch,
+        }
+        if not os.path.isdir('models'):
+            os.mkdir('models')
+        torch.save(state, './models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
 
-        if not os.path.isdir('checkpoint'):
-            os.mkdir('checkpoint')
-        state = torch.load('./checkpoint/ckpt_{}.t7'.format(self.args.checkpoint_key))
-        model = state['net']
+    def load_checkpoint(self, model_label="best"):
+
+        if not os.path.isdir('models'):
+            os.mkdir('models')
+        state = torch.load('./models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
+        model = state['model']
         model.cpu()
         model.eval()
         return model
