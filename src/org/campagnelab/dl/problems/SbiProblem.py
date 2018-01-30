@@ -4,7 +4,7 @@ import torch
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset, \
-    InterleaveDatasets
+    InterleaveDatasets, CyclicInterleavedDatasets
 from org.campagnelab.dl.problems.Problem import Problem
 
 
@@ -29,7 +29,7 @@ class SbiProblem(Problem):
             # Use a list of datasets and interleave their records:
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines=list_file.readlines()
-                return InterleaveDatasets([ GenotypeDataset(path,vector_names=self.get_vector_names()) for path in lines ])
+                return CyclicInterleavedDatasets([ GenotypeDataset(path.rstrip(),vector_names=self.get_vector_names()) for path in lines ])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
                 return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_vector_names())
@@ -119,5 +119,7 @@ class SbiGenotypingProblem(SbiProblem):
 
     def get_vector_names(self):
         return ["input", "softmaxGenotype"]
+
+
 
 

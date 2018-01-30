@@ -44,6 +44,8 @@ class InterleavedReaderIndex:
         self.index_in_reader+=1
         return new_index
 
+    def reset(self):
+        self.index_in_reader=0
 
 class InterleaveDatasets(Dataset):
     """ A dataset that exposes delegates by interleaving their records.
@@ -72,6 +74,34 @@ class InterleaveDatasets(Dataset):
         return delegate[index_in_reader]
 
 
+class CyclicInterleavedDatasets(Dataset):
+    """ A dataset that exposes delegates by interleaving their records and cycling through them when no more
+        items are available in a dataset.
+    """
+    def __init__(self, dataset_list):
+        self.dataset_list=dataset_list
+        self.num_readers=len(dataset_list)
+        self.index_delegates=[None]*self.num_readers
+        for reader_index, dataset in enumerate(dataset_list):
+            self.index_delegates[reader_index]=InterleavedReaderIndex(reader_index, dataset)
+
+    def __len__(self):
+        """
+        This Dataset returns sys.maxsize, but is effectively unlimited.
+        :return:
+        """
+        return sys.maxsize
+
+    def __getitem__(self, idx):
+
+        reader_index= idx % len(self.index_delegates)
+        delegate = self.index_delegates[reader_index]
+        index_in_reader= delegate.advance()
+        if delegate.at_end():
+            delegate.reset()
+        return delegate.dataset[index_in_reader]
+
+
 
 class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""
@@ -82,7 +112,7 @@ class GenotypeDataset(Dataset):
                                    return_example_id=True)
         self.props = self.reader.vector_reader_properties
         # obtain number of examples from .vecp file:
-        self.length = self.props.get_num_records()
+        self.length = self.props.num_records
         self.vector_names=vector_names
 
     def __len__(self):
