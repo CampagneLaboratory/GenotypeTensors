@@ -2,7 +2,7 @@ from torch import nn
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, input_size=512, encoded_size=32, ngpus=1, nreplicas=1):
+    def __init__(self, input_size=512, encoded_size=32, ngpus=1):
         """
 
         :param input_size:
@@ -12,8 +12,7 @@ class AutoEncoder(nn.Module):
         """
         super().__init__()
         self.ngpu=ngpus
-        self.num_replica=nreplicas
-        self.device_list=list(range(0,ngpus))*nreplicas
+        self.device_list=list(range(0,ngpus))
         encoder_list = []
         encoder_input_size = input_size
         encoder_output_size = int(encoder_input_size / 2)

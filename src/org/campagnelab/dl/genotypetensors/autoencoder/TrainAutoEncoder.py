@@ -81,7 +81,6 @@ if __name__ == '__main__':
                         help='Reset learning rate to initial value every n epochs.')
 
     parser.add_argument("--num-gpus", type=int, default=1, help='Number of GPUs to run on.')
-    parser.add_argument("--num-replicas", type=int, default=1, help='Number of model replicas per GPU.')
 
     parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                         help='Abort training if performance fails to improve for more than the specified number of epochs.')
@@ -134,8 +133,7 @@ if __name__ == '__main__':
                                      (lambda model_name, problem: create_autoencoder_model(model_name,
                                                                                            problem,
                                                                                            encoded_size=args.encoded_size,
-                                                                                           ngpus=args.num_gpus,
-                                                                                           nreplicas=args.num_replicas)))
+                                                                                           ngpus=args.num_gpus)))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_autoencoder
 
@@ -145,8 +143,7 @@ if __name__ == '__main__':
                                      (lambda model_name, problem: create_classifier_model(model_name,
                                                                                           problem,
                                                                                           encoded_size=args.encoded_size,
-                                                                                          ngpus=args.num_gpus,
-                                                                                          nreplicas=args.num_replicas)))
+                                                                                          ngpus=args.num_gpus                                                                                          )))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_somatic_classifer
         elif args.mode == "semisupervised_genotypes":
@@ -156,8 +153,7 @@ if __name__ == '__main__':
                                                                                           problem,
                                                                                           encoded_size=args.encoded_size,
                                                                                           somatic=False,
-                                                                                          ngpus=args.num_gpus,
-                                                                                          nreplicas=args.num_replicas)))
+                                                                                          ngpus=args.num_gpus)))
             training_loop_method = model_trainer.train_semisup
             testing_loop_method = model_trainer.test_semi_sup
         else:
