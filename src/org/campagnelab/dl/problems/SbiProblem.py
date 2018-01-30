@@ -29,7 +29,8 @@ class SbiProblem(Problem):
             # Use a list of datasets and interleave their records:
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines=list_file.readlines()
-                return CyclicInterleavedDatasets([ GenotypeDataset(path.rstrip(),vector_names=self.get_vector_names()) for path in lines ])
+                return CyclicInterleavedDatasets(
+                    [ GenotypeDataset(path.rstrip(),vector_names=self.get_vector_names()) for path in lines ])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
                 return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_vector_names())

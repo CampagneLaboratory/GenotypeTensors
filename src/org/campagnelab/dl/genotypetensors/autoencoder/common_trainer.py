@@ -176,21 +176,21 @@ class CommonTrainer:
         if self.best_performance_metrics is None:
             self.best_performance_metrics = performance_estimators
 
-        metric = performance_estimators.get_metric("test_loss")
-        if metric is not None and metric < self.best_test_loss:
+        metric = performance_estimators.get_metric(self.get_test_metric_name())
+        if metric is not None and self.is_better(metric , self.best_test_loss):
             self.failed_to_improve = 0
 
             with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write(" ".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
-        if metric is not None and metric <= self.best_test_loss:
+        if metric is not None and (self.is_better(metric , self.best_test_loss) or metric == self.best_test_loss):
 
             self.save_checkpoint(epoch, metric)
             self.best_performance_metrics = performance_estimators
             self.best_model = self.net
 
-        if metric is not None and metric <= self.best_test_loss:
+        if metric is not None and self.is_better(metric , self.best_test_loss):
             self.failed_to_improve += 1
             if self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
@@ -270,3 +270,9 @@ class CommonTrainer:
                 return perfs
 
         return perfs
+
+    def get_test_metric_name(self):
+        return "test_loss"
+
+    def is_better(self, metric, best_test_loss):
+        return metric<best_test_loss

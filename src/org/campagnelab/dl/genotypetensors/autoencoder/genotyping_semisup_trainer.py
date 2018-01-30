@@ -15,6 +15,12 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         self.criterion_autoencoder = MSELoss()
         self.criterion_classifier = BCEWithLogitsLoss()
 
+    def get_test_metric_name(self):
+        return "test_supervised_loss"
+
+    def is_better(self, metric, previous_metric):
+        return metric< previous_metric
+
     def train_semisup(self, epoch):
 
         performance_estimators = PerformanceList()
