@@ -15,7 +15,7 @@ class VectorReaderBinary(VectorReaderBase):
 
     def __init__(self, path_to_vector, vector_reader_properties):
         super().__init__(path_to_vector, vector_reader_properties)
-        self.vector_fp = open(path_to_vector, "rb")
+        self.vector_fp = open(self.path_to_vector, "rb")
         # Get total number of bytes in file by going to end of file, checking position, and returning to start
         self.vector_fp.seek(0, 2)
         self.num_bytes = self.vector_fp.tell()
