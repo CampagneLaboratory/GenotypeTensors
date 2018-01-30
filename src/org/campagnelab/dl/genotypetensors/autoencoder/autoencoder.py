@@ -2,8 +2,18 @@ from torch import nn
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, input_size=512, encoded_size=32):
+    def __init__(self, input_size=512, encoded_size=32, ngpus=1, nreplicas=1):
+        """
+
+        :param input_size:
+        :param encoded_size:
+        :param ngpu: Number of gpus to run on.
+        :param num_replica: Number of model replica per GPUs, if ngpu>1
+        """
         super().__init__()
+        self.ngpu=ngpus
+        self.num_replica=nreplicas
+        self.device_list=list(range(0,ngpus))*nreplicas
         encoder_list = []
         encoder_input_size = input_size
         encoder_output_size = int(encoder_input_size / 2)
@@ -34,15 +44,19 @@ class AutoEncoder(nn.Module):
 
 
     def forward(self, input):
-        encoded=self.encoder(input)
-        decoded=self.decoder(encoded)
+        if input.data.is_cuda and self.ngpu*self.num_replica > 1:
+            encoded = nn.parallel.data_parallel(self.encoder, input, self.device_list)
+            decoded = nn.parallel.data_parallel(self.encoder, encoded, self.device_list)
+        else:
+            encoded=self.encoder(input)
+            decoded=self.decoder(encoded)
         return decoded
 
 
-def create_autoencoder_model(model_name, problem, encoded_size=32):
+def create_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1,nreplicas=1):
     input_size = problem.input_size("input")
     assert len(input_size)==1, "AutoEncoders required 1D input features."
 
-    autoencoder = AutoEncoder(input_size=input_size[0], encoded_size=encoded_size)
+    autoencoder = AutoEncoder(input_size=input_size[0], encoded_size=encoded_size,ngpus=ngpus,nreplicas=nreplicas)
     print("model" +str(autoencoder))
     return autoencoder

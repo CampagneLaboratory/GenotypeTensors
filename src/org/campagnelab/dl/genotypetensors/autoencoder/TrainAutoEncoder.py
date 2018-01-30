@@ -62,7 +62,8 @@ if __name__ == '__main__':
                                                                    'number of examples in the training set.',
                         default=None)
     parser.add_argument('--momentum', type=float, help='Momentum for SGD.', default=0.9)
-    parser.add_argument('--gamma', type=float, help='Float used to control the effect of reconstruction loss.', default=1.0)
+    parser.add_argument('--gamma', type=float, help='Float used to control the effect of reconstruction loss.',
+                        default=1.0)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
     parser.add_argument('--seed', type=int,
                         help='Random seed', default=random.randint(0, sys.maxsize))
@@ -78,6 +79,10 @@ if __name__ == '__main__':
                         default="supervised")
     parser.add_argument("--reset-lr-every-n-epochs", type=int,
                         help='Reset learning rate to initial value every n epochs.')
+
+    parser.add_argument("--num-gpus", type=int, default=1, help='Number of GPUs to run on.')
+    parser.add_argument("--num-replicas", type=int, default=1, help='Number of model replicas per GPU.')
+
     parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                         help='Abort training if performance fails to improve for more than the specified number of epochs.')
     parser.add_argument('--test-every-n-epochs', type=int,
@@ -101,7 +106,7 @@ if __name__ == '__main__':
     is_parallel = False
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-    problem=None
+    problem = None
     if args.problem.startswith("genotyping:"):
         problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem)
     elif args.problem.startswith("somatic:"):
@@ -128,7 +133,9 @@ if __name__ == '__main__':
             model_trainer.init_model(create_model_function=
                                      (lambda model_name, problem: create_autoencoder_model(model_name,
                                                                                            problem,
-                                                                                           encoded_size=args.encoded_size)))
+                                                                                           encoded_size=args.encoded_size,
+                                                                                           ngpus=args.num_gpus,
+                                                                                           nreplicas=args.num_replicas)))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_autoencoder
 
@@ -137,7 +144,9 @@ if __name__ == '__main__':
             model_trainer.init_model(create_model_function=
                                      (lambda model_name, problem: create_classifier_model(model_name,
                                                                                           problem,
-                                                                                          encoded_size=args.encoded_size)))
+                                                                                          encoded_size=args.encoded_size,
+                                                                                          ngpus=args.num_gpus,
+                                                                                          nreplicas=args.num_replicas)))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_somatic_classifer
         elif args.mode == "semisupervised_genotypes":
@@ -146,18 +155,19 @@ if __name__ == '__main__':
                                      (lambda model_name, problem: create_classifier_model(model_name,
                                                                                           problem,
                                                                                           encoded_size=args.encoded_size,
-                                                                                          somatic=False)))
+                                                                                          somatic=False,
+                                                                                          ngpus=args.num_gpus,
+                                                                                          nreplicas=args.num_replicas)))
             training_loop_method = model_trainer.train_semisup
             testing_loop_method = model_trainer.test_semi_sup
         else:
-            model_trainer=None
+            model_trainer = None
             print("unknown mode specified: " + args.mode)
             exit(1)
 
         torch.manual_seed(args.seed)
         if use_cuda:
             torch.cuda.manual_seed(args.seed)
-
 
         return model_trainer.training_loops(training_loop_method=training_loop_method,
                                             testing_loop_method=testing_loop_method)
