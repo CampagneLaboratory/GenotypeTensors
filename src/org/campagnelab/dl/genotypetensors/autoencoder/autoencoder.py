@@ -46,7 +46,7 @@ class AutoEncoder(nn.Module):
     def forward(self, input):
         if input.data.is_cuda and self.ngpu*self.num_replica > 1:
             encoded = nn.parallel.data_parallel(self.encoder, input, self.device_list)
-            decoded = nn.parallel.data_parallel(self.encoder, encoded, self.device_list)
+            decoded = nn.parallel.data_parallel(self.decoder, encoded, self.device_list)
         else:
             encoded=self.encoder(input)
             decoded=self.decoder(encoded)
