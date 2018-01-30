@@ -1,8 +1,11 @@
 import sys
+from pathlib import Path
 
+import os
 import torch
 from torchnet.dataset.dataset import Dataset
 
+from org.campagnelab.dl.genotypetensors.VectorCache import VectorCache
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 
 class  SmallerDataset(Dataset):
@@ -102,6 +105,23 @@ class CyclicInterleavedDatasets(Dataset):
         return delegate.dataset[index_in_reader]
 
 
+
+class CachedGenotypeDataset(Dataset):
+    def __init__(self, vec_basename,vector_names, max_records=sys.maxsize, sample_id=False):
+        basename, file_extension = os.path.splitext(vec_basename)
+        if not self.file_exists(basename+"-cached.vec") or not self.file_exists(basename+"-cached.vecp"):
+            # Write cache:
+            VectorCache(basename,max_records=max_records).write_lines()
+        self.delegate=GenotypeDataset(basename+"-cached",vector_names, sample_id)
+
+    def file_exists(self, filename):
+        return Path(filename).is_file()
+
+    def __len__(self):
+        return len(self.delegate)
+
+    def __getitem__(self, idx):
+        return self.delegate[idx]
 
 class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""
