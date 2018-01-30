@@ -20,7 +20,7 @@ class VectorReaderText(VectorReaderBase):
         line_vector_id = np.uint32(line_split[2])
         line_vector_elements = np.array(line_split[3:], dtype=np.float32)
         line_vector_elements = np.reshape(line_vector_elements,
-                                          self.vector_properties.get_vector_type_from_idx(line_vector_id),
+                                          self.vector_properties.get_vector_dimensions_from_idx(line_vector_id),
                                           "C")
         return VectorLine(line_example_id, line_sample_id, line_vector_id, line_vector_elements)
 
