@@ -67,7 +67,18 @@ bin/train-autoencoder.sh --mode supervised_somatic \
         --max-epochs 20
 ```
 
-Note that we changed both the mode (now supervised_somatic) and the the dataset, 
+Note that we changed both the mode (now supervised_somatic) and the the dataset,
 now somatic:dataset2. Training a somatic supervised model requires specific outputs in 
 the .vec files, which are produced by somatic feature mappers in the variationanalysis 
 project (and by the DNANexus **Convert Somatic .sbi to Tensors** app).
+
+
+## Training genotyping models with semi-supervised training:
+
+```
+bin/train-autoencoder.sh --mode semisupervised_genotypes \
+                --problem genotyping:/data/gen/CNG-NA12878-realigned-2018-01-30 \
+                --lr 0.01 --L2 1E-6 --mini-batch-size 100 \
+                --checkpoint-key GENOTYPE_SEMISUP_1 \
+                --max-epochs 200 -n 500 -x 10000
+```
