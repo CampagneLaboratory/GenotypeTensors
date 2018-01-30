@@ -28,6 +28,51 @@ class EmptyDataset(Dataset):
     def __getitem__(self, idx):
         pass
 
+class InterleavedReaderIndex:
+    def __init__(self, reader_index, dataset):
+        self.reader_index=reader_index
+
+        self.dataset=dataset
+        self.num_elements=len(dataset)
+        self.index_in_reader=0
+
+    def at_end(self):
+        return self.index_in_reader>=self.num_elements
+
+    def advance(self):
+        new_index=self.index_in_reader
+        self.index_in_reader+=1
+        return new_index
+
+
+class InterleaveDatasets(Dataset):
+    """ A dataset that exposes delegates by interleaving their records.
+    """
+    def __init__(self, dataset_list):
+        self.dataset_list=dataset_list
+        self.num_readers=len(dataset_list)
+        self.index_delegates=[None]*self.num_readers
+        for reader_index, dataset in enumerate(dataset_list):
+            self.index_delegates[reader_index]=InterleavedReaderIndex(reader_index, dataset)
+
+    def __len__(self):
+        len=0
+        for dataset in  self.dataset_list:
+            len+=len(dataset)
+        return len
+
+    def __getitem__(self, idx):
+        if len(self.index_delegates)==0:
+            raise IndexError("CustomRange index out of range")
+        reader_index= idx % len(self.index_delegates)
+        delegate = self.index_delegates[reader_index]
+        index_in_reader= delegate.advance()
+        if delegate.at_end():
+            self.index_delegates -= delegate
+        return delegate[index_in_reader]
+
+
+
 class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""
     def __init__(self, vec_basename,  vector_names,sample_id=False):

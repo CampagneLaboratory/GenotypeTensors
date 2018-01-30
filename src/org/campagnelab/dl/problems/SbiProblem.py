@@ -3,8 +3,11 @@ from pathlib import Path
 import torch
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
-from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset
+from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset, \
+    InterleaveDatasets
 from org.campagnelab.dl.problems.Problem import Problem
+
+
 
 
 class SbiProblem(Problem):
@@ -21,10 +24,17 @@ class SbiProblem(Problem):
         return GenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
 
     def unlabeled_set(self):
-        if self.file_exists(self.basename + "-unlabeled.vec"):
-            return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_vector_names())
+
+        if self.file_exists(self.basename + "-unlabeled.list"):
+            # Use a list of datasets and interleave their records:
+            with open(self.basename + "-unlabeled.list") as list_file:
+                lines=list_file.readlines()
+                return InterleaveDatasets([ GenotypeDataset(path,vector_names=self.get_vector_names()) for path in lines ])
         else:
-            return EmptyDataset()
+            if self.file_exists(self.basename + "-unlabeled.vec"):
+                return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_vector_names())
+            else:
+                return EmptyDataset()
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
