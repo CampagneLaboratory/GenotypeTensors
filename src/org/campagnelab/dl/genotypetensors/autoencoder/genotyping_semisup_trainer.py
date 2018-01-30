@@ -93,7 +93,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             inputs = dict["input"]
             targets = dict["softmaxGenotype"]
             if self.use_cuda:
-                inputs = inputs.cuda()
+                inputs, targets = inputs.cuda(), targets.cuda()
 
             input_s, target_s, input_u, target_u = Variable(inputs, volatile=True), Variable(targets, volatile=True),\
                                                    Variable(inputs, volatile=True), Variable(inputs, volatile=True)
