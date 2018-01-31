@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import torch
+from torch.utils.data import DataLoader
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset, \
@@ -52,7 +53,7 @@ class SbiProblem(Problem):
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
 
-        return self.train_set().batch(batchsize=self.mini_batch_size(), policy='skip-last')
+        return self.loader_for_dataset(self.train_set())
 
     def _filter(self, indices, iterator):
         fast_indices = set(indices)
@@ -67,7 +68,7 @@ class SbiProblem(Problem):
 
     def validation_loader(self):
         """Returns the torch dataloader over the test set. """
-        return self.validation_set().batch(batchsize=self.mini_batch_size(), policy='skip-last')
+        return self.loader_for_dataset(self.validation_set())
 
     def test_loader_subset(self, indices):
         """Returns the torch dataloader over the test set, limiting to the examples
@@ -75,7 +76,7 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def unlabeled_loader(self):
-        return self.unlabeled_set().batch(batchsize=self.mini_batch_size(), policy='skip-last')
+        return self.loader_for_dataset(dataset=self.unlabeled_set())
 
     def reg_loader_subset(self, indices):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
@@ -84,7 +85,8 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def loader_for_dataset(self, dataset):
-        return dataset.batch(batchsize=self.mini_batch_size(), policy='skip-last')
+        return iter(DataLoader(dataset=dataset, batch_size=self.mini_batch_size(), num_workers=0, pin_memory=True, drop_last=True))
+
 
     def loss_function(self, output_name):
         return torch.nn.CrossEntropyLoss()
