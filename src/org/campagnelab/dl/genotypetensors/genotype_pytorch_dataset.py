@@ -134,6 +134,7 @@ class GenotypeDataset(Dataset):
         # obtain number of examples from .vecp file:
         self.length = self.props.num_records
         self.vector_names=vector_names
+        self.is_random_access=self.props.file_type == "binary"
 
     def __len__(self):
         return self.length
@@ -141,14 +142,13 @@ class GenotypeDataset(Dataset):
     def __getitem__(self, idx):
         # get next example from .vec file and check that idx matches example index,
         # then return the features and outputs as tuple.
-        if self.props.file_type == "text" or self.props.file_type == "gzipped+text":
-            example_tuple = next(self.reader)
-            assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
-        elif self.props.file_type == "binary":
+        if self.is_random_access:
             self.reader.set_to_example_at_idx(idx)
             example_tuple = next(self.reader)
         else:
-            raise NotImplementedError
+            example_tuple = next(self.reader)
+            assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
+
         result={}
         i=0
         for tensor in example_tuple[1:]:
