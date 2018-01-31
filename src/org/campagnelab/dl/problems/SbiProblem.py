@@ -15,6 +15,9 @@ class SbiProblem(Problem):
     def get_vector_names(self):
         return []
 
+    def get_input_names(self):
+        return []
+
     def input_size(self, input_name):
         return self.meta_data.get_vector_dimensions_from_name(input_name)
 
@@ -31,10 +34,10 @@ class SbiProblem(Problem):
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines=list_file.readlines()
                 return CyclicInterleavedDatasets(
-                    [ GenotypeDataset(path.rstrip(),vector_names=self.get_vector_names()) for path in lines ])
+                    [ GenotypeDataset(path.rstrip(),vector_names=self.get_input_names()) for path in lines ])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
-                return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_vector_names())
+                return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_input_names())
             else:
                 return EmptyDataset()
 
@@ -104,6 +107,9 @@ class SbiSomaticProblem(SbiProblem):
     def get_vector_names(self):
         return ["input", "isBaseMutated", "somaticFrequency"]
 
+    def get_input_names(self):
+        return ["input"]
+
     def basename_prefix(self):
         return "somatic:"
 
@@ -119,6 +125,9 @@ class SbiGenotypingProblem(SbiProblem):
 
     def basename_prefix(self):
         return "genotyping:"
+
+    def get_input_names(self):
+        return ["input"]
 
     def get_vector_names(self):
         return ["input", "softmaxGenotype"]
