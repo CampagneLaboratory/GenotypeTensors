@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import torch
+from torch.utils.data import DataLoader
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset, \
@@ -14,6 +15,9 @@ class SbiProblem(Problem):
     def get_vector_names(self):
         return []
 
+    def get_input_names(self):
+        return []
+
     def input_size(self, input_name):
         return self.meta_data.get_vector_dimensions_from_name(input_name)
 
@@ -21,7 +25,7 @@ class SbiProblem(Problem):
         return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
-        return CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
+        return GenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
 
     def unlabeled_set(self):
 
@@ -30,16 +34,16 @@ class SbiProblem(Problem):
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines=list_file.readlines()
                 return CyclicInterleavedDatasets(
-                    [ CachedGenotypeDataset(path.rstrip(),vector_names=self.get_vector_names()) for path in lines ])
+                    [ GenotypeDataset(path.rstrip(),vector_names=self.get_input_names()) for path in lines ])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
-                return CachedGenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_vector_names())
+                return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_input_names())
             else:
                 return EmptyDataset()
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
-            return CachedGenotypeDataset(self.basename + "-validation.vec",  vector_names=self.get_vector_names())
+            return GenotypeDataset(self.basename + "-validation.vec",  vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
 
@@ -52,7 +56,7 @@ class SbiProblem(Problem):
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
 
-        return self.train_set().batch(batchsize=self.mini_batch_size(), policy='skip-last')
+        return self.loader_for_dataset(self.train_set())
 
     def _filter(self, indices, iterator):
         fast_indices = set(indices)
@@ -67,7 +71,7 @@ class SbiProblem(Problem):
 
     def validation_loader(self):
         """Returns the torch dataloader over the test set. """
-        return self.validation_set().batch(batchsize=self.mini_batch_size(), policy='skip-last')
+        return self.loader_for_dataset(self.validation_set())
 
     def test_loader_subset(self, indices):
         """Returns the torch dataloader over the test set, limiting to the examples
@@ -75,7 +79,7 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def unlabeled_loader(self):
-        return self.unlabeled_set().batch(batchsize=self.mini_batch_size(), policy='skip-last')
+        return self.loader_for_dataset(dataset=self.unlabeled_set())
 
     def reg_loader_subset(self, indices):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
@@ -84,7 +88,8 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def loader_for_dataset(self, dataset):
-        return dataset.batch(batchsize=self.mini_batch_size(), policy='skip-last')
+        return iter(DataLoader(dataset=dataset, batch_size=self.mini_batch_size(), num_workers=0, pin_memory=True, drop_last=True))
+
 
     def loss_function(self, output_name):
         return torch.nn.CrossEntropyLoss()
@@ -102,6 +107,9 @@ class SbiSomaticProblem(SbiProblem):
     def get_vector_names(self):
         return ["input", "isBaseMutated", "somaticFrequency"]
 
+    def get_input_names(self):
+        return ["input"]
+
     def basename_prefix(self):
         return "somatic:"
 
@@ -117,6 +125,9 @@ class SbiGenotypingProblem(SbiProblem):
 
     def basename_prefix(self):
         return "genotyping:"
+
+    def get_input_names(self):
+        return ["input"]
 
     def get_vector_names(self):
         return ["input", "softmaxGenotype"]

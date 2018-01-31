@@ -41,13 +41,13 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         unlabeled_loader = self.problem.unlabeled_loader()
 
         for batch_idx, (dict_training, dict_unlabeled) in enumerate(zip(train_loader_subset, unlabeled_loader)):
-            input_s = dict_unlabeled["input"]
-            target_s = dict_unlabeled["softmaxGenotype"]
+            input_s = dict_training["input"]
+            target_s = dict_training["softmaxGenotype"]
             input_u = dict_unlabeled["input"]
             num_batches += 1
 
             if self.use_cuda:
-                input_s, target_s, input_u = input_s.cuda(), target_s.cuda(), input_u.cuda()
+                input_s, target_s, input_u = input_s.cuda(async =True), target_s.cuda(async =True), input_u.cuda(async =True)
 
             input_s, target_s, input_u, target_u = Variable(input_s), Variable(target_s), Variable(input_u), \
                                                    Variable(input_u, requires_grad=False)
