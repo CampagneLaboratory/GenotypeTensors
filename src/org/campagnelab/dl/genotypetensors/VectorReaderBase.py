@@ -5,7 +5,7 @@ class VectorReaderBase(ABC):
     def __init__(self, path_to_vector, vector_properties):
         self.path_to_vector = path_to_vector
         if not path_to_vector.endswith(".vec"):
-            self.path_to_vector+=".vec"
+            self.path_to_vector += ".vec"
         self.vector_properties = vector_properties
 
     def get_vector_properties(self):
