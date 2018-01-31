@@ -2,6 +2,8 @@ from torch.autograd import Variable
 from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
+from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider, \
+    MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
@@ -39,18 +41,19 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader = self.problem.unlabeled_loader()
+        data_provider = CpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),is_cuda=self.use_cuda,
+                                     batch_names=["training", "unlabeled"],
+                                     requires_grad={"training": ["input"], "unlabeled": ["input"]},
+                                     volatile={"training": [], "unlabeled": []})
 
-        for batch_idx, (dict_training, dict_unlabeled) in enumerate(zip(train_loader_subset, unlabeled_loader)):
-            input_s = dict_training["input"]
-            target_s = dict_training["softmaxGenotype"]
-            input_u = dict_unlabeled["input"]
+        for batch_idx, dict in enumerate(data_provider):
+            input_s = dict["training"]["input"]
+            target_s = dict["training"]["softmaxGenotype"]
+            input_u = dict["unlabeled"]["input"]
             num_batches += 1
 
-            if self.use_cuda:
-                input_s, target_s, input_u = input_s.cuda(async =True), target_s.cuda(async =True), input_u.cuda(async =True)
-
-            input_s, target_s, input_u, target_u = Variable(input_s), Variable(target_s), Variable(input_u), \
-                                                   Variable(input_u, requires_grad=False)
+            # need a copy of input_u as output:
+            target_u = Variable(input_u.data, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
             self.net.train()
@@ -88,15 +91,16 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-
-        for batch_idx, dict in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
-            inputs = dict["input"]
-            targets = dict["softmaxGenotype"]
-            if self.use_cuda:
-                inputs, targets = inputs.cuda(), targets.cuda()
-
-            input_s, target_s, input_u, target_u = Variable(inputs, volatile=True), Variable(targets, volatile=True),\
-                                                   Variable(inputs, volatile=True), Variable(inputs, volatile=True)
+        validation_loader_subset=self.problem.validation_loader_range(0, self.args.num_validation)
+        data_provider = CpuGpuDataProvider(iterator=zip(validation_loader_subset), is_cuda=self.use_cuda,
+                                     batch_names=["validation"],
+                                     requires_grad={"validation": []},
+                                     volatile={"validation": ["input","softmaxGenotype"]})
+        for batch_idx, dict in enumerate(data_provider):
+            input_s = dict["validation"]["input"]
+            target_s = dict["validation"]["softmaxGenotype"]
+            # we need copies of the same tensors:
+            input_u, target_u = Variable(input_s.data, volatile=True), Variable(input_s.data, volatile=True)
 
             output_s = self.net(input_s)
             output_u = self.net.autoencoder(input_u)
