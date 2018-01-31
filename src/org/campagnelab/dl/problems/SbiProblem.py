@@ -25,7 +25,7 @@ class SbiProblem(Problem):
         return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
-        return GenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
+        return CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
 
     def unlabeled_set(self):
 
@@ -34,16 +34,16 @@ class SbiProblem(Problem):
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines=list_file.readlines()
                 return CyclicInterleavedDatasets(
-                    [ GenotypeDataset(path.rstrip(),vector_names=self.get_input_names()) for path in lines ])
+                    [ CachedGenotypeDataset(path.rstrip(),vector_names=self.get_input_names()) for path in lines ])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
-                return GenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_input_names())
+                return CachedGenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_input_names())
             else:
                 return EmptyDataset()
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
-            return GenotypeDataset(self.basename + "-validation.vec",  vector_names=self.get_vector_names())
+            return CachedGenotypeDataset(self.basename + "-validation.vec",  vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
 
