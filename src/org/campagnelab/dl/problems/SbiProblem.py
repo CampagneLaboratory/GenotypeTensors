@@ -87,8 +87,8 @@ class SbiProblem(Problem):
 
         assert False, "Not support for text .vec files"
 
-    def loader_for_dataset(self, dataset):
-        return iter(DataLoader(dataset=dataset, batch_size=self.mini_batch_size(), num_workers=0, pin_memory=True, drop_last=True))
+    def loader_for_dataset(self, dataset, shuffle=False):
+        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(), num_workers=0, pin_memory=False, drop_last=True))
 
 
     def loss_function(self, output_name):
