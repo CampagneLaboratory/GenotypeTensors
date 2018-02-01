@@ -2,7 +2,8 @@ from torch.autograd import Variable
 from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
-from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider, \
+    MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
@@ -40,7 +41,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader = self.problem.unlabeled_loader()
-        data_provider = CpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),is_cuda=self.use_cuda,
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),is_cuda=self.use_cuda,
                                      batch_names=["training", "unlabeled"],
                                      requires_grad={"training": ["input"], "unlabeled": ["input"]},
                                      volatile={"training": [], "unlabeled": []})
@@ -77,6 +78,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
+        data_provider.close()
 
         return performance_estimators
 
@@ -91,7 +93,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset=self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = CpuGpuDataProvider(iterator=zip(validation_loader_subset), is_cuda=self.use_cuda,
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(validation_loader_subset), is_cuda=self.use_cuda,
                                      batch_names=["validation"],
                                      requires_grad={"validation": []},
                                      volatile={"validation": ["input","softmaxGenotype"]})
@@ -115,7 +117,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
         # print()
-
+        data_provider.close()
         # Apply learning rate schedule:
         test_accuracy = performance_estimators.get_metric("test_supervised_loss")
         assert test_accuracy is not None, "test_supervised_loss must be found among estimated performance metrics"

@@ -45,7 +45,7 @@ class DataProvider:
 
 
 class CpuGpuDataProvider(DataProvider):
-    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=12, preload_cuda_n=3):
+    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=3, preload_cuda_n=3):
         super(CpuGpuDataProvider, self).__init__(iterator=iterator,batch_names=batch_names, is_cuda=False, # do not put on GPU in super
                                                  volatile=volatile, requires_grad=requires_grad)
         self.is_cuda = is_cuda
@@ -85,55 +85,67 @@ class CpuGpuDataProvider(DataProvider):
                 for var_name in batch.keys():
                     batch[var_name]=batch[var_name].cuda(async =True)
             self.gpu_batches_queue.put(batches, block=True)
-#
-# class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
-#     def __init__(self,iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=12, preload_cuda_n=6):
-#         super().__init__(iterator, batch_names, is_cuda=is_cuda,
-#                          volatile=volatile, requires_grad=requires_grad, preload_n=preload_n, preload_cuda_n=preload_cuda_n)
-#         self.stop_iteration = False
-#         def add_to_cpu_queue():
-#             while True:
-#                     try:
-#                         self.populate_cpu_queue()
-#                     except StopIteration:
-#                         self.stop_iteration=True
-#                     return
-#         t1 = Thread(target=add_to_cpu_queue)
-#         t1.start()
-#
-#         while self.cpu_batches_queue.empty():
-#             time.sleep(10)
-#
-#         if is_cuda:
-#             def add_to_gpu_queue():
-#                 while True:
-#                     try:
-#                         self.populate_gpu_queue()
-#                     except StopIteration:
-#                         self.stop_iteration = True
-#                     return
-#
-#             t2 = Thread(target=add_to_gpu_queue)
-#             t2.start()
-#             while self.gpu_batches_queue.empty():
-#                 time.sleep(10)
-#
-#
-#     def __next__(self):
-#         """
-#         This method returns the next batch of data, prepared for pytorch, on GPU when is_cuda is true.
-#         :return: Dictionary with named inputs and outputs.
-#         """
-#         print("cpu queue size: {}".format(self.cpu_batches_queue.qsize()))
-#         print("gpu queue size: {}".format(self.gpu_batches_queue.qsize()))
-#         if self.stop_iteration  and self.cpu_batches_queue.empty() and self.is_cuda and self.gpu_batches_queue.empty():
-#             raise StopIteration
-#
-#         if self.is_cuda:
-#             while self.gpu_batches_queue.empty():
-#                 time.sleep(10)
-#             return self.gpu_batches_queue.get(block=True)
-#         else:
-#             while self.cpu_batches_queue.empty():
-#                 time.sleep(10)
-#             return self.cpu_batches_queue.get(block=True)
+
+
+class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
+    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=12,
+                 preload_cuda_n=6):
+        super().__init__(iterator, batch_names, is_cuda=is_cuda,
+                         volatile=volatile, requires_grad=requires_grad, preload_n=preload_n,
+                         preload_cuda_n=preload_cuda_n)
+        self.stop_iteration = False
+        self.kill_threads=False
+        def add_to_cpu_queue():
+            while not self.kill_threads:
+                try:
+                    if not self.cpu_batches_queue.full():
+                        self.populate_cpu_queue()
+                    else:
+                        time.sleep(1.0 / 1000.0)
+                except StopIteration:
+                    self.stop_iteration = True
+                    break
+
+        self.t1 = Thread(target=add_to_cpu_queue, name="BatchesToCPU")
+        self.t1.start()
+
+        while self.cpu_batches_queue.empty():
+            time.sleep(1)
+
+        if is_cuda:
+            def add_to_gpu_queue():
+                while not self.kill_threads:
+
+                    if not self.gpu_batches_queue.full():
+                        self.populate_gpu_queue()
+                    else:
+                        time.sleep(1.0 / 1000.0)
+
+            self.t2 = Thread(target=add_to_gpu_queue, name="BatchesToGPU")
+            self.t2.start()
+
+            time.sleep(1)
+
+    def __next__(self):
+        """
+        This method returns the next batch of data, prepared for pytorch, on GPU when is_cuda is true.
+        :return: Dictionary with named inputs and outputs.
+        """
+        #print("cpu queue size: {}".format(self.cpu_batches_queue.qsize()))
+        #print("gpu queue size: {}".format(self.gpu_batches_queue.qsize()))
+        if self.stop_iteration and self.cpu_batches_queue.empty() and self.is_cuda and self.gpu_batches_queue.empty():
+            raise StopIteration
+
+        if self.is_cuda:
+
+            return self.gpu_batches_queue.get(block=True)
+        else:
+
+            return self.cpu_batches_queue.get(block=True)
+
+    def close(self):
+
+        self.kill_threads=True
+        time.sleep(1)
+
+

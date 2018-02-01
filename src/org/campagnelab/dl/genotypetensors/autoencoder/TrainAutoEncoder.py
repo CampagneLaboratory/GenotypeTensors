@@ -5,7 +5,9 @@ import argparse
 import random
 import string
 import sys
+import threading
 
+import os
 import torch
 
 # MIT License
@@ -170,4 +172,6 @@ if __name__ == '__main__':
 
 
     train_once(args, problem, use_cuda)
-    exit(0)
+    # don't wait for threads to die, just exit:
+    os._exit(0)
+
