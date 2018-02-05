@@ -53,13 +53,13 @@ def infer(model_name, checkpoint_dir_path, input_data_path, sample_id, input_ten
 
 
 def infer_genotyping(model_name, checkpoint_dir_path, input_data_path):
-    infer(model_name, checkpoint_dir_path, input_data_path, sample_id=0, input_tensor_names=["input"],
-          output_tensor_names=["isBaseMutated", "somaticFrequency"])
+    return infer(model_name, checkpoint_dir_path, input_data_path, sample_id=0, input_tensor_names=["input"],
+                 output_tensor_names=["isBaseMutated", "somaticFrequency"])
 
 
 def infer_somatic(model_name, checkpoint_dir_path, input_data_path):
-    infer(model_name, checkpoint_dir_path, input_data_path, sample_id=0, input_tensor_names=["input"],
-          output_tensor_names=["softmaxGenotype"])
+    return infer(model_name, checkpoint_dir_path, input_data_path, sample_id=0, input_tensor_names=["input"],
+                 output_tensor_names=["softmaxGenotype"])
 
 
 def ping():
