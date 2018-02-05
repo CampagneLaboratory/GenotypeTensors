@@ -34,10 +34,10 @@ class SbiProblem(Problem):
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines=list_file.readlines()
                 return CyclicInterleavedDatasets(
-                    [ CachedGenotypeDataset(path.rstrip(),vector_names=self.get_input_names()) for path in lines ])
+                    [ CachedGenotypeDataset(path.rstrip(),vector_names=self.get_input_names()).shuffle() for path in lines ])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
-                return CachedGenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_input_names())
+                return CachedGenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_input_names()).shuffle()
             else:
                 return EmptyDataset()
 
@@ -56,7 +56,7 @@ class SbiProblem(Problem):
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
 
-        return self.loader_for_dataset(self.train_set())
+        return self.loader_for_dataset(self.train_set(),shuffle=True)
 
     def _filter(self, indices, iterator):
         fast_indices = set(indices)
@@ -87,8 +87,8 @@ class SbiProblem(Problem):
 
         assert False, "Not support for text .vec files"
 
-    def loader_for_dataset(self, dataset):
-        return iter(DataLoader(dataset=dataset, batch_size=self.mini_batch_size(), num_workers=0, pin_memory=True, drop_last=True))
+    def loader_for_dataset(self, dataset, shuffle=False):
+        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(), num_workers=0, pin_memory=False, drop_last=True))
 
 
     def loss_function(self, output_name):

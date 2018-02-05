@@ -135,15 +135,18 @@ class GenotypeDataset(Dataset):
         self.length = self.props.num_records
         self.vector_names=vector_names
         self.is_random_access=self.props.file_type == "binary"
+        self.previous_index=0
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
+
         # get next example from .vec file and check that idx matches example index,
         # then return the features and outputs as tuple.
         if self.is_random_access:
-            self.reader.set_to_example_at_idx(idx)
+            if idx!=(self.previous_index+1):
+                self.reader.set_to_example_at_idx(idx)
             example_tuple = next(self.reader)
         else:
             example_tuple = next(self.reader)
@@ -154,4 +157,5 @@ class GenotypeDataset(Dataset):
         for tensor in example_tuple[1:]:
             result[self.vector_names[i]]= torch.from_numpy(tensor)
             i+=1
+        self.previous_index = idx
         return  result
