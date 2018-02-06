@@ -9,13 +9,14 @@ from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import Genotype
 from org.campagnelab.dl.problems.Problem import Problem
 
 
-
-
 class SbiProblem(Problem):
     def get_vector_names(self):
         return []
 
     def get_input_names(self):
+        return []
+
+    def get_output_names(self):
         return []
 
     def input_size(self, input_name):
@@ -32,18 +33,20 @@ class SbiProblem(Problem):
         if self.file_exists(self.basename + "-unlabeled.list"):
             # Use a list of datasets and interleave their records:
             with open(self.basename + "-unlabeled.list") as list_file:
-                lines=list_file.readlines()
+                lines = list_file.readlines()
                 return CyclicInterleavedDatasets(
-                    [ CachedGenotypeDataset(path.rstrip(),vector_names=self.get_input_names()).shuffle() for path in lines ])
+                    [CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()).shuffle() for path in
+                     lines])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
-                return CachedGenotypeDataset(self.basename + "-unlabeled.vec", vector_names=self.get_input_names()).shuffle()
+                return CachedGenotypeDataset(self.basename + "-unlabeled.vec",
+                                             vector_names=self.get_input_names()).shuffle()
             else:
                 return EmptyDataset()
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
-            return CachedGenotypeDataset(self.basename + "-validation.vec",  vector_names=self.get_vector_names())
+            return CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
 
@@ -56,7 +59,7 @@ class SbiProblem(Problem):
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
 
-        return self.loader_for_dataset(self.train_set(),shuffle=True)
+        return self.loader_for_dataset(self.train_set(), shuffle=True)
 
     def _filter(self, indices, iterator):
         fast_indices = set(indices)
@@ -88,8 +91,8 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def loader_for_dataset(self, dataset, shuffle=False):
-        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(), num_workers=0, pin_memory=False, drop_last=True))
-
+        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(), num_workers=0,
+                               pin_memory=False, drop_last=True))
 
     def loss_function(self, output_name):
         return torch.nn.CrossEntropyLoss()
@@ -100,6 +103,7 @@ class SbiProblem(Problem):
     def basename_prefix(self):
         return None
 
+
 class SbiSomaticProblem(SbiProblem):
     def name(self):
         return self.basename_prefix() + self.basename
@@ -109,6 +113,9 @@ class SbiSomaticProblem(SbiProblem):
 
     def get_input_names(self):
         return ["input"]
+
+    def get_output_names(self):
+        return ["isBaseMutated", "somaticFrequency"]
 
     def basename_prefix(self):
         return "somatic:"
@@ -132,6 +139,5 @@ class SbiGenotypingProblem(SbiProblem):
     def get_vector_names(self):
         return ["input", "softmaxGenotype"]
 
-
-
-
+    def get_output_names(self):
+        return ["softmaxGenotype"]

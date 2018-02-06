@@ -83,7 +83,7 @@ class VectorCache:
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("-i", "--input", help="text .vec.gz file to read in", type=str, required=True)
+    arg_parser.add_argument("-i", "--input", help="input .vec file to read in", type=str, required=True)
     args = arg_parser.parse_args()
     with VectorCache(args.input) as vector_cache:
         vector_cache.write_lines()
