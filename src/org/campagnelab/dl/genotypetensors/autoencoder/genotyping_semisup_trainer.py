@@ -45,7 +45,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
                                      batch_names=["training", "unlabeled"],
                                      requires_grad={"training": ["input"], "unlabeled": ["input"]},
                                      volatile={"training": [], "unlabeled": []})
-
+        self.net.autoencoder.train()
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["training"]["input"]
             target_s = dict["training"]["softmaxGenotype"]
@@ -56,8 +56,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             target_u = Variable(input_u.data, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
-            self.net.train()
-            self.net.autoencoder.train()
+
             self.optimizer_training.zero_grad()
             output_s = self.net(input_s)
             output_u = self.net.autoencoder(input_u)

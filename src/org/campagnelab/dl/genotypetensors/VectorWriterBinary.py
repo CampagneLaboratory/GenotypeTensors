@@ -12,6 +12,7 @@ import numpy as np
 
 
 class VectorWriterBinary:
+    # TODO: REMOVE input_data_path  we don't generally have properties to copy to the destination.
     def __init__(self, path_with_basename, sample_id, tensor_names, input_data_path):
         def _get_vector_length(vector_name_for_dims):
             return reduce(mul,
