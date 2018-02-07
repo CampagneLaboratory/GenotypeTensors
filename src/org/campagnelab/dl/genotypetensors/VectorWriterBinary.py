@@ -6,6 +6,8 @@ import struct
 from functools import reduce
 from operator import mul
 
+from torch.autograd import Variable
+
 from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorPropertiesReader
 
 import numpy as np
@@ -98,6 +100,8 @@ class VectorWriterBinary:
 
     def append(self, example_index, tensors):
         num_rows = None
+        if isinstance(tensors, Variable):
+            tensors = (tensors,)
         for tensor_id, tensor_pytorch in enumerate(tensors):
             tensor = tensor_pytorch.data.cpu().numpy()
             num_rows_tensor = tensor.shape[0]
@@ -113,7 +117,7 @@ class VectorWriterBinary:
             if self.using_input_data:
                 fmt_string = ">IQII{}{}".format(self.vector_lengths[self.vector_names[tensor_id]], fmt_string_type)
             else:
-                vector_length = VectorWriterBinary._get_vector_length(tensor.shape)
+                vector_length = VectorWriterBinary._get_vector_length(tensor[0].shape)
                 fmt_string = ">IQII{}{}".format(vector_length, fmt_string_type)
                 if not self.vector_props_written:
                     self.num_bytes_per_example += vector_length * vector_bytes_per_element

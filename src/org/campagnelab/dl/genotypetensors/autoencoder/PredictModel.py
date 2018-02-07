@@ -27,7 +27,7 @@ class PredictModel:
 
                 outputs = self.model(input_u)
                 writer.append(0, outputs)
-                progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples)
+                progress_bar(batch_idx * self.mini_batch_size, max_examples)
 
                 if ((batch_idx + 1) * self.mini_batch_size) > max_examples:
                     break
