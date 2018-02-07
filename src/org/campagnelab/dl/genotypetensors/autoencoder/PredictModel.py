@@ -15,13 +15,13 @@ class PredictModel:
     def predict(self, iterator, output_filename, max_examples=sys.maxsize):
 
         self.model.eval()
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
+                                                        is_cuda=self.use_cuda,
+                                                        batch_names=["unlabeled"],
+                                                        volatile={"unlabeled": ["input"]})
 
         with VectorWriterBinary(sample_id=0, path_with_basename=output_filename,
                                 tensor_names=self.problem.get_output_names()) as writer:
-            data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
-                                                            is_cuda=self.use_cuda,
-                                                            batch_names=["unlabeled"],
-                                                            volatile={"unlabeled": ["input"]})
             for batch_idx, dict in enumerate(data_provider):
                 input_u = dict["unlabeled"]["input"]
 
@@ -31,3 +31,6 @@ class PredictModel:
 
                 if ((batch_idx + 1) * self.mini_batch_size) > max_examples:
                     break
+
+        data_provider.close()
+        print("Done")
