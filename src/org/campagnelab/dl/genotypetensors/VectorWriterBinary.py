@@ -83,7 +83,7 @@ class VectorWriterBinary:
             self.vector_props_written = False
             self.vector_names_for_props_written = set()
             self.num_bytes_per_example = 0
-        self.output_properties_file = open("{}.vecp".format(path_with_basename))
+        self.output_properties_file = open("{}.vecp".format(path_with_basename), mode="w")
         self.num_records = 0
 
     def __enter__(self):
