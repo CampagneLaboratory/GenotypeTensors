@@ -93,8 +93,10 @@ tester = PredictModel(model=model, problem=problem, use_cuda=use_cuda )
 
 iterator=None
 if args.dataset=="validation":
+    args.n = min(args.n, len(problem.validation_set()))
     iterator=problem.validation_loader_range(0, args.n)
 elif args.dataset=="unlabeled":
+    args.n = min(args.n, len(problem.unlabeled_loader()))
     iterator = problem.unlabeled_loader_range(0, args.n)
 
 else:
