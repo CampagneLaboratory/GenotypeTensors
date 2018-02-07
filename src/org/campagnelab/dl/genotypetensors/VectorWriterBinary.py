@@ -106,7 +106,7 @@ class VectorWriterBinary:
             num_rows = num_rows_tensor
             tensor_dtype = tensor.dtype
             if tensor_dtype == np.dtype("float32"):
-                fmt_string_type = "F"
+                fmt_string_type = "f"
                 vector_bytes_per_element = 4
             else:
                 raise NotImplementedError
