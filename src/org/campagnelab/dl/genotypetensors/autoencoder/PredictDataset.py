@@ -89,7 +89,15 @@ if problem is None or model is None:
     print("no problem or model, aborting")
     exit(1)
 
-tester = PredictModel(model=model, problem=problem, use_cuda=use_cuda )
+domain_descriptor = checkpoint["domain_descriptor"] if "domain_descriptor" in checkpoint else None
+feature_mapper = checkpoint["feature_mapper"] if "domain_descriptor" in checkpoint else None
+samples = checkpoint["samples"] if "domain_descriptor" in checkpoint else None
+input_files = checkpoint["input_files"] if "domain_descriptor" in checkpoint else None
+
+tester = PredictModel(model=model, problem=problem, use_cuda=use_cuda,
+                      domain_descriptor=None,
+                      feature_mapper=None, samples=None, input_files=None
+                      )
 
 iterator=None
 if args.dataset=="validation":

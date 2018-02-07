@@ -24,7 +24,8 @@ class VectorWriterBinary:
     header_size = example_id_size + vector_id_size + sample_id_size + vector_length_size
     vector_element_size = 4
 
-    def __init__(self, path_with_basename, sample_id, tensor_names, input_data_path=None):
+    def __init__(self, path_with_basename, sample_id, tensor_names, input_data_path=None, domain_descriptor=None,
+                 feature_mapper=None, samples=None, input_files=None):
         self.basename = path_with_basename
         self.vec_file = open(self.basename + ".vec", "wb")
         self.sample_id = sample_id
@@ -70,11 +71,11 @@ class VectorWriterBinary:
                 "majorVersion": VectorWriterBinary.major_version,
                 "minorVersion": VectorWriterBinary.minor_version,
                 "fileType": "binary",
-                "domainDescriptor": "pytorch_model_only",
-                "featureMapper": "pytorch_model_only",
+                "domainDescriptor": domain_descriptor if domain_descriptor is not None else "pytorch_model_only",
+                "featureMapper": feature_mapper if feature_mapper is not None else "pytorch_model_only",
                 "headerSize": VectorWriterBinary.header_size,
-                "inputFiles": ["pytorch_model_only"],
-                "samples": [
+                "inputFiles": input_files if input_files is not None else ["pytorch_model_only"],
+                "samples": samples if samples is not None else [
                     {
                         "sampleName": "pytorch_model_only",
                         "sampleType": "pytorch_model_only",

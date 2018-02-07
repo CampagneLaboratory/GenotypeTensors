@@ -101,5 +101,8 @@ class Problem:
         """Return the loss function for this problem."""
         pass
 
+    def model_attrs(self):
+        """Return additional attributes that can be added to the model"""
+        pass
 
 

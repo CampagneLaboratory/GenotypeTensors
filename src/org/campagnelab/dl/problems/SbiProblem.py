@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import copy
 import torch
 from torch.utils.data import DataLoader
 
@@ -102,6 +103,14 @@ class SbiProblem(Problem):
 
     def basename_prefix(self):
         return None
+
+    def model_attrs(self):
+        return {
+            "samples": self.meta_data.samples,
+            "domain_descriptor": self.meta_data.vector_properties["domainDescriptor"],
+            "input_files": copy.deepcopy(self.meta_data.vector_properties["inputFiles"]),
+            "feature_mapper": self.meta_data.vector_properties["featureMapper"]
+        }
 
 
 class SbiSomaticProblem(SbiProblem):

@@ -220,6 +220,12 @@ class CommonTrainer:
             'best_test_loss': acc,
             'epoch': epoch,
         }
+        additional_attrs = self.problem.model_attrs()
+        if isinstance(additional_attrs, dict):
+            del additional_attrs['model']
+            del additional_attrs['best_test_loss']
+            del additional_attrs['epoch']
+            state.update(additional_attrs)
         if not os.path.isdir('models'):
             os.mkdir('models')
         torch.save(state, './models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
