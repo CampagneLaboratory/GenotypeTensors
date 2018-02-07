@@ -130,6 +130,11 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
             self.t2.start()
 
             time.sleep(1)
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def __next__(self):
         """
@@ -138,19 +143,24 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
         """
         #print("cpu queue size: {}".format(self.cpu_batches_queue.qsize()))
         #print("gpu queue size: {}".format(self.gpu_batches_queue.qsize()))
-        if self.stop_iteration and self.cpu_batches_queue.empty() and self.is_cuda and self.gpu_batches_queue.empty():
-            raise StopIteration
+        while self.queues_are_empty():
+            if self.stop_iteration and self.queues_are_empty():
+                raise StopIteration
+            time.sleep(100/1000)
 
         if self.is_cuda:
 
-            return self.gpu_batches_queue.get(block=True)
+            return self.gpu_batches_queue.get(block=True,timeout=3)
         else:
 
-            return self.cpu_batches_queue.get(block=True)
+            return self.cpu_batches_queue.get(block=True, timeout=3)
 
     def close(self):
 
         self.kill_threads=True
         time.sleep(1)
+
+    def queues_are_empty(self):
+        return self.cpu_batches_queue.empty() or self.is_cuda and self.gpu_batches_queue.empty() and self.cpu_batches_queue.empty()
 
 
