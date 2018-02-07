@@ -51,7 +51,7 @@ parser.add_argument('--checkpoint-key', help='Random key to load a checkpoint mo
                     default=None)
 parser.add_argument('--model-path', help='Path of where the models directory is located.',      default=None)
 parser.add_argument('--model-label', help='Model label: best or latest.',      default="best")
-parser.add_argument('-o','--output', help='Output file name.',      default=None)
+parser.add_argument('-o','--output', help='Output file name.',      default="output")
 parser.add_argument('--problem', default="genotyping:basename", type=str,
                     help='The problem, genotyping:basename or somatic:basename')
 
@@ -93,9 +93,10 @@ tester = PredictModel(model=model, problem=problem, use_cuda=use_cuda )
 
 iterator=None
 if args.dataset=="validation":
-    iterator=problem.loader_for_dataset(problem.validation_set())
+    iterator=problem.validation_loader_range(0, args.n)
 elif args.dataset=="unlabeled":
-    iterator=problem.loader_for_dataset(problem.unlabeled_set())
+    iterator = problem.unlabeled_loader_range(0, args.n)
+
 else:
     print("Unsupported dataset: " + args.dataset)
     exit(1)

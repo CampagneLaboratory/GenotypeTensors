@@ -31,6 +31,11 @@ class DataProvider:
         for loader_index, batch in enumerate(batch):
             loader_name=self.batch_names[loader_index]
             dict[loader_name] = {}
+            if len(self.requires_grad)==0:
+                self.requires_grad[loader_name]=[]
+            if len(self.volatile)==0:
+                self.volatile[loader_name]=[]
+
             for var_name in batch.keys():
 
                 var_batch = Variable(batch[var_name], requires_grad=(var_name in self.requires_grad[loader_name]),
