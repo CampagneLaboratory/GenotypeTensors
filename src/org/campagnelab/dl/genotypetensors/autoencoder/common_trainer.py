@@ -222,9 +222,9 @@ class CommonTrainer:
         }
         additional_attrs = self.problem.model_attrs()
         if isinstance(additional_attrs, dict):
-            del additional_attrs['model']
-            del additional_attrs['best_test_loss']
-            del additional_attrs['epoch']
+            for key in state:
+                if key in additional_attrs:
+                    del additional_attrs[key]
             state.update(additional_attrs)
         if not os.path.isdir('models'):
             os.mkdir('models')
