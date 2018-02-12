@@ -95,8 +95,8 @@ samples = checkpoint["samples"] if "domain_descriptor" in checkpoint else None
 input_files = checkpoint["input_files"] if "domain_descriptor" in checkpoint else None
 
 tester = PredictModel(model=model, problem=problem, use_cuda=use_cuda,
-                      domain_descriptor=None,
-                      feature_mapper=None, samples=None, input_files=None
+                      domain_descriptor=domain_descriptor,
+                      feature_mapper=feature_mapper, samples=samples, input_files=input_files
                       )
 
 iterator=None
