@@ -78,9 +78,9 @@ if checkpoint is not None:
     model = checkpoint['model']
 problem = None
 if args.problem.startswith("genotyping:"):
-    problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem)
+    problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem, drop_last_batch=False)
 elif args.problem.startswith("somatic:"):
-    problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem)
+    problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem, drop_last_batch=False)
 else:
     print("Unsupported problem: " + args.problem)
     exit(1)

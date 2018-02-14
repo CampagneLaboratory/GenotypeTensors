@@ -51,10 +51,11 @@ class SbiProblem(Problem):
         else:
             return EmptyDataset()
 
-    def __init__(self, mini_batch_size, code, num_workers=0):
+    def __init__(self, mini_batch_size, code, drop_last_batch=True, num_workers=0):
         super().__init__(mini_batch_size)
         self.basename = code[len(self.basename_prefix()):]
         self.num_workers = num_workers
+        self.drop_last_batch = drop_last_batch
         self.meta_data = VectorReader(self.basename + "-train.vec", False, vector_names=[]).vector_reader_properties
 
     def train_loader(self):
@@ -93,7 +94,7 @@ class SbiProblem(Problem):
 
     def loader_for_dataset(self, dataset, shuffle=False):
         return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(), num_workers=0,
-                               pin_memory=False, drop_last=True))
+                               pin_memory=False, drop_last=self.drop_last_batch))
 
     def loss_function(self, output_name):
         return torch.nn.CrossEntropyLoss()
