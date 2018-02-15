@@ -67,6 +67,7 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, help='Float used to control the effect of reconstruction loss.',
                         default=1.0)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
+    parser.add_argument('--dropout-probability', type=float, help='Probability of droping activations (drop-out P).', default=0)
     parser.add_argument('--seed', type=int,
                         help='Random seed', default=random.randint(0, sys.maxsize))
     parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
@@ -155,7 +156,8 @@ if __name__ == '__main__':
                                                                                           problem,
                                                                                           encoded_size=args.encoded_size,
                                                                                           somatic=False,
-                                                                                          ngpus=args.num_gpus)))
+                                                                                          ngpus=args.num_gpus,
+                                                                                          dropout_p=args.dropout_probability)))
             training_loop_method = model_trainer.train_semisup
             testing_loop_method = model_trainer.test_semi_sup
         else:

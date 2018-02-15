@@ -28,11 +28,11 @@ class SbiSomaticClassifier(nn.Module):
 class SbiGenotypeClassifier(nn.Module):
     """ A classifier that predicts genotypes with a softmax. forward returns the output. """
 
-    def __init__(self, input_size=32, num_layers=3, target_size=10, autoencoder=None):
+    def __init__(self, input_size=32, num_layers=3, target_size=10, autoencoder=None, dropout_p=0.2):
         super().__init__()
         layer_list = []
         for layer in range(0, num_layers):
-            layer_list += [nn.Linear(input_size, input_size), nn.ReLU(), nn.Dropout()]
+            layer_list += [nn.Linear(input_size, input_size), nn.ReLU(), nn.Dropout(p=dropout_p)]
 
         self.features = nn.Sequential(*layer_list)
         self.softmax_genotype_linear = nn.Linear(input_size, target_size)
@@ -49,7 +49,7 @@ class SbiGenotypeClassifier(nn.Module):
         return self.autoencoder
 
 
-def create_classifier_model(model_name, problem, encoded_size=32, somatic=True, ngpus=1):
+def create_classifier_model(model_name, problem, encoded_size=32, somatic=True, ngpus=1,dropout_p=0.2):
     input_size = problem.input_size("input")
 
     assert len(input_size) == 1, "Classifier require 1D input features."
@@ -69,6 +69,6 @@ def create_classifier_model(model_name, problem, encoded_size=32, somatic=True, 
         autoencoder = AutoEncoder(input_size=input_size[0], encoded_size=encoded_size, ngpus=ngpus)
         # Store it in the classifier, so we can retrieve it for unsupervised reconstruction and to optimize its parameters:
         classifier = SbiGenotypeClassifier(input_size=encoded_size, target_size=output_size[0],
-                                           autoencoder=autoencoder)
+                                           autoencoder=autoencoder, dropout_p=dropout_p)
     print("classifier:" + str(classifier))
     return classifier
