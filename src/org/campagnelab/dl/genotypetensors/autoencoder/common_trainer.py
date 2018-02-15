@@ -8,6 +8,7 @@ from torch.nn import MSELoss
 from org.campagnelab.dl.performance.LRHelper import LearningRateHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.LRSchedules import construct_scheduler
+from org.campagnelab.dl.utils.utils import init_params
 
 
 def _format_nice(n):
@@ -129,7 +130,7 @@ class CommonTrainer:
         if self.use_cuda:
             self.net.cuda()
         cudnn.benchmark = True
-
+        self.net.apply(init_params)
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
 
