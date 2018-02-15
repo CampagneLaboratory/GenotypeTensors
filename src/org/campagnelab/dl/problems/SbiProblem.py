@@ -2,7 +2,7 @@ from pathlib import Path
 
 import copy
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset, \
@@ -35,7 +35,7 @@ class SbiProblem(Problem):
             # Use a list of datasets and interleave their records:
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines = list_file.readlines()
-                return CyclicInterleavedDatasets(
+                return ConcatDataset(
                     [CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()).shuffle() for path in
                      lines])
         else:
@@ -84,7 +84,7 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def unlabeled_loader(self):
-        return self.loader_for_dataset(dataset=self.unlabeled_set())
+        return self.loader_for_dataset(dataset=self.unlabeled_set(), shuffle=True)
 
     def reg_loader_subset(self, indices):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
