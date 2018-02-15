@@ -28,4 +28,4 @@ class FloatHelper(PerformanceEstimator):
 
     def progress_message(self):
         """ Return a message suitable for logging progress of the metrics."""
-        return self.name+": {:.4e}".format(*self.estimates_of_metric())
+        return self.name+": {:.4f}".format(*self.estimates_of_metric())
