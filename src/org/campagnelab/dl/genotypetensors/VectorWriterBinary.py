@@ -11,6 +11,7 @@ from torch.autograd import Variable
 
 from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorPropertiesReader
 
+import torch
 import numpy as np
 
 
@@ -100,11 +101,16 @@ class VectorWriterBinary:
     def _get_vector_length(dims):
         return reduce(mul, dims, 1)
 
-    def append(self, example_index, tensors):
+    def append(self, example_index, tensors, inverse_logit=False):
         num_rows = None
         if isinstance(tensors, Variable):
             tensors = (tensors,)
         for tensor_id, tensor_pytorch in enumerate(tensors):
+            if inverse_logit:
+                # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
+                # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
+                tensor_pytorch_exp = torch.exp(tensor_pytorch)
+                tensor_pytorch = torch.div(tensor_pytorch_exp, torch.add(tensor_pytorch_exp, 1))
             tensor = tensor_pytorch.data.cpu().numpy()
             num_rows_tensor = tensor.shape[0]
             if num_rows is not None and num_rows_tensor != num_rows:

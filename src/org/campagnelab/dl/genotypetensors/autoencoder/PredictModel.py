@@ -33,7 +33,7 @@ class PredictModel:
                 input_u = dict["unlabeled"]["input"]
 
                 outputs = self.model(input_u)
-                writer.append(0, outputs)
+                writer.append(0, outputs, inverse_logit=True)
                 progress_bar(batch_idx * self.mini_batch_size, max_examples)
 
                 if ((batch_idx + 1) * self.mini_batch_size) > max_examples:

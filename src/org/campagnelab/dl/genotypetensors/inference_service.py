@@ -47,7 +47,7 @@ def infer(model_name, checkpoint_dir_path, input_data_path, sample_id, input_ten
     with VectorWriterBinary(output_file_path, sample_id, output_tensor_names, input_data_path) as writer:
         for example_id, data in iterator:
             output = model(data)
-            writer.append(example_id, output)
+            writer.append(example_id, output, inverse_logit=True)
 
     return output_file_path
 
