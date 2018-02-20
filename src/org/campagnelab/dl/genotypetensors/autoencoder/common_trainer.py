@@ -185,6 +185,8 @@ class CommonTrainer:
                 perf_file.write(" ".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
 
+        self.save_model(metric, epoch, self.net, "latest")
+
         if metric is not None and (self.is_better(metric , self.best_test_loss) or metric == self.best_test_loss):
 
             self.save_checkpoint(epoch, metric)
@@ -206,7 +208,6 @@ class CommonTrainer:
         if test_loss < self.best_test_loss:
             print('Saving..')
 
-            self.save_model(test_loss, epoch, self.net,"latest")
             if self.best_model is not None:
                 self.save_model(test_loss, epoch, self.best_model,"best")
             else:
