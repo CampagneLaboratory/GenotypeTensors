@@ -27,7 +27,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
     def class_frequency(self):
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=self.use_cuda,
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=self.false,
                                                         batch_names=["training"],
                                                         volatile={"training": ["input","softmaxGenotype"]})
         class_frequencies = None
@@ -38,7 +38,8 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             if class_frequencies is None:
                 class_frequencies=torch.zeros(target_s[0].size())
             max, target_index = torch.max(target_s, dim=1)
-            class_frequencies[target_index.data] += 1
+
+            class_frequencies[target_index.cpu().data] += 1
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
                          "Class frequencies")
@@ -88,7 +89,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s_p = self.get_p(output_s)
             max, target_index= torch.max(target_s, dim=1)
             max, output_index= torch.max(output_s_p, dim=1)
-            errors[target_index.data]+=torch.ne(target_index.data, output_index.data).type(torch.FloatTensor)
+            errors[target_index.data]+=torch.ne(target_index.data.cpu(), output_index.data.cpu()).type(torch.FloatTensor)
             supervised_loss = self.criterion_classifier(output_s_p,target_index )
             optimized_loss = supervised_loss
             optimized_loss.backward()
