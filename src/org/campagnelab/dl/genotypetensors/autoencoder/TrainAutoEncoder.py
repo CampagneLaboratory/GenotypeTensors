@@ -169,6 +169,8 @@ if __name__ == '__main__':
 
         elif args.mode == "supervised_genotypes":
             model_trainer = GenotypingSupervisedTrainer(args=args, problem=problem, use_cuda=use_cuda)
+
+
             model_trainer.init_model(create_model_function=
                                      (lambda model_name, problem: create_classifier_model(model_name,
                                                                                           problem,
@@ -177,6 +179,8 @@ if __name__ == '__main__':
                                                                                           ngpus=args.num_gpus,
                                                                                           dropout_p=args.dropout_probability,
                                                                                           num_layers=args.num_layers)))
+            class_frequency = model_trainer.class_frequency()
+            print("class_frequency " + str(class_frequency))
             training_loop_method = model_trainer.train_supervised
             testing_loop_method = model_trainer.test_supervised
         else:

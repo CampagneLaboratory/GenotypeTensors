@@ -1,6 +1,8 @@
 import torch
 from torch.autograd import Variable
-from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss, MultiLabelSoftMarginLoss
+from torch.legacy.nn import SoftMax
+from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss, MultiLabelSoftMarginLoss, CrossEntropyLoss
+from torch.nn.functional import softmax
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider, \
@@ -15,13 +17,37 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
-        self.criterion_classifier = MultiLabelSoftMarginLoss()
+        self.criterion_classifier = CrossEntropyLoss()
 
     def get_test_metric_name(self):
         return "test_supervised_loss"
 
     def is_better(self, metric, previous_metric):
         return metric< previous_metric
+
+    def class_frequency(self):
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=self.use_cuda,
+                                                        batch_names=["training"],
+                                                        volatile={"training": ["input","softmaxGenotype"]})
+        class_frequencies = None
+
+        for batch_idx, dict in enumerate(data_provider):
+
+            target_s = dict["training"]["softmaxGenotype"]
+            if class_frequencies is None:
+                class_frequencies=torch.zeros(target_s[0].size())
+            max, target_index = torch.max(target_s, dim=1)
+            class_frequencies[target_index.data] += 1
+            progress_bar(batch_idx * self.mini_batch_size,
+                         self.max_training_examples,
+                         "Class frequencies")
+
+
+        class_frequencies=class_frequencies+1
+        weights=torch.norm(class_frequencies, p=1, dim=0)/class_frequencies
+        self.criterion_classifier = CrossEntropyLoss(weight=weights)
+        return class_frequencies
 
     def train_supervised(self, epoch):
 
@@ -42,10 +68,13 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                                      batch_names=["training"],
                                      requires_grad={"training": ["input"]},
                                      volatile={"training": [] })
+        errors = None
         self.net.autoencoder.train()
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["training"]["input"]
             target_s = dict["training"]["softmaxGenotype"]
+            if errors is None:
+                errors=torch.zeros(target_s[0].size())
 
             num_batches += 1
 
@@ -57,7 +86,10 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
 
             output_s_p = self.get_p(output_s)
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+            max, target_index= torch.max(target_s, dim=1)
+            max, output_index= torch.max(output_s_p, dim=1)
+            errors[target_index.data]+=torch.ne(target_index.data, output_index.data).type(torch.FloatTensor)
+            supervised_loss = self.criterion_classifier(output_s_p,target_index )
             optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
@@ -76,13 +108,14 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     def get_p(self, output_s):
         # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
         # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
-        output_s_exp = torch.exp(output_s)
-        output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
+        #output_s_exp = torch.exp(output_s)
+        #output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
+        output_s_p= softmax(output_s)
         return output_s_p
 
     def test_supervised(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
-
+        errors = None
         performance_estimators = PerformanceList()
         performance_estimators += [LossHelper("test_supervised_loss")]
 
@@ -98,9 +131,16 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             input_s = dict["validation"]["input"]
             target_s = dict["validation"]["softmaxGenotype"]
 
+            if errors is None:
+                errors=torch.zeros(target_s[0].size())
+
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+
+            max, target_index = torch.max(target_s, dim=1)
+            max, output_index = torch.max(output_s_p, dim=1)
+            errors[target_index.data] += torch.ne(target_index.data, output_index.data).type(torch.FloatTensor)
+            supervised_loss = self.criterion_classifier(output_s_p, target_index)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
@@ -110,6 +150,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                 break
         # print()
         data_provider.close()
+        print("test errors by class: ", str(errors))
         # Apply learning rate schedule:
         test_accuracy = performance_estimators.get_metric("test_supervised_loss")
         assert test_accuracy is not None, "test_supervised_loss must be found among estimated performance metrics"
