@@ -1,5 +1,5 @@
 from torch.autograd import Variable
-from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss
+from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss, MultiLabelSoftMarginLoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider, \
@@ -15,7 +15,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
         self.criterion_autoencoder = MSELoss()
-        self.criterion_classifier = BCEWithLogitsLoss()
+        self.criterion_classifier = MultiLabelSoftMarginLoss()
 
     def get_test_metric_name(self):
         return "test_supervised_loss"
