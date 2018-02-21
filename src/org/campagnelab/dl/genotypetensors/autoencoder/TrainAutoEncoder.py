@@ -175,7 +175,8 @@ if __name__ == '__main__':
                                                                                           encoded_size=args.encoded_size,
                                                                                           somatic=False,
                                                                                           ngpus=args.num_gpus,
-                                                                                          dropout_p=args.dropout_probability)))
+                                                                                          dropout_p=args.dropout_probability,
+                                                                                          num_layers=args.num_layers)))
             training_loop_method = model_trainer.train_supervised
             testing_loop_method = model_trainer.test_supervised
         else:
