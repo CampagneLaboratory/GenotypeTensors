@@ -65,10 +65,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
             output_s = self.net(input_s)
             output_u = self.net.autoencoder(input_u)
-            # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
-            # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
-            output_s_exp = torch.exp(output_s)
-            output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
+            output_s_p = self.get_p(output_s)
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
             optimized_loss = supervised_loss + self.args.gamma * reconstruction_loss
@@ -87,6 +84,13 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         data_provider.close()
 
         return performance_estimators
+
+    def get_p(self, output_s):
+        # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
+        # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
+        output_s_exp = torch.exp(output_s)
+        output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
+        return output_s_p
 
     def test_semi_sup(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
@@ -111,7 +115,8 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
             output_s = self.net(input_s)
             output_u = self.net.autoencoder(input_u)
-            supervised_loss = self.criterion_classifier(output_s, target_s)
+            output_s_p = self.get_p(output_s)
+            supervised_loss = self.criterion_classifier(output_s_p, target_s)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
