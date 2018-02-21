@@ -7,14 +7,13 @@ from org.campagnelab.dl.multithreading.sequential_implementation import DataProv
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
-from org.campagnelab.dl.utils.utils import progress_bar, grad_norm
+from org.campagnelab.dl.utils.utils import progress_bar
 
 
-class GenotypingSemiSupTrainer(CommonTrainer):
-    """Train a genotyping model using supervised and reconstruction on unlabeled set."""
+class GenotypingSupervisedTrainer(CommonTrainer):
+    """Train a genotyping model using supervised training only."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
-        self.criterion_autoencoder = MSELoss()
         self.criterion_classifier = MultiLabelSoftMarginLoss()
 
     def get_test_metric_name(self):
@@ -23,12 +22,10 @@ class GenotypingSemiSupTrainer(CommonTrainer):
     def is_better(self, metric, previous_metric):
         return metric< previous_metric
 
-    def train_semisup(self, epoch):
+    def train_supervised(self, epoch):
 
         performance_estimators = PerformanceList()
-        performance_estimators += [FloatHelper("optimized_loss")]
         performance_estimators += [FloatHelper("supervised_loss")]
-        performance_estimators += [FloatHelper("reconstruction_loss")]
 
         print('\nTraining, epoch: %d' % epoch)
 
@@ -40,39 +37,29 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        unlabeled_loader = self.problem.unlabeled_loader()
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),is_cuda=self.use_cuda,
-                                     batch_names=["training", "unlabeled"],
-                                     requires_grad={"training": ["input"], "unlabeled": ["input"]},
-                                     volatile={"training": [], "unlabeled": []})
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset),is_cuda=self.use_cuda,
+                                     batch_names=["training"],
+                                     requires_grad={"training": ["input"]},
+                                     volatile={"training": [] })
         self.net.autoencoder.train()
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["training"]["input"]
             target_s = dict["training"]["softmaxGenotype"]
-            input_u = dict["unlabeled"]["input"]
+
             num_batches += 1
 
-            # need a copy of input_u as output:
-            target_u = Variable(input_u.data, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
 
-            # Zero gradients:
-            self.net.zero_grad()
-            self.net.autoencoder.zero_grad()
             self.optimizer_training.zero_grad()
-
+            self.net.zero_grad()
             output_s = self.net(input_s)
-            output_u = self.net.autoencoder(input_u)
 
             supervised_loss = self.criterion_classifier(output_s, target_s)
-            reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
-            optimized_loss = supervised_loss + self.args.gamma * reconstruction_loss
+            optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
             performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
 
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
@@ -84,12 +71,11 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
         return performance_estimators
 
-    def test_semi_sup(self, epoch):
+    def test_supervised(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
 
         performance_estimators = PerformanceList()
         performance_estimators += [LossHelper("test_supervised_loss")]
-        performance_estimators += [LossHelper("test_reconstruction_loss")]
 
         self.net.eval()
         for performance_estimator in performance_estimators:
@@ -102,17 +88,11 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["validation"]["input"]
             target_s = dict["validation"]["softmaxGenotype"]
-            # we need copies of the same tensors:
-            input_u, target_u = Variable(input_s.data, volatile=True), Variable(input_s.data, volatile=True)
 
             output_s = self.net(input_s)
-            output_u = self.net.autoencoder(input_u)
             supervised_loss = self.criterion_classifier(output_s, target_s)
-            reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "test_reconstruction_loss", reconstruction_loss.data[0])
-
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                          performance_estimators.progress_message(["test_supervised_loss","test_reconstruction_loss"]))
 

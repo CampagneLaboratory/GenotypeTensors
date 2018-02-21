@@ -34,6 +34,7 @@ import torch
 
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
+from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_trainer import GenotypingSupervisedTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_trainer import GenotypingAutoEncoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.sbi_classifier import create_classifier_model
 from org.campagnelab.dl.genotypetensors.autoencoder.somatic_trainer import SomaticTrainer
@@ -160,6 +161,18 @@ if __name__ == '__main__':
                                                                                           dropout_p=args.dropout_probability)))
             training_loop_method = model_trainer.train_semisup
             testing_loop_method = model_trainer.test_semi_sup
+
+        elif args.mode == "supervised_genotypes":
+            model_trainer = GenotypingSupervisedTrainer(args=args, problem=problem, use_cuda=use_cuda)
+            model_trainer.init_model(create_model_function=
+                                     (lambda model_name, problem: create_classifier_model(model_name,
+                                                                                          problem,
+                                                                                          encoded_size=args.encoded_size,
+                                                                                          somatic=False,
+                                                                                          ngpus=args.num_gpus,
+                                                                                          dropout_p=args.dropout_probability)))
+            training_loop_method = model_trainer.train_supervised
+            testing_loop_method = model_trainer.test_supervised
         else:
             model_trainer = None
             print("unknown mode specified: " + args.mode)
