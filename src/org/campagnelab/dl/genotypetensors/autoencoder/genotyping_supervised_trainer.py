@@ -1,3 +1,4 @@
+import torch
 from torch.autograd import Variable
 from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss, MultiLabelSoftMarginLoss
 
@@ -55,7 +56,11 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             self.net.zero_grad()
             output_s = self.net(input_s)
 
-            supervised_loss = self.criterion_classifier(output_s, target_s)
+            # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
+            # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
+            output_s_exp = torch.exp(output_s)
+            output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
+            supervised_loss = self.criterion_classifier(output_s_p, target_s)
             optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
