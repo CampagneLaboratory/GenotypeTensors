@@ -60,6 +60,8 @@ if __name__ == '__main__':
                         default=sys.maxsize)
     parser.add_argument('--num-unlabeled', '-u', type=int, help='Maximum number of unlabeled examples to use.',
                         default=sys.maxsize)
+    parser.add_argument('--num-layers', type=int, help='Number of layers in the classifier.', default=3)
+
     parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number of examples scanned in an epoch'
                                                                    '(e.g., for ureg model training). By default, equal to the '
                                                                    'number of examples in the training set.',
@@ -68,7 +70,8 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, help='Float used to control the effect of reconstruction loss.',
                         default=1.0)
     parser.add_argument('--L2', type=float, help='L2 regularization.', default=1E-4)
-    parser.add_argument('--dropout-probability', type=float, help='Probability of droping activations (drop-out P).', default=0)
+    parser.add_argument('--dropout-probability', type=float, help='Probability of droping activations (drop-out P).',
+                        default=0)
     parser.add_argument('--seed', type=int,
                         help='Random seed', default=random.randint(0, sys.maxsize))
     parser.add_argument('--checkpoint-key', help='random key to save/load checkpoint',
@@ -147,7 +150,8 @@ if __name__ == '__main__':
                                      (lambda model_name, problem: create_classifier_model(model_name,
                                                                                           problem,
                                                                                           encoded_size=args.encoded_size,
-                                                                                          ngpus=args.num_gpus                                                                                          )))
+                                                                                          ngpus=args.num_gpus,
+                                                                                          num_layers=args.num_layers)))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_somatic_classifer
         elif args.mode == "semisupervised_genotypes":
@@ -158,7 +162,8 @@ if __name__ == '__main__':
                                                                                           encoded_size=args.encoded_size,
                                                                                           somatic=False,
                                                                                           ngpus=args.num_gpus,
-                                                                                          dropout_p=args.dropout_probability)))
+                                                                                          dropout_p=args.dropout_probability,
+                                                                                          num_layers=args.num_layers)))
             training_loop_method = model_trainer.train_semisup
             testing_loop_method = model_trainer.test_semi_sup
 
@@ -189,4 +194,3 @@ if __name__ == '__main__':
     train_once(args, problem, use_cuda)
     # don't wait for threads to die, just exit:
     os._exit(0)
-
