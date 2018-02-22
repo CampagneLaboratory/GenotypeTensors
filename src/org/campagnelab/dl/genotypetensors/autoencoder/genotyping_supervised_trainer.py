@@ -13,6 +13,21 @@ from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar
 
+def toBinary(n,max_value):
+    for index in range(max_value)[::-1]:
+        yield 1 & int(n) >> index
+
+def recode_as_multi_label(one_hot_vector):
+
+    coded=torch.zeros(one_hot_vector.size())
+    for example_index in range(0,len(one_hot_vector)):
+        value, index=torch.max(one_hot_vector[example_index],dim=0)
+        count_indices=list(toBinary(index.data[0],len(one_hot_vector)))
+        for count_index in count_indices:
+            coded[example_index,count_index]=1
+
+    #print(coded)
+    return one_hot_vector
 
 class GenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
@@ -27,6 +42,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         return metric< previous_metric
 
     def class_frequency(self):
+        return
         train_loader_subset = self.problem.train_loader_subset_range(0, min(100000,self.args.num_training))
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
                                                         batch_names=["training"],
@@ -51,7 +67,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         weights=torch.ones(class_frequencies.size())-(class_frequencies/torch.norm(class_frequencies, p=1, dim=0))
         if self.use_cuda:
             weights=weights.cuda()
-        self.criterion_classifier = CrossEntropyLoss(weight=weights)
+        #self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
         return class_frequencies
 
     def train_supervised(self, epoch):
@@ -73,13 +89,11 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset),is_cuda=self.use_cuda,
                                      batch_names=["training"],
                                      requires_grad={"training": ["input"]},
-                                     volatile={"training": [] })
+                                     volatile={"training": [] },                                     )
 
-        self.net.autoencoder.train()
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["training"]["input"]
             target_s = dict["training"]["softmaxGenotype"]
-
 
             num_batches += 1
 
