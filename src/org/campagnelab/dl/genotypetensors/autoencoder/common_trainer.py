@@ -126,11 +126,11 @@ class CommonTrainer:
             print('==> Building model {}'.format(args.model))
 
             self.net = create_model_function(args.model, self.problem)
+            self.net.apply(init_params)
 
         if self.use_cuda:
             self.net.cuda()
         cudnn.benchmark = True
-        self.net.apply(init_params)
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
 
@@ -260,7 +260,8 @@ class CommonTrainer:
         perfs = PerformanceList()
 
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
-
+            self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum,
+                                                      weight_decay=self.args.L2)
             perfs = PerformanceList()
             perfs+=training_loop_method(epoch)
 
