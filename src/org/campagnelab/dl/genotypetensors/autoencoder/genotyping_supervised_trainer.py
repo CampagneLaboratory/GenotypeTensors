@@ -7,6 +7,7 @@ from torch.nn.functional import softmax
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider, \
     MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
@@ -57,6 +58,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
+        performance_estimators += [AccuracyHelper("train_")]
 
         print('\nTraining, epoch: %d' % epoch)
 
@@ -94,10 +96,12 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             optimized_loss.backward()
             self.optimizer_training.step()
             performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                           output_s_p,targets=target_index)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
-                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss"]))
+                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss","train_accuracy"]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -118,6 +122,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         errors = None
         performance_estimators = PerformanceList()
         performance_estimators += [LossHelper("test_supervised_loss")]
+        performance_estimators += [AccuracyHelper("test_")]
 
         self.net.eval()
         for performance_estimator in performance_estimators:
@@ -143,8 +148,10 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             errors[target_index.cpu().data] += torch.ne(target_index.cpu().data, output_index.cpu().data).type(torch.FloatTensor)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+                                                           output_s_p, targets=target_index)
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_supervised_loss","test_reconstruction_loss"]))
+                         performance_estimators.progress_message(["test_supervised_loss","test_reconstruction_loss","test_accuracy"]))
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
