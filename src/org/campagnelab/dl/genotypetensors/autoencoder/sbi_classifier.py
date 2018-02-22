@@ -32,7 +32,7 @@ class SbiGenotypeClassifier(nn.Module):
         super().__init__()
         layer_list = []
         for layer in range(0, num_layers):
-            layer_list += [nn.BatchNorm1d(input_size), nn.Linear(input_size, input_size), nn.ReLU(), nn.Dropout(p=dropout_p)]
+            layer_list += [nn.Linear(input_size, input_size), nn.SELU()]
 
         self.features = nn.Sequential(*layer_list)
         self.softmax_genotype_linear = nn.Linear(input_size, target_size)
