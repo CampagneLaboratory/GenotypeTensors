@@ -26,7 +26,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         return metric< previous_metric
 
     def class_frequency(self):
-        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        train_loader_subset = self.problem.train_loader_subset_range(0, min(100000,self.args.num_training))
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
                                                         batch_names=["training"],
                                                         volatile={"training": ["input","softmaxGenotype"]})
