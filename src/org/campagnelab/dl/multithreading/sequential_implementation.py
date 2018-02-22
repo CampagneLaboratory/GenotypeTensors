@@ -74,10 +74,15 @@ class CpuGpuDataProvider(DataProvider):
         else:
             return self.cpu_batches_queue.get(block=True)
 
-    def populate_cpu_queue(self):
+    def populate_cpu_queue(self, recode_functions):
 
             try:
                 next_item=super().__next__()
+                for batch_name in self.batch_names:
+                    batch = next_item[batch_name]
+                    for var_name in recode_functions.keys():
+                        batch[var_name] = recode_functions[var_name](batch[var_name])
+
                 self.cpu_batches_queue.put(next_item, block=True)
             except StopIteration:
                 raise StopIteration
@@ -94,7 +99,7 @@ class CpuGpuDataProvider(DataProvider):
 
 class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
     def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=20,
-                 preload_cuda_n=20):
+                 preload_cuda_n=20, recode_functions={}):
         super().__init__(iterator, batch_names, is_cuda=is_cuda,
                          volatile=volatile, requires_grad=requires_grad, preload_n=preload_n,
                          preload_cuda_n=preload_cuda_n)
@@ -104,7 +109,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
             while not self.kill_threads:
                 try:
                     if not self.cpu_batches_queue.full():
-                        self.populate_cpu_queue()
+                        self.populate_cpu_queue(recode_functions=recode_functions)
                     else:
                         time.sleep(10 / 1000.0)
                 except StopIteration:
