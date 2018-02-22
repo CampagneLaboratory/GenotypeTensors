@@ -25,6 +25,7 @@ class PredictModel:
                                                         batch_names=["unlabeled"],
                                                         volatile={"unlabeled": ["input"]})
 
+
         with VectorWriterBinary(sample_id=0, path_with_basename=output_filename,
                                 tensor_names=self.problem.get_output_names(),
                                 domain_descriptor=self.domain_descriptor, feature_mapper=self.feature_mapper,

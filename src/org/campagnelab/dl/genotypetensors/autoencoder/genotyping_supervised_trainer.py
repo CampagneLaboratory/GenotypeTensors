@@ -17,8 +17,10 @@ def toBinary(n,max_value):
     for index in range(max_value)[::-1]:
         yield 1 & int(n) >> index
 
+enable_recode=False
 def recode_as_multi_label(one_hot_vector):
-
+    if not enable_recode:
+        return one_hot_vector
     coded=torch.zeros(one_hot_vector.size())
     for example_index in range(0,len(one_hot_vector)):
         value, index=torch.max(one_hot_vector[example_index],dim=0)
@@ -46,7 +48,8 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         train_loader_subset = self.problem.train_loader_subset_range(0, min(100000,self.args.num_training))
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
                                                         batch_names=["training"],
-                                                        volatile={"training": ["input","softmaxGenotype"]})
+                                                        volatile={"training": ["input","softmaxGenotype"]}
+                                                        )
         class_frequencies = None
 
         for batch_idx, dict in enumerate(data_provider):
@@ -75,7 +78,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [AccuracyHelper("train_")]
-
+        self.criterion_classifier = MultiLabelSoftMarginLoss()
         print('\nTraining, epoch: %d' % epoch)
 
         self.net.train()
@@ -89,7 +92,9 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset),is_cuda=self.use_cuda,
                                      batch_names=["training"],
                                      requires_grad={"training": ["input"]},
-                                     volatile={"training": [] },                                     )
+                                     volatile={"training": [] },
+                                     recode_functions={"softmaxGenotype":recode_as_multi_label}
+                                                        )
 
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["training"]["input"]
@@ -105,7 +110,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
             max, target_index= torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p,target_index )
+            supervised_loss = self.criterion_classifier(output_s_p,target_s )
             optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
@@ -139,6 +144,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators += [AccuracyHelper("test_")]
 
         self.net.eval()
+        self.criterion_classifier = MultiLabelSoftMarginLoss()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset=self.problem.validation_loader_range(0, self.args.num_validation)
@@ -156,9 +162,9 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
 
-            max, target_index = torch.max(target_s, dim=1)
-            max, output_index = torch.max(output_s_p, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_index)
+            max, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
+            max, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
+            supervised_loss = self.criterion_classifier(output_s_p, recode_as_multi_label(target_s))
             errors[target_index.cpu().data] += torch.ne(target_index.cpu().data, output_index.cpu().data).type(torch.FloatTensor)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
