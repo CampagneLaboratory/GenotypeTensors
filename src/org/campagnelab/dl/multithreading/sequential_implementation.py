@@ -93,8 +93,8 @@ class CpuGpuDataProvider(DataProvider):
 
 
 class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
-    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=12,
-                 preload_cuda_n=6):
+    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=20,
+                 preload_cuda_n=20):
         super().__init__(iterator, batch_names, is_cuda=is_cuda,
                          volatile=volatile, requires_grad=requires_grad, preload_n=preload_n,
                          preload_cuda_n=preload_cuda_n)
@@ -106,7 +106,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
                     if not self.cpu_batches_queue.full():
                         self.populate_cpu_queue()
                     else:
-                        time.sleep(1.0 / 1000.0)
+                        time.sleep(10 / 1000.0)
                 except StopIteration:
                     self.stop_iteration = True
                     break
@@ -115,7 +115,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
         self.t1.start()
 
         while self.cpu_batches_queue.empty():
-            time.sleep(1)
+            time.sleep(10 / 1000.0)
 
         if is_cuda:
             def add_to_gpu_queue():
@@ -124,12 +124,12 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
                     if not self.gpu_batches_queue.full():
                         self.populate_gpu_queue()
                     else:
-                        time.sleep(1.0 / 1000.0)
+                        time.sleep(10 / 1000.0)
 
             self.t2 = Thread(target=add_to_gpu_queue, name="BatchesToGPU")
             self.t2.start()
 
-            time.sleep(1)
+            time.sleep(10 / 1000.0)
     def __enter__(self):
         pass
 
@@ -146,7 +146,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
         while self.queues_are_empty():
             if self.stop_iteration and self.queues_are_empty():
                 raise StopIteration
-            time.sleep(100/1000)
+            time.sleep(10/1000)
 
         if self.is_cuda:
 
