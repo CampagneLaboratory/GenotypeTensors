@@ -46,7 +46,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
 
         class_frequencies=class_frequencies+1
-        weights=1.0-torch.norm(class_frequencies, p=1, dim=0)
+        weights=torch.ones(class_frequencies.size())-torch.norm(class_frequencies, p=1, dim=0)
         if self.use_cuda:
             weights=weights.cuda()
         self.criterion_classifier = CrossEntropyLoss(weight=weights)
