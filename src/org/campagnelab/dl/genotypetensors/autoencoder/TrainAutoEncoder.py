@@ -106,7 +106,7 @@ if __name__ == '__main__':
     print("Executing " + args.checkpoint_key)
 
     with open("args-{}".format(args.checkpoint_key), "w") as args_file:
-        args_file.write(" ".join(sys.argv))
+        args_file.write(" ".join(sys.argv+["--seed ",str(args.seed)]))
 
     use_cuda = torch.cuda.is_available()
     is_parallel = False
