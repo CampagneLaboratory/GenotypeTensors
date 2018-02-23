@@ -144,7 +144,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators += [AccuracyHelper("test_")]
 
         self.net.eval()
-        self.criterion_classifier = MultiLabelSoftMarginLoss()
+
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset=self.problem.validation_loader_range(0, self.args.num_validation)
