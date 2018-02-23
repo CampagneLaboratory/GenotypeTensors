@@ -140,7 +140,8 @@ if __name__ == '__main__':
                                      (lambda model_name, problem: create_autoencoder_model(model_name,
                                                                                            problem,
                                                                                            encoded_size=args.encoded_size,
-                                                                                           ngpus=args.num_gpus)))
+                                                                                           ngpus=args.num_gpus,
+                                                                                           dropout_p=args.dropout_probability)))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_autoencoder
 
