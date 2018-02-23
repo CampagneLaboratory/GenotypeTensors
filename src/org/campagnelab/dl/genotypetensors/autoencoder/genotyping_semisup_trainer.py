@@ -1,10 +1,11 @@
 import torch
 from torch.autograd import Variable
-from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss, MultiLabelSoftMarginLoss
+from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss, MultiLabelSoftMarginLoss, CrossEntropyLoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider, \
     MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
@@ -16,7 +17,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
         self.criterion_autoencoder = MSELoss()
-        self.criterion_classifier = MultiLabelSoftMarginLoss()
+        self.criterion_classifier = CrossEntropyLoss()
 
     def get_test_metric_name(self):
         return "test_supervised_loss"
@@ -30,6 +31,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         performance_estimators += [FloatHelper("optimized_loss")]
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [FloatHelper("reconstruction_loss")]
+        performance_estimators += [AccuracyHelper("train_")]
 
         print('\nTraining, epoch: %d' % epoch)
 
@@ -66,6 +68,8 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_u = self.net.autoencoder(input_u)
             output_s_p = self.get_p(output_s)
+
+            max, target_index = torch.max(target_s, dim=1)
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
             optimized_loss = supervised_loss + self.args.gamma * reconstruction_loss
@@ -74,10 +78,12 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                           output_s_p, targets=target_index)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
-                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss"]))
+                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss","test_accuracy"]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -98,6 +104,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         performance_estimators = PerformanceList()
         performance_estimators += [LossHelper("test_supervised_loss")]
         performance_estimators += [LossHelper("test_reconstruction_loss")]
+        performance_estimators += [AccuracyHelper("test_")]
 
         self.net.eval()
         for performance_estimator in performance_estimators:
@@ -116,14 +123,19 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_u = self.net.autoencoder(input_u)
             output_s_p = self.get_p(output_s)
+
+            max, target_index = torch.max(target_s, dim=1)
+
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
             performance_estimators.set_metric(batch_idx, "test_reconstruction_loss", reconstruction_loss.data[0])
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+                                                           output_s_p, targets=target_index)
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_supervised_loss","test_reconstruction_loss"]))
+                         performance_estimators.progress_message(["test_supervised_loss","test_reconstruction_loss","test_accuracy"]))
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
