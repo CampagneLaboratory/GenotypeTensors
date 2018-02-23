@@ -11,7 +11,7 @@ class SbiSomaticClassifier(nn.Module):
         super().__init__()
         layer_list = []
         for layer in range(0, num_layers):
-            layer_list += [nn.Linear(input_size, input_size), nn.ReLU(), nn.Dropout()]
+            layer_list += [ nn.Linear(input_size, input_size), nn.ReLU(), nn.Dropout()]
 
         self.features = nn.Sequential(*layer_list)
         self.is_mutated_linear = nn.Linear(input_size, target_size)
@@ -32,10 +32,10 @@ class SbiGenotypeClassifier(nn.Module):
         super().__init__()
         layer_list = []
         for layer in range(0, num_layers):
-            layer_list += [nn.BatchNorm1d(input_size), nn.Linear(input_size, input_size), nn.SELU()]
+            layer_list += [nn.Dropout(dropout_p), nn.BatchNorm1d(input_size), nn.Linear(input_size, input_size), nn.SELU()]
 
         self.features = nn.Sequential(*layer_list)
-        self.softmax_genotype_linear = nn.Sequential(nn.BatchNorm1d(input_size),nn.Linear(input_size, target_size))
+        self.softmax_genotype_linear = nn.Sequential(nn.Dropout(dropout_p),nn.BatchNorm1d(input_size),nn.Linear(input_size, target_size))
         self.autoencoder = autoencoder
 
     def forward(self, input):
