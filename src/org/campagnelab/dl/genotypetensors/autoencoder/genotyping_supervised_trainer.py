@@ -164,7 +164,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
             max, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
             max, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, recode_as_multi_label(target_s))
+            supervised_loss = self.criterion_classifier(output_s_p, target_index if not enable_recode else target_s)
             errors[target_index.cpu().data] += torch.ne(target_index.cpu().data, output_index.cpu().data).type(torch.FloatTensor)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
