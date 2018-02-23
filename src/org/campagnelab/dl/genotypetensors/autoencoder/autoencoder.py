@@ -23,7 +23,7 @@ class AutoEncoder(nn.Module):
             encoder_input_size = encoder_output_size
             encoder_output_size = max(int(encoder_input_size / 2),encoded_size)
 
-        encoder_list += [ nn.Linear(encoder_input_size, encoded_size) , nn.SELU()]
+        encoder_list += [ nn.BatchNorm1d(encoder_input_size),nn.Linear(encoder_input_size, encoded_size) , nn.SELU()]
         # Constrain the code towards a binary 1/0 code using a sigmoid:
         encoder_list += [ nn.Sigmoid()]
         self.encoder = nn.Sequential(*encoder_list)
@@ -32,7 +32,7 @@ class AutoEncoder(nn.Module):
         decoder_input_size = encoded_size
         decoder_output_size = int(decoder_input_size * 2)
         while decoder_output_size < input_size:
-            decoder_list += [ nn.BatchNorm1d(encoder_input_size), nn.Linear(decoder_input_size, decoder_output_size),  nn.SELU()]
+            decoder_list += [ nn.BatchNorm1d(decoder_input_size), nn.Linear(decoder_input_size, decoder_output_size),  nn.SELU()]
             decoder_input_size = decoder_output_size
             decoder_output_size = min(int(decoder_output_size * 2),input_size)
 

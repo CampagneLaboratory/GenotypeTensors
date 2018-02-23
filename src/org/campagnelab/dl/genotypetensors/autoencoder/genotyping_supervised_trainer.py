@@ -35,7 +35,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
-        self.criterion_classifier = CrossEntropyLoss()
+        self.criterion_classifier = CrossEntropyLoss() if not enable_recode else MultiLabelSoftMarginLoss()
 
     def get_test_metric_name(self):
         return "test_supervised_loss"
@@ -78,7 +78,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [AccuracyHelper("train_")]
-        self.criterion_classifier = MultiLabelSoftMarginLoss()
+
         print('\nTraining, epoch: %d' % epoch)
 
         self.net.train()
@@ -110,7 +110,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
             max, target_index= torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p,target_s )
+            supervised_loss = self.criterion_classifier(output_s_p,target_s if not enable_recode else target_index)
             optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
