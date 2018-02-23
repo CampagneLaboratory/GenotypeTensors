@@ -110,7 +110,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
             max, target_index= torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p,target_s if not enable_recode else target_index)
+            supervised_loss = self.criterion_classifier(output_s_p, target_index if not enable_recode else target_s)
             optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
