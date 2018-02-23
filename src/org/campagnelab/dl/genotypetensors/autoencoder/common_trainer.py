@@ -313,9 +313,6 @@ class CommonTrainer:
                 target_s = dict["training"][output_name]
                 if output_name not in class_frequencies.keys():
                     class_frequencies[output_name] = torch.ones(target_s[0].size())
-                    if not recode_as_multi_label:
-                        done=True
-                        break
 
                 max, target_index = torch.max(target_s, dim=1)
 
@@ -335,3 +332,4 @@ class CommonTrainer:
                 weights = weights.cuda()
 
             self.rebuild_criterions(output_name=output_name, weights=weights)
+        return class_frequencies
