@@ -40,7 +40,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
             self.criterion_classifier = CrossEntropyLoss(weight=weights) \
-                if not recode_as_multi_label else MultiLabelSoftMarginLoss(weight=weights)
+                if not enable_recode else MultiLabelSoftMarginLoss(weight=weights)
 
     def get_test_metric_name(self):
         return "test_supervised_loss"
@@ -85,7 +85,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
             max, target_index= torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_index if not enable_recode else target_s)
+            supervised_loss = self.criterion_classifier(output_s_p, target_index)
             optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
