@@ -70,7 +70,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             output_s_p = self.get_p(output_s)
 
             max, target_index = torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+            supervised_loss = self.criterion_classifier(output_s_p, target_index)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
             optimized_loss = supervised_loss + self.args.gamma * reconstruction_loss
             optimized_loss.backward()
@@ -83,7 +83,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
-                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss","test_accuracy"]))
+                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss","train_accuracy"]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -126,7 +126,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
             max, target_index = torch.max(target_s, dim=1)
 
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+            supervised_loss = self.criterion_classifier(output_s_p, target_index)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
