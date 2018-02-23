@@ -35,43 +35,17 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
-        self.criterion_classifier = CrossEntropyLoss() if not enable_recode else MultiLabelSoftMarginLoss()
+
+    def rebuild_criterions(self, output_name, weights=None):
+        if output_name == "softmaxGenotype":
+            self.criterion_classifier = CrossEntropyLoss(weight=weights) \
+                if not recode_as_multi_label else MultiLabelSoftMarginLoss(weight=weights)
 
     def get_test_metric_name(self):
         return "test_supervised_loss"
 
     def is_better(self, metric, previous_metric):
         return metric< previous_metric
-
-    def class_frequency(self):
-        return
-        train_loader_subset = self.problem.train_loader_subset_range(0, min(100000,self.args.num_training))
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
-                                                        batch_names=["training"],
-                                                        volatile={"training": ["input","softmaxGenotype"]}
-                                                        )
-        class_frequencies = None
-
-        for batch_idx, dict in enumerate(data_provider):
-
-            target_s = dict["training"]["softmaxGenotype"]
-            if class_frequencies is None:
-                class_frequencies=torch.zeros(target_s[0].size())
-            max, target_index = torch.max(target_s, dim=1)
-
-            class_frequencies[target_index.cpu().data] += 1
-            progress_bar(batch_idx * self.mini_batch_size,
-                         self.max_training_examples,
-                         "Class frequencies")
-
-
-        class_frequencies=class_frequencies+1
-        # normalize with 1-f, where f is normalized frequency vector:
-        weights=torch.ones(class_frequencies.size())-(class_frequencies/torch.norm(class_frequencies, p=1, dim=0))
-        if self.use_cuda:
-            weights=weights.cuda()
-        #self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
-        return class_frequencies
 
     def train_supervised(self, epoch):
 

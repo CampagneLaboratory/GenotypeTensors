@@ -16,8 +16,11 @@ class GenotypingSemiSupTrainer(CommonTrainer):
     """Train a genotyping model using supervised and reconstruction on unlabeled set."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
-        self.criterion_autoencoder = MSELoss()
-        self.criterion_classifier = CrossEntropyLoss()
+
+    def rebuild_criterions(self, output_name, weights=None):
+        if output_name == "softmaxGenotype":
+            self.criterion_classifier = CrossEntropyLoss(weight=weights)
+            self.criterion_autoencoder = MSELoss()
 
     def get_test_metric_name(self):
         return "test_supervised_loss"

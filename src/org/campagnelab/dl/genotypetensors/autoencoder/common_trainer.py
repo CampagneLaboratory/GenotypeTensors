@@ -3,12 +3,13 @@ import sys
 
 import torch
 from torch.backends import cudnn
-from torch.nn import MSELoss
+from torch.nn import MSELoss, CrossEntropyLoss, MultiLabelSoftMarginLoss
 
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.LRHelper import LearningRateHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.LRSchedules import construct_scheduler
-from org.campagnelab.dl.utils.utils import init_params
+from org.campagnelab.dl.utils.utils import init_params, progress_bar
 
 
 def _format_nice(n):
@@ -43,7 +44,7 @@ class CommonTrainer:
         :param use_cuda When True, use the GPU.
          """
 
-        self.model_label = "best" # or latest
+        self.model_label = "best"  # or latest
         self.max_regularization_examples = args.num_unlabeled if hasattr(args, "num_unlabeled") else 0
         self.max_validation_examples = args.num_validation if hasattr(args, "num_validation") else 0
         self.max_training_examples = args.num_training if hasattr(args, "num_training") else 0
@@ -53,7 +54,7 @@ class CommonTrainer:
 
         self.args = args
         self.problem = problem
-        self.best_test_loss= sys.maxsize
+        self.best_test_loss = sys.maxsize
         self.start_epoch = 0
         self.use_cuda = use_cuda
         self.mini_batch_size = problem.mini_batch_size()
@@ -131,6 +132,10 @@ class CommonTrainer:
         if self.use_cuda:
             self.net.cuda()
         cudnn.benchmark = True
+
+        class_frequency = self.class_frequency()
+        print("class_frequency " + str(class_frequency))
+
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
 
@@ -140,7 +145,6 @@ class CommonTrainer:
                                 ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs
                                 if hasattr(self.args, 'reset_lr_every_n_epochs')
                                 else None)
-
 
     def log_performance_header(self, performance_estimators, kind="perfs"):
 
@@ -178,7 +182,7 @@ class CommonTrainer:
             self.best_performance_metrics = performance_estimators
 
         metric = performance_estimators.get_metric(self.get_test_metric_name())
-        if metric is not None and self.is_better(metric , self.best_test_loss):
+        if metric is not None and self.is_better(metric, self.best_test_loss):
             self.failed_to_improve = 0
 
             with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
@@ -187,13 +191,12 @@ class CommonTrainer:
 
         self.save_model(metric, epoch, self.net, "latest")
 
-        if metric is not None and (self.is_better(metric , self.best_test_loss) or metric == self.best_test_loss):
-
+        if metric is not None and (self.is_better(metric, self.best_test_loss) or metric == self.best_test_loss):
             self.save_checkpoint(epoch, metric)
             self.best_performance_metrics = performance_estimators
             self.best_model = self.net
 
-        if metric is not None and self.is_better(metric , self.best_test_loss):
+        if metric is not None and self.is_better(metric, self.best_test_loss):
             self.failed_to_improve += 1
             if self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
@@ -209,7 +212,7 @@ class CommonTrainer:
             print('Saving..')
 
             if self.best_model is not None:
-                self.save_model(test_loss, epoch, self.best_model,"best")
+                self.save_model(test_loss, epoch, self.best_model, "best")
             else:
                 # not best model, latest is best:
                 self.save_model(test_loss, epoch, self.net, "best")
@@ -260,14 +263,15 @@ class CommonTrainer:
         perfs = PerformanceList()
 
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
-            self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr, momentum=self.args.momentum,
+            self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr,
+                                                      momentum=self.args.momentum,
                                                       weight_decay=self.args.L2)
             perfs = PerformanceList()
-            perfs+=training_loop_method(epoch)
+            perfs += training_loop_method(epoch)
 
             perfs += [lr_train_helper]
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
-                perfs+=testing_loop_method(epoch)
+                perfs += testing_loop_method(epoch)
 
             if (not header_written):
                 header_written = True
@@ -284,4 +288,49 @@ class CommonTrainer:
         return "test_loss"
 
     def is_better(self, metric, best_test_loss):
-        return metric<best_test_loss
+        return metric < best_test_loss
+
+    def rebuild_criterions(self, output_name, weights=None):
+        """ This method set the criterions for the problem outputs. """
+        pass
+
+    def class_frequency(self, recode_as_multi_label=False):
+        """
+        Estimate class frequencies for the output vectors of the problem and rebuild criterions
+        with weights that correct class imbalances.
+        """
+        if not recode_as_multi_label:
+            return
+        train_loader_subset = self.problem.train_loader_subset_range(0, min(100000, self.args.num_training))
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
+                                                        batch_names=["training"],
+                                                        volatile={"training": self.problem.get_vector_names()}
+                                                        )
+
+        class_frequencies = [None] * len(self.problem.get_output_names())
+
+        for batch_idx, dict in enumerate(data_provider):
+            for output_name in self.problem.get_output_names():
+                target_s = dict["training"][output_name]
+                if class_frequencies is None:
+                    class_frequencies = torch.zeros(target_s[0].size())
+                max, target_index = torch.max(target_s, dim=1)
+
+                class_frequencies[output_name][target_index.cpu().data] += 1
+
+            progress_bar(batch_idx * self.mini_batch_size,
+                         self.max_training_examples,
+                         "Class frequencies")
+
+        for output_name in self.problem.get_output_names():
+            class_frequencies[output_name] = class_frequencies[output_name] + 1
+            class_frequencies_output = class_frequencies[output_name]
+            # normalize with 1-f, where f is normalized frequency vector:
+            weights = torch.ones(class_frequencies_output.size()) - (
+            class_frequencies_output / torch.norm(class_frequencies_output, p=1, dim=0))
+            if self.use_cuda:
+                weights = weights.cuda()
+
+            self.rebuild_criterions(output_name=output_name, weights=weights)
+
+        return class_frequencies
