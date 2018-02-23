@@ -35,6 +35,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
+        self.criterion_classifier=None
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":

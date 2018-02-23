@@ -101,7 +101,6 @@ class CommonTrainer:
         self.best_model = None
 
         self.agreement_loss = MSELoss()
-
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
 
@@ -299,21 +298,25 @@ class CommonTrainer:
         Estimate class frequencies for the output vectors of the problem and rebuild criterions
         with weights that correct class imbalances.
         """
-        if not recode_as_multi_label:
-            return
+
         train_loader_subset = self.problem.train_loader_subset_range(0, min(100000, self.args.num_training))
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
-                                                        batch_names=["training"],
-                                                        volatile={"training": self.problem.get_vector_names()}
-                                                        )
+                                                    batch_names=["training"],
+                                                    volatile={"training": self.problem.get_vector_names()}
+                                                    )
 
-        class_frequencies = [None] * len(self.problem.get_output_names())
-
+        class_frequencies = {} # one frequency vector per output_name
+        done=False
         for batch_idx, dict in enumerate(data_provider):
+            if done: break
             for output_name in self.problem.get_output_names():
                 target_s = dict["training"][output_name]
-                if class_frequencies is None:
-                    class_frequencies = torch.zeros(target_s[0].size())
+                if output_name not in class_frequencies.keys():
+                    class_frequencies[output_name] = torch.ones(target_s[0].size())
+                    if not recode_as_multi_label:
+                        done=True
+                        break
+
                 max, target_index = torch.max(target_s, dim=1)
 
                 class_frequencies[output_name][target_index.cpu().data] += 1
@@ -323,7 +326,7 @@ class CommonTrainer:
                          "Class frequencies")
 
         for output_name in self.problem.get_output_names():
-            class_frequencies[output_name] = class_frequencies[output_name] + 1
+
             class_frequencies_output = class_frequencies[output_name]
             # normalize with 1-f, where f is normalized frequency vector:
             weights = torch.ones(class_frequencies_output.size()) - (
@@ -332,5 +335,3 @@ class CommonTrainer:
                 weights = weights.cuda()
 
             self.rebuild_criterions(output_name=output_name, weights=weights)
-
-        return class_frequencies
