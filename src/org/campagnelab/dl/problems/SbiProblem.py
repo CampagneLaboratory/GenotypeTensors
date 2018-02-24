@@ -56,7 +56,7 @@ class SbiProblem(Problem):
         self.basename = code[len(self.basename_prefix()):]
         self.num_workers = num_workers
         self.drop_last_batch = drop_last_batch
-        self.meta_data = VectorReader(self.basename + "-train.vec", False, vector_names=[]).vector_reader_properties
+        self.meta_data = VectorReader(self.basename + "-train", False, vector_names=[]).vector_reader_properties
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """

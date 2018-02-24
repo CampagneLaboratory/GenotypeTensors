@@ -105,7 +105,7 @@ if args.dataset=="validation":
     iterator=problem.validation_loader_range(0, args.n)
 elif args.dataset=="unlabeled":
     args.n = min(args.n, len(problem.unlabeled_loader()))
-    iterator = problem.unlabeled_loader_range(0, args.n)
+    iterator = problem.unlabeled_loader_subset_range(0, args.n)
 
 else:
     print("Unsupported dataset: " + args.dataset)

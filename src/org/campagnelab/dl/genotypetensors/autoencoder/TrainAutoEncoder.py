@@ -88,6 +88,7 @@ if __name__ == '__main__':
                         help='Reset learning rate to initial value every n epochs.')
 
     parser.add_argument("--num-gpus", type=int, default=1, help='Number of GPUs to run on.')
+    parser.add_argument("--autoencoder-type", type=int, default=1, help='Choose a variant of auto-encoder. Type 1 or 2 are currently available.')
 
     parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
                         help='Abort training if performance fails to improve for more than the specified number of epochs.')
@@ -141,7 +142,8 @@ if __name__ == '__main__':
                                                                                            problem,
                                                                                            encoded_size=args.encoded_size,
                                                                                            ngpus=args.num_gpus,
-                                                                                           dropout_p=args.dropout_probability)))
+                                                                                           dropout_p=args.dropout_probability,
+                                                                                           autoencoder_type=args.autoencoder_type)))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_autoencoder
 
@@ -152,7 +154,8 @@ if __name__ == '__main__':
                                                                                           problem,
                                                                                           encoded_size=args.encoded_size,
                                                                                           ngpus=args.num_gpus,
-                                                                                          num_layers=args.num_layers)))
+                                                                                          num_layers=args.num_layers,
+                                                                                          autoencoder_type=args.autoencoder_type)))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_somatic_classifer
         elif args.mode == "semisupervised_genotypes":
@@ -164,7 +167,8 @@ if __name__ == '__main__':
                                                                                           somatic=False,
                                                                                           ngpus=args.num_gpus,
                                                                                           dropout_p=args.dropout_probability,
-                                                                                          num_layers=args.num_layers)))
+                                                                                          num_layers=args.num_layers,
+                                                                                          autoencoder_type=args.autoencoder_type)))
             training_loop_method = model_trainer.train_semisup
             testing_loop_method = model_trainer.test_semi_sup
 
@@ -179,7 +183,8 @@ if __name__ == '__main__':
                                                                                           somatic=False,
                                                                                           ngpus=args.num_gpus,
                                                                                           dropout_p=args.dropout_probability,
-                                                                                          num_layers=args.num_layers)))
+                                                                                          num_layers=args.num_layers,
+                                                                                          autoencoder_type=args.autoencoder_type)))
             training_loop_method = model_trainer.train_supervised
             testing_loop_method = model_trainer.test_supervised
         else:
