@@ -81,7 +81,8 @@ class CpuGpuDataProvider(DataProvider):
                 for batch_name in self.batch_names:
                     batch = next_item[batch_name]
                     for var_name in recode_functions.keys():
-                        batch[var_name] = recode_functions[var_name](batch[var_name])
+                        if var_name in batch.keys():
+                            batch[var_name] = recode_functions[var_name](batch[var_name])
 
                 self.cpu_batches_queue.put(next_item, block=True)
             except StopIteration:
