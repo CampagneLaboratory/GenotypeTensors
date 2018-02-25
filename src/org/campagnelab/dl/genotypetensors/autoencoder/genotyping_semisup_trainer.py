@@ -1,15 +1,14 @@
 import torch
 from torch.autograd import Variable
-from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss, MultiLabelSoftMarginLoss, CrossEntropyLoss
+from torch.nn import MSELoss, MultiLabelSoftMarginLoss
 
-from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
-from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider, \
-    MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
-from org.campagnelab.dl.utils.utils import progress_bar, grad_norm
+from org.campagnelab.dl.utils.utils import progress_bar
 
 
 class GenotypingSemiSupTrainer(CommonTrainer):
@@ -21,7 +20,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
-            self.criterion_classifier = CrossEntropyLoss(weight=weights)
+            self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
             self.criterion_autoencoder = MSELoss()
 
     def get_test_metric_name(self):
@@ -52,7 +51,8 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),is_cuda=self.use_cuda,
                                      batch_names=["training", "unlabeled"],
                                      requires_grad={"training": ["input"], "unlabeled": ["input"]},
-                                     volatile={"training": [], "unlabeled": []})
+                                     volatile={"training": [], "unlabeled": []},
+                                     recode_functions={"softmaxGenotype": recode_for_label_smoothing})
         self.net.autoencoder.train()
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["training"]["input"]
@@ -75,7 +75,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             output_s_p = self.get_p(output_s)
 
             max, target_index = torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_index)
+            supervised_loss = self.criterion_classifier(output_s_p, target_s)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
             optimized_loss = supervised_loss + self.args.gamma * reconstruction_loss
             optimized_loss.backward()
@@ -96,12 +96,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
         return performance_estimators
 
-    def get_p(self, output_s):
-        # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
-        # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
-        output_s_exp = torch.exp(output_s)
-        output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
-        return output_s_p
+
 
     def test_semi_sup(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
@@ -131,7 +126,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
             max, target_index = torch.max(target_s, dim=1)
 
-            supervised_loss = self.criterion_classifier(output_s_p, target_index)
+            supervised_loss = self.criterion_classifier(output_s_p, target_s)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])

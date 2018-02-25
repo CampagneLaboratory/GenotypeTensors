@@ -24,6 +24,14 @@ def _format_nice(n):
     except:
         return str(n)
 
+def recode_for_label_smoothing(one_hot_vector):
+        epsilon = 0.2
+        num_classes = len(one_hot_vector[0])
+
+        one_hot_vector[one_hot_vector == 1] = 1.0 - epsilon
+        one_hot_vector[one_hot_vector == 0] = epsilon / num_classes
+
+        return one_hot_vector
 
 def print_params(epoch, net):
     params = []
@@ -313,10 +321,10 @@ class CommonTrainer:
                 target_s = dict["training"][output_name]
                 if output_name not in class_frequencies.keys():
                     class_frequencies[output_name] = torch.ones(target_s[0].size())
-
-                max, target_index = torch.max(target_s, dim=1)
-
-                class_frequencies[output_name][target_index.cpu().data] += 1
+                cf=class_frequencies[output_name]
+                indices=torch.nonzero(target_s.data)
+                for example_index in range(len(target_s)):
+                    cf[indices[example_index,1]] += 1
 
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
@@ -333,3 +341,10 @@ class CommonTrainer:
 
             self.rebuild_criterions(output_name=output_name, weights=weights)
         return class_frequencies
+
+    def get_p(self, output_s):
+        # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
+        # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
+        output_s_exp = torch.exp(output_s)
+        output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
+        return output_s_p

@@ -1,17 +1,14 @@
 import torch
-from torch.autograd import Variable
-from torch.legacy.nn import SoftMax
-from torch.nn import MSELoss, BCELoss, BCEWithLogitsLoss, NLLLoss, MultiLabelSoftMarginLoss, CrossEntropyLoss
-from torch.nn.functional import softmax
+from torch.nn import MultiLabelSoftMarginLoss
 
-from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
-from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider, CpuGpuDataProvider, \
-    MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar
+
 
 def toBinary(n,max_value):
     for index in range(max_value)[::-1]:
@@ -29,7 +26,8 @@ def recode_as_multi_label(one_hot_vector):
             coded[example_index,count_index]=1
 
     #print(coded)
-    return one_hot_vector
+    return coded
+
 
 class GenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
@@ -39,8 +37,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
-            self.criterion_classifier = CrossEntropyLoss(weight=weights) \
-                if not enable_recode else MultiLabelSoftMarginLoss(weight=weights)
+            self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
 
     def get_test_metric_name(self):
         return "test_supervised_loss"
@@ -68,7 +65,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                                      batch_names=["training"],
                                      requires_grad={"training": ["input"]},
                                      volatile={"training": [] },
-                                     recode_functions={"softmaxGenotype":recode_as_multi_label}
+                                     recode_functions={"softmaxGenotype":recode_for_label_smoothing}
                                                         )
 
         for batch_idx, dict in enumerate(data_provider):
@@ -85,7 +82,8 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
             max, target_index= torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_index)
+
+            supervised_loss = self.criterion_classifier(output_s_p, target_s)
             optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
@@ -106,9 +104,8 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     def get_p(self, output_s):
         # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
         # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
-        #output_s_exp = torch.exp(output_s)
-        #output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
-        output_s_p= softmax(output_s)
+        output_s_exp = torch.exp(output_s)
+        output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
         return output_s_p
 
     def test_supervised(self, epoch):
@@ -139,7 +136,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
             max, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
             max, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_index if not enable_recode else target_s)
+            supervised_loss = self.criterion_classifier(output_s_p,target_s)
             errors[target_index.cpu().data] += torch.ne(target_index.cpu().data, output_index.cpu().data).type(torch.FloatTensor)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
