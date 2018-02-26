@@ -116,4 +116,5 @@ else:
 
 tester.predict(iterator=iterator, output_filename=args.output, max_examples=args.n)
 
-exit(0)
+# don't wait for threads to die, just exit:
+os._exit(0)
