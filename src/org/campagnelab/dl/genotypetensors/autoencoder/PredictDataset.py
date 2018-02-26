@@ -104,10 +104,10 @@ if args.dataset=="validation":
     args.n = min(args.n, len(problem.validation_set()))
     iterator=problem.validation_loader_range(0, args.n)
 elif args.dataset=="unlabeled":
-    args.n = min(args.n, len(problem.unlabeled_loader()))
+    args.n = min(args.n, len(problem.unlabeled_set()))
     iterator = problem.unlabeled_loader_range(0, args.n)
 elif args.dataset=="test":
-    args.n = min(args.n, len(problem.test_loader()))
+    args.n = min(args.n, len(problem.test_set()))
     iterator = problem.test_loader_range(0, args.n)
 
 else:
