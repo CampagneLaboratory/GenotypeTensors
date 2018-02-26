@@ -46,11 +46,19 @@ class Problem:
         """Returns the validation DataSet."""
         return None
 
+    def test_set(self):
+        """Returns the test DataSet."""
+        return None
+
     def loader_for_dataset(self, dataset):
         pass
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
+        pass
+
+    def test_loader(self):
+        """Returns the torch dataloader over the test set. """
         pass
 
     def train_loader_subset_range(self, start, end):
@@ -70,6 +78,11 @@ class Problem:
         """Returns the torch dataloader over the validation set. """
         pass
 
+    def test_loader_subset(self, indices):
+        """Returns the torch dataloader over the test set, limiting to the examples
+        identified by the indices. """
+        pass
+
     def validation_loader_subset(self, indices):
         """Returns the torch dataloader over the test set, limiting to the examples
         identified by the indices. """
@@ -82,6 +95,15 @@ class Problem:
             return self.loader_for_dataset(SmallerDataset(delegate=self.validation_set(), new_size=end))
         else:
             return self.validation_loader_subset(range(start,end))
+
+    def test_loader_range(self, start, end):
+        """Returns the torch dataloader over the test set, limiting to the examples
+        identified by the indices. """
+        if start==0:
+            return self.loader_for_dataset(SmallerDataset(delegate=self.test_set(), new_size=end))
+        else:
+            return self.test_loader_subset(range(start,end))
+
 
     def unlabeled_loader(self):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """

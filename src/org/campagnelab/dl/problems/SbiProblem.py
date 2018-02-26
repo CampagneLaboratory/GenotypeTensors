@@ -29,6 +29,9 @@ class SbiProblem(Problem):
     def train_set(self):
         return CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
 
+    def test_set(self):
+        return CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names())
+
     def unlabeled_set(self):
 
         if self.file_exists(self.basename + "-unlabeled.list"):
@@ -85,6 +88,9 @@ class SbiProblem(Problem):
 
     def unlabeled_loader(self):
         return self.loader_for_dataset(dataset=self.unlabeled_set(), shuffle=True)
+
+    def test_loader(self):
+        return self.loader_for_dataset(dataset=self.test_set(), shuffle=False)
 
     def reg_loader_subset(self, indices):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
