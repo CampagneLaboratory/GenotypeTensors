@@ -1,4 +1,4 @@
-from queue import Queue
+from queue import Queue, Empty
 from threading import Thread
 
 import time
@@ -64,15 +64,20 @@ class CpuGpuDataProvider(DataProvider):
         This method returns the next batch of data, prepared for pytorch, on GPU when is_cuda is true.
         :return: Dictionary with named inputs and outputs.
         """
-        while not self.gpu_batches_queue.full():
-            self.populate_cpu_queue()
-            self.populate_gpu_queue()
-
         self.batch_index += 1
+        self.join_queues()
+        try:
+            if self.is_cuda:
+                return self.gpu_batches_queue.get(block=True, timeout=3)
+            else:
+                return self.cpu_batches_queue.get(block=True, timeout=3)
+        except Empty:
+            raise StopIteration
+
+    def join_queues(self):
+        self.cpu_batches_queue.join()
         if self.is_cuda:
-            return self.gpu_batches_queue.get(block=True)
-        else:
-            return self.cpu_batches_queue.get(block=True)
+            self.gpu_batches_queue.join()
 
     def populate_cpu_queue(self, recode_functions):
 
@@ -149,17 +154,14 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
         """
         #print("cpu queue size: {}".format(self.cpu_batches_queue.qsize()))
         #print("gpu queue size: {}".format(self.gpu_batches_queue.qsize()))
-        while self.queues_are_empty():
-            if self.stop_iteration and self.queues_are_empty():
-                raise StopIteration
-            time.sleep(10/1000)
-
-        if self.is_cuda:
-
-            return self.gpu_batches_queue.get(block=True,timeout=3)
-        else:
-
-            return self.cpu_batches_queue.get(block=True, timeout=3)
+        self.join_queues()
+        try:
+            if self.is_cuda:
+                return self.gpu_batches_queue.get(block=True,timeout=3)
+            else:
+                return self.cpu_batches_queue.get(block=True, timeout=3)
+        except Empty:
+            raise StopIteration
 
     def close(self):
 
@@ -168,5 +170,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
 
     def queues_are_empty(self):
         return self.cpu_batches_queue.empty() or self.is_cuda and self.gpu_batches_queue.empty() and self.cpu_batches_queue.empty()
+
+
 
 
