@@ -8,7 +8,7 @@ class VectorPropertiesReader:
         :param path_to_vector_properties: path to .vecp file
         """
         if not path_to_vector_properties.endswith(".vecp"):
-            path_to_vector_properties+=".vecp"
+            path_to_vector_properties += ".vecp"
         with open(path_to_vector_properties, 'r') as reader_fp:
             self.vector_properties = json.load(reader_fp)
             self.major_version = self.vector_properties["majorVersion"]
