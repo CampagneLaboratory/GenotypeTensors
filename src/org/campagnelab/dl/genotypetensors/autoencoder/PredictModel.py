@@ -24,7 +24,7 @@ class PredictModel:
                                                         is_cuda=self.use_cuda,
                                                         batch_names=["unlabeled"],
                                                         volatile={"unlabeled": ["input"]},
-                                                        fake_GPU_on_CPU=True)
+                                                        fake_GPU_on_CPU=False) # Enable fake_GPU_on_CPU to debug on CPU
 
 
         with VectorWriterBinary(sample_id=0, path_with_basename=output_filename,
