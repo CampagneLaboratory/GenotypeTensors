@@ -70,7 +70,7 @@ class CpuGpuDataProvider(DataProvider):
         :return: Dictionary with named inputs and outputs.
         """
         while not self.gpu_batches_queue.full():
-            self.populate_cpu_queue()
+            self.populate_cpu_queue({})
             self.populate_gpu_queue()
 
         self.batch_index += 1
