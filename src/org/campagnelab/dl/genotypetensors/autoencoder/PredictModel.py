@@ -23,7 +23,8 @@ class PredictModel:
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
                                                         is_cuda=self.use_cuda,
                                                         batch_names=["unlabeled"],
-                                                        volatile={"unlabeled": ["input"]})
+                                                        volatile={"unlabeled": ["input"]},
+                                                        fake_GPU_on_CPU=True)
 
 
         with VectorWriterBinary(sample_id=0, path_with_basename=output_filename,

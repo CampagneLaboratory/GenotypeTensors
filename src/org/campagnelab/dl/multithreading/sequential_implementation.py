@@ -18,6 +18,9 @@ class DataProvider:
         return self
 
     def __next__(self):
+        return self.__next_tuple__(is_cuda=self.is_cuda)
+
+    def __next_tuple__(self,is_cuda):
         """
         This method returns the next batch of data, prepared for pytorch, on GPU when is_cuda is true, as variables.
         Use variable_kargs to pass arguments to the Variable calls.
@@ -40,7 +43,7 @@ class DataProvider:
 
                 var_batch = Variable(batch[var_name], requires_grad=(var_name in self.requires_grad[loader_name]),
                              volatile=(var_name in self.volatile[loader_name]))
-                if self.is_cuda:
+                if is_cuda:
                     var_batch = var_batch.cuda(async=True)
                 dict[loader_name][var_name]=var_batch
 
@@ -50,14 +53,17 @@ class DataProvider:
 
 
 class CpuGpuDataProvider(DataProvider):
-    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=3, preload_cuda_n=3):
+    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=3,
+                 preload_cuda_n=3, fake_GPU_on_CPU=False):
         super(CpuGpuDataProvider, self).__init__(iterator=iterator,batch_names=batch_names, is_cuda=False, # do not put on GPU in super
                                                  volatile=volatile, requires_grad=requires_grad)
         self.is_cuda = is_cuda
         self.cpu_batches_queue = Queue(maxsize=preload_n)
         self.batch_index = 0
-        if is_cuda:
+        self.fake_GPU_on_CPU = fake_GPU_on_CPU
+        if is_cuda or self.fake_GPU_on_CPU:
             self.gpu_batches_queue = Queue(maxsize=preload_cuda_n)
+
 
     def __next__(self):
         """
@@ -69,7 +75,7 @@ class CpuGpuDataProvider(DataProvider):
             self.populate_gpu_queue()
 
         self.batch_index += 1
-        if self.is_cuda:
+        if self.is_cuda or self.fake_GPU_on_CPU:
             return self.gpu_batches_queue.get(block=True)
         else:
             return self.cpu_batches_queue.get(block=True)
@@ -77,7 +83,7 @@ class CpuGpuDataProvider(DataProvider):
     def populate_cpu_queue(self, recode_functions):
 
             try:
-                next_item=super().__next__()
+                next_item=self.__next_tuple__(False if self.fake_GPU_on_CPU else self.is_cuda)
                 for batch_name in self.batch_names:
                     batch = next_item[batch_name]
                     for var_name in recode_functions.keys():
@@ -94,16 +100,17 @@ class CpuGpuDataProvider(DataProvider):
             for batch_name in self.batch_names:
                 batch=batches[batch_name]
                 for var_name in batch.keys():
-                    batch[var_name]=batch[var_name].cuda(async =True)
+                    if not self.fake_GPU_on_CPU:
+                        batch[var_name]=batch[var_name].cuda(async =True)
             self.gpu_batches_queue.put(batches, block=True)
 
 
 class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
     def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}, preload_n=20,
-                 preload_cuda_n=20, recode_functions={}):
+                 preload_cuda_n=20, recode_functions={}, fake_GPU_on_CPU=False):
         super().__init__(iterator, batch_names, is_cuda=is_cuda,
                          volatile=volatile, requires_grad=requires_grad, preload_n=preload_n,
-                         preload_cuda_n=preload_cuda_n)
+                         preload_cuda_n=preload_cuda_n,fake_GPU_on_CPU=fake_GPU_on_CPU)
         self.stop_iteration = False
         self.kill_threads=False
         def add_to_cpu_queue():
@@ -123,7 +130,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
         while self.cpu_batches_queue.empty():
             time.sleep(10 / 1000.0)
 
-        if is_cuda:
+        if is_cuda or self.fake_GPU_on_CPU:
             def add_to_gpu_queue():
                 while not self.kill_threads:
 
@@ -167,6 +174,6 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
         time.sleep(1)
 
     def queues_are_empty(self):
-        return self.cpu_batches_queue.empty() or self.is_cuda and self.gpu_batches_queue.empty() and self.cpu_batches_queue.empty()
+        return self.cpu_batches_queue.empty() or (self.is_cuda or self.fake_GPU_on_CPU) and self.gpu_batches_queue.empty() and self.cpu_batches_queue.empty()
 
 
