@@ -13,7 +13,7 @@ import os
 
 class VectorReader:
     def __init__(self, path_to_vector, sample_id, vector_names, assert_example_ids=False, return_example_id=False,
-                 parallel=False, num_bytes=None):
+                 parallel=False, num_bytes=None, vector_fps=None):
         """
         :param path_to_vector: Path to the .vec file.
         :param sample_id: sample_id to read vectors from
@@ -24,6 +24,7 @@ class VectorReader:
                          Setting up the vector reader in this way disables iteration/next
         :param num_bytes: Precomputed num bytes in the vector file; useful if parallel is set to true, as it will
                           disable calculating the number of bytes for each call to __getitem__.
+        :param vector_fps: Preset vector file pointers. Used for partitioned datasets.
         """
         basename, file_extension = os.path.splitext(path_to_vector)
         properties_path = "{}.vecp".format(basename)
@@ -44,7 +45,9 @@ class VectorReader:
             raise ValueError("Version number too low to be parsed by reader")
         vector_file_type = self.vector_reader_properties.file_type
         self.parallel = parallel
-        if not self.parallel:
+        self.partitioned = vector_fps is not None
+        self.vector_fps = vector_fps
+        if not self.parallel and not self.partitioned:
             if vector_file_type == "text" or vector_file_type == "gzipped+text":
                 self.vector_reader = VectorReaderText(self.path_to_vector, self.vector_reader_properties)
             elif vector_file_type == "binary":
@@ -54,25 +57,28 @@ class VectorReader:
             self.num_bytes_for_parallel = None
         else:
             if vector_file_type == "text":
-                raise ValueError("Text vector file can't be processed in parallel")
-            if num_bytes is None or not type(num_bytes) == int:
-                num_records = self.vector_reader_properties.num_records
-                num_bytes_per_example = self.vector_reader_properties.num_bytes_per_example
-                self.num_bytes_for_parallel = VectorReaderBinary.check_file_size(self.path_to_vector,
-                                                                                 num_records,
-                                                                                 num_bytes_per_example)
+                raise ValueError("Text vector file can't be processed in parallel or partitioned")
+            if self.parallel:
+                if num_bytes is None or not type(num_bytes) == int:
+                    num_records = self.vector_reader_properties.num_records
+                    num_bytes_per_example = self.vector_reader_properties.num_bytes_per_example
+                    self.num_bytes_for_parallel = VectorReaderBinary.check_file_size(self.path_to_vector,
+                                                                                     num_records,
+                                                                                     num_bytes_per_example)
+                else:
+                    self.num_bytes_for_parallel = num_bytes
             else:
-                self.num_bytes_for_parallel = num_bytes
+                self.vector_fps = vector_fps
             self.vector_reader = None
 
     def __iter__(self):
-        if self.parallel:
+        if self.parallel or self.partitioned:
             raise ValueError("Iteration over parallel vector reader unsupported")
         assert self.vector_reader is not None, "Vector reader must be defined if not parallel"
         return self
 
     def __next__(self):
-        if self.parallel:
+        if self.parallel or self.partitioned:
             raise ValueError("Iteration over parallel vector reader unsupported")
         assert self.vector_reader is not None, "Vector reader must be defined if not parallel"
         return self._get_next_example(self.vector_reader)
@@ -113,6 +119,10 @@ class VectorReader:
                                            self.num_bytes_for_parallel)
             VectorReader._set_vec_to_example_at_idx(vector_fp, idx)
             return self._get_next_example(vector_fp)
+
+    def get_item_vector(self, idx, vector_fp):
+        VectorReader._set_vec_to_example_at_idx(vector_fp, idx)
+        return self._get_next_example(vector_fp)
 
     def __enter__(self):
         return self
