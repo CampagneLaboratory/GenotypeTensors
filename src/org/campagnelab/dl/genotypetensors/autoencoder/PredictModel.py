@@ -30,7 +30,9 @@ class PredictModel:
             data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
                                                             is_cuda=self.use_cuda,
                                                             batch_names=["unlabeled"],
-                                                            volatile={"unlabeled": ["input"]})
+                                                            volatile={"unlabeled": ["input"]},
+                                                            fake_GPU_on_CPU = False)  # Enable fake_GPU_on_CPU to debug on CPU
+
         elif self.processing_type == "sequential":
             data_provider = DataProvider(iterator=zip(iterator),
                                          is_cuda=self.use_cuda,
@@ -64,6 +66,6 @@ class PredictModel:
 
                 if ((batch_idx + 1) * self.mini_batch_size) > max_examples:
                     break
-
-        # data_provider.close()
+        if self.processing_type == "multithreaded" or self.processing_type == "sequential":
+            data_provider.close()
         print("Done")

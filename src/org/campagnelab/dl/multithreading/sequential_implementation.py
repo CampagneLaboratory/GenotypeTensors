@@ -70,11 +70,10 @@ class CpuGpuDataProvider(DataProvider):
         :return: Dictionary with named inputs and outputs.
         """
         while not self.gpu_batches_queue.full():
-            self.populate_cpu_queue({})
+            self.populate_cpu_queue()
             self.populate_gpu_queue()
 
         self.batch_index += 1
-        self.join_queues()
         try:
             if self.is_cuda or self.fake_GPU_on_CPU:
                 return self.gpu_batches_queue.get(block=True, timeout=3)
@@ -83,21 +82,10 @@ class CpuGpuDataProvider(DataProvider):
         except Empty:
             raise StopIteration
 
-    def join_queues(self):
-        self.cpu_batches_queue.join()
-        if self.is_cuda:
-            self.gpu_batches_queue.join()
-
-
-    def join_queues(self):
-        self.cpu_batches_queue.join()
-        if self.is_cuda:
-            self.gpu_batches_queue.join()
-
     def populate_cpu_queue(self, recode_functions):
 
             try:
-                next_item=self.__next_tuple__(False if self.fake_GPU_on_CPU else self.is_cuda)
+                next_item=self.__next_tuple__(False)
                 for batch_name in self.batch_names:
                     batch = next_item[batch_name]
                     for var_name in recode_functions.keys():
@@ -168,9 +156,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
         This method returns the next batch of data, prepared for pytorch, on GPU when is_cuda is true.
         :return: Dictionary with named inputs and outputs.
         """
-        #print("cpu queue size: {}".format(self.cpu_batches_queue.qsize()))
-        #print("gpu queue size: {}".format(self.gpu_batches_queue.qsize()))
-        self.join_queues()
+
         try:
             if self.is_cuda or self.fake_GPU_on_CPU:
                 return self.gpu_batches_queue.get(block=True,timeout=3)
