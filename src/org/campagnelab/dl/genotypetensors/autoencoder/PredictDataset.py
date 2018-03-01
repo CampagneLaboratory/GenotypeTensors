@@ -54,9 +54,14 @@ parser.add_argument('--model-label', help='Model label: best or latest.',      d
 parser.add_argument('-o','--output', help='Output file name.',      default="output")
 parser.add_argument('--problem', default="genotyping:basename", type=str,
                     help='The problem, genotyping:basename or somatic:basename')
-
 parser.add_argument('--dataset', default="validation", type=str,
                     help='the dataset to predict on. Filename used will be basename-dataset, where basename if given in the problem.')
+parser.add_argument('--num-workers', default=0, type=int, help="Number of workers to use when multithreaded "
+                                                               "dataset is used")
+parser.add_argument('--use-parallel', action="store_true", dest="use_parallel",
+                    help="If set, run predict in parallel mode, with the number of workers determined by --num-workers")
+parser.add_argument("--use-sequential", action="store_true", dest="use_sequential",
+                    help="If set, run predict in sequential mode using base DataProvider")
 
 args = parser.parse_args()
 
@@ -96,8 +101,8 @@ input_files = checkpoint["input_files"] if "domain_descriptor" in checkpoint els
 
 tester = PredictModel(model=model, problem=problem, use_cuda=use_cuda,
                       domain_descriptor=domain_descriptor,
-                      feature_mapper=feature_mapper, samples=samples, input_files=input_files
-                      )
+                      feature_mapper=feature_mapper, samples=samples, input_files=input_files,
+                      use_parallel=args.use_parallel, num_workers=args.num_workers, use_sequential=args.use_sequential)
 
 iterator=None
 if args.dataset=="validation":

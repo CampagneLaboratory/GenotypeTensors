@@ -164,9 +164,13 @@ class GenotypeDataset(Dataset):
         return  result
 
 
-class NewGenotypeDataset(Dataset):
-    """Test implementation of dataset"""
-    def __init__(self, vec_basename, vector_names, sample_id=0, cache_first=True, max_records=sys.maxsize):
+class MultiProcessingPredictDataset(Dataset):
+    """
+    Implementation of dataset that supports multiple workers in predict phase by allowing each worker to separately
+    create a pointer to the vector file when reading in data
+    """
+    def __init__(self, vec_basename, vector_names, sample_id=0, cache_first=True, max_records=sys.maxsize,
+                 use_cuda=False):
         super().__init__()
         if cache_first:
             vector_path = "{}-test-cached.vec".format(vec_basename)
@@ -186,10 +190,11 @@ class NewGenotypeDataset(Dataset):
                                    return_example_id=True, parallel=True, num_bytes=num_bytes)
         self.props = self.reader.vector_reader_properties
         if not self.props.file_type == "binary":
-            raise TypeError("NewGenotypeDataset expects a binary file but instead received a {} file"
+            raise TypeError("MultiProcessingPredictDataset expects a binary file but instead received a {} file"
                             .format(self.props.file_type))
         self.length = self.props.num_records
         self.vector_names = vector_names
+        self.use_cuda = use_cuda
 
     def __len__(self):
         return self.length
@@ -201,6 +206,9 @@ class NewGenotypeDataset(Dataset):
         result = {}
         i = 0
         for tensor in example_tuple[1:]:
-            result[self.vector_names[i]] = torch.from_numpy(tensor)
+            var = torch.from_numpy(tensor)
+            if self.use_cuda:
+                var = var.cuda(async=True)
+            result[self.vector_names[i]] = var
             i += 1
         return result
