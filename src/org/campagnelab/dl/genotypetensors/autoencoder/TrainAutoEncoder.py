@@ -88,6 +88,7 @@ if __name__ == '__main__':
                         help='Reset learning rate to initial value every n epochs.')
 
     parser.add_argument("--num-gpus", type=int, default=1, help='Number of GPUs to run on.')
+    parser.add_argument("--num-workers", type=int, default=1, help='Number of workers to feed data to the GPUs.')
     parser.add_argument("--autoencoder-type", type=int, default=1, help='Choose a variant of auto-encoder. Type 1 or 2 are currently available.')
 
     parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
@@ -115,9 +116,9 @@ if __name__ == '__main__':
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
     problem = None
     if args.problem.startswith("genotyping:"):
-        problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem)
+        problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem, num_workers=args.num_workers)
     elif args.problem.startswith("somatic:"):
-        problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem)
+        problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem,num_workers=args.num_workers)
     else:
         print("Unsupported problem: " + args.problem)
         exit(1)

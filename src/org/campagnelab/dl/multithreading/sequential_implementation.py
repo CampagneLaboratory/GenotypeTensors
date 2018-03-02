@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 
 class DataProvider:
-    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={}):
+    def __init__(self, iterator, batch_names, is_cuda=False, volatile={}, requires_grad={},recode_functions={}):
         self.iterator = iterator
         self.batch_names = batch_names
         self.batch_index = 0
@@ -50,6 +50,8 @@ class DataProvider:
 
         return dict
 
+    def close(self):
+        pass
 
 
 class CpuGpuDataProvider(DataProvider):

@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, ConcatDataset
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset, \
-    InterleaveDatasets, CyclicInterleavedDatasets, CachedGenotypeDataset
+    InterleaveDatasets, CyclicInterleavedDatasets, CachedGenotypeDataset, DispatchDataset
 from org.campagnelab.dl.problems.Problem import Problem
 
 
@@ -27,10 +27,12 @@ class SbiProblem(Problem):
         return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
-        return CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
+        return DispatchDataset(CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names()),
+                               self.num_workers)
 
     def test_set(self):
-        return CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names())
+        return DispatchDataset(CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names()),
+                               num_workers=self.num_workers)
 
     def unlabeled_set(self):
 
@@ -39,25 +41,26 @@ class SbiProblem(Problem):
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines = list_file.readlines()
                 return ConcatDataset(
-                    [CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()).shuffle() for path in
+                    [DispatchDataset(CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()),num_workers=self.num_workers).shuffle() for path in
                      lines])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
-                return CachedGenotypeDataset(self.basename + "-unlabeled.vec",
-                                             vector_names=self.get_input_names()).shuffle()
+                return DispatchDataset(CachedGenotypeDataset(self.basename + "-unlabeled.vec",
+                                             vector_names=self.get_input_names()).shuffle(),self.num_workers)
             else:
                 return EmptyDataset()
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
-            return CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names())
+            return DispatchDataset(CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names()),
+                                   num_workers=self.num_workers)
         else:
             return EmptyDataset()
 
     def __init__(self, mini_batch_size, code, drop_last_batch=True, num_workers=0):
         super().__init__(mini_batch_size)
         self.basename = code[len(self.basename_prefix()):]
-        self.num_workers = num_workers
+        self.num_workers = max(1,num_workers)
         self.drop_last_batch = drop_last_batch
         self.meta_data = VectorReader(self.basename + "-train", False, vector_names=[]).vector_reader_properties
 

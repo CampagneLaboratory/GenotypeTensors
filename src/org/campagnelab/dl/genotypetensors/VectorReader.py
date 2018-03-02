@@ -3,6 +3,7 @@ import argparse
 import sys
 
 import itertools
+import threading
 
 from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorPropertiesReader
 from org.campagnelab.dl.genotypetensors.VectorReaderBinary import VectorReaderBinary
@@ -44,48 +45,55 @@ class VectorReader:
             self.vector_reader = VectorReaderBinary(self.path_to_vector, self.vector_reader_properties)
         else:
             raise NotImplementedError
+        self.lock = threading.Lock()
 
     def __iter__(self):
+
         return self
 
-    def __next__(self):
-        curr_example = None
-        processed_vector_sample_ids = set()
-        for _ in range(len(self.sample_vector_ids)):
-            next_vector_line = self.vector_reader.get_next_vector_line()
-            if curr_example is None:
-                curr_example = ExampleVectorLines(next_vector_line.line_example_id, self.vector_ids, self.sample_id)
-                if self.assert_example_ids and curr_example.example_id in self.processed_example_ids:
-                    raise RuntimeError("Example ID % already processed".format(
-                                next_vector_line.line_example_id))
-            if curr_example.same_example(next_vector_line.line_example_id):
-                curr_example.add_vector_line(next_vector_line)
-                processed_vector_sample_ids.add((next_vector_line.line_sample_id, next_vector_line.line_vector_id))
+    def __next__(self, idx=0):
+        with self.lock:
+            self.vector_reader.set_to_example_at_idx(idx)
+            curr_example = None
+            processed_vector_sample_ids = set()
+            for _ in range(len(self.sample_vector_ids)):
+                next_vector_line = self.vector_reader.get_next_vector_line()
+                if curr_example is None:
+                    curr_example = ExampleVectorLines(next_vector_line.line_example_id, self.vector_ids, self.sample_id)
+                    if self.assert_example_ids and curr_example.example_id in self.processed_example_ids:
+                        raise RuntimeError("Example ID % already processed".format(
+                                    next_vector_line.line_example_id))
+                if curr_example.same_example(next_vector_line.line_example_id):
+                    curr_example.add_vector_line(next_vector_line)
+                    processed_vector_sample_ids.add((next_vector_line.line_sample_id, next_vector_line.line_vector_id))
+                else:
+                    break
+            if not processed_vector_sample_ids == self.sample_vector_ids:
+                unprocessed_vector_sample_ids = self.sample_vector_ids - processed_vector_sample_ids
+                raise Exception("Missing vector index-sample index pairs for example {}: {}".format(
+                    curr_example.example_id,
+                    unprocessed_vector_sample_ids
+                ))
             else:
-                break
-        if not processed_vector_sample_ids == self.sample_vector_ids:
-            unprocessed_vector_sample_ids = self.sample_vector_ids - processed_vector_sample_ids
-            raise Exception("Missing vector index-sample index pairs for example {}: {}".format(
-                curr_example.example_id,
-                unprocessed_vector_sample_ids
-            ))
-        else:
-            return curr_example.get_tuples(self.return_example_id)
+                return curr_example.get_tuples(self.return_example_id)
 
     def __enter__(self):
+
         return self
 
     def __exit__(self, exception_type, exception_value, traceback):
-        self.close()
+        pass
 
     def close(self):
         self.vector_reader.close()
 
     def set_to_example_at_idx(self, idx):
-        if self.vector_reader_properties.file_type != "binary":
-            raise ValueError("Operation only valid for binary files")
-        else:
-            self.vector_reader.set_to_example_at_idx(idx)
+        #assert idx>=0 and idx>self.length, "index out of bounds."
+        with self.lock:
+            if self.vector_reader_properties.file_type != "binary":
+                raise ValueError("Operation only valid for binary files")
+            else:
+                self.vector_reader.set_to_example_at_idx(idx)
 
 
 class ExampleVectorLines:

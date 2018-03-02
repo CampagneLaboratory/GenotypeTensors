@@ -1,8 +1,11 @@
 import bisect
 import sys
+import threading
 from pathlib import Path
 
 import os
+
+import numpy
 import torch
 from torchnet.dataset.dataset import Dataset
 
@@ -13,8 +16,11 @@ from org.campagnelab.dl.genotypetensors.VectorReaderBinary import VectorReaderBi
 
 from multiprocessing import Lock
 
+
 # Given n items and s sets to partition into, return ceiling of count in any partition (faster than math.ceil)
 def _ceiling_partition(n, s):
+    if s == 0:
+        return n
     return -(-n // s)
 
 
@@ -30,6 +36,7 @@ class SmallerDataset(Dataset):
         return min(self.length, len(self.delegate))
 
     def __getitem__(self, idx):
+        #print("Fetching index "+str(idx))
         if idx < self.length:
             value = self.delegate[idx]
             return value
@@ -67,6 +74,7 @@ class InterleavedReaderIndex:
 class InterleaveDatasets(Dataset):
     """ A dataset that exposes delegates by interleaving their records.
     """
+
     def __init__(self, dataset_list):
         super().__init__()
         self.dataset_list = dataset_list
@@ -95,6 +103,7 @@ class CyclicInterleavedDatasets(Dataset):
     """ A dataset that exposes delegates by interleaving their records and cycling through them when no more
         items are available in a dataset.
     """
+
     def __init__(self, dataset_list):
         super().__init__()
         self.dataset_list = dataset_list
@@ -123,6 +132,7 @@ class ClippedDataset(Dataset):
     A dataset that is clipped to bounds on the index.
     Used in combination with index dispatch to improve locality of access to a large dataset.
     """
+
     def __init__(self, delegate, num_slices, slice_index):
         super().__init__()
         assert 0 <= slice_index < num_slices, "slice_index must be between 0 and num_slices"
@@ -130,9 +140,13 @@ class ClippedDataset(Dataset):
         self.delegate = delegate
         self.delegate_length = len(delegate)
         self.slice_length = int(self.delegate_length / num_slices)
-        if slice_index > 0:
-            self.start_index = int(self.slice_length * (slice_index - 1))
+        # if (slice_index == num_slices - 1):
+        #     # last slice is smaller:
+        #     self.slice_length = int(self.delegate_length - self.slice_length * (num_slices - 1))
+
+        self.start_index = int(self.slice_length * slice_index)
         self.end_index = self.start_index + self.slice_length
+        #print("index {} start: {} end: {} ", slice_index, self.start_index, self.end_index)
 
     def __len__(self):
         return self.slice_length
@@ -142,7 +156,8 @@ class ClippedDataset(Dataset):
             value = self.delegate[idx]
             return value
         else:
-            assert False, "index is larger than clipped length."
+            assert False, "index is outside the clipped bounds: {} <= {} < {}.".format(self.start_index, idx,
+                                                                                       self.end_index)
 
 
 class CachedGenotypeDataset(Dataset):
@@ -179,6 +194,7 @@ class CachedGenotypeDataset(Dataset):
 
 class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""
+
     def __init__(self, vec_basename, vector_names, sample_id=0):
         super().__init__()
         # initialize vector reader with basename and selected vectors:
@@ -190,44 +206,50 @@ class GenotypeDataset(Dataset):
         self.vector_names = vector_names
         self.is_random_access = self.props.file_type == "binary"
         self.previous_index = 0
+        self.lock = threading.Lock()
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
-        # get next example from .vec file and check that idx matches example index,
-        # then return the features and outputs as tuple.
-        if self.is_random_access:
-            if idx != (self.previous_index+1):
-                self.reader.set_to_example_at_idx(idx)
-            example_tuple = next(self.reader)
-        else:
-            example_tuple = next(self.reader)
-            assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
-        result = {}
-        i = 0
-        for tensor in example_tuple[1:]:
-            result[self.vector_names[i]] = torch.from_numpy(tensor)
-            i += 1
-        self.previous_index = idx
-        return result
+        assert idx>=0 and idx<self.length, "index {} out of reader bounds {} {}.".format(idx, 0, self.length)
+        with self.lock:
+            # get next example from .vec file and check that idx matches example index,
+            # then return the features and outputs as tuple.
+            if self.is_random_access:
+                #if idx != (self.previous_index + 1):
+
+                example_tuple =next(self.reader,idx)
+            else:
+                example_tuple = next(self.reader)
+                assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
+            result = {}
+            i = 0
+            for tensor in example_tuple[1:]:
+                result[self.vector_names[i]] = torch.from_numpy(tensor)
+                i += 1
+            self.previous_index = idx
+            return result
 
 
 class DispatchDataset(Dataset):
     def __init__(self, base_delegate, num_workers):
         super().__init__()
         self.base_delegate = base_delegate
-        self.delegate_readers = [self.base_delegate.slice(worker_idx, num_workers) for worker_idx in range(num_workers)]
+        self.delegate_readers = [self.base_delegate.slice(slice_index=worker_idx, num_slices=num_workers) for worker_idx
+                                 in range(num_workers)]
         self.delegate_locks = [Lock() for _ in range(num_workers)]
         self.delegate_cumulative_sizes = [len(self.delegate_readers[0])]
         for delegate_reader in self.delegate_readers[1:]:
             self.delegate_cumulative_sizes.append(len(delegate_reader) + self.delegate_cumulative_sizes[-1])
 
+        self.delegate_cumulative_sizes = numpy.cumsum([len(x) for x in self.delegate_readers])
+
     def __len__(self):
         return len(self.base_delegate)
 
     def __getitem__(self, idx):
-        worker_idx = bisect.bisect_right(self.delegate_cumulative_sizes, idx)
-        with self.delegate_locks[worker_idx]:
-            result = self.delegate_readers[worker_idx][idx]
+        worker_index = self.delegate_cumulative_sizes.searchsorted(idx, 'right')
+        with self.delegate_locks[worker_index]:
+            result = self.delegate_readers[worker_index][idx]
         return result
