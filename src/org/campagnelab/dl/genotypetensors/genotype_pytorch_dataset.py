@@ -8,6 +8,30 @@ from torchnet.dataset.dataset import Dataset
 from org.campagnelab.dl.genotypetensors.VectorCache import VectorCache
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 
+class ClippedDataset(Dataset):
+    """A dataset that is clipped to bounds on the index.
+    Used in combination with index dispatch to improve locality of access to a large dataset. """
+    def __init__(self, delegate, num_slices, slice_index):
+        assert slice_index>=0 and slice_index<num_slices, "slice_index must be between 0 and num_slices"
+        self.start_index=0
+        self.delegate=delegate
+        self.delegate_length=len(delegate)
+        self.slice_length=int(self.delegate_length/num_slices)
+        if slice_index>0:
+            self.start_index=int(self.slice_length*(slice_index-1))
+        self.end_index=self.start_index+self.slice_length
+
+    def __len__(self):
+        return self.slice_length
+
+    def __getitem__(self, index_inside_slice):
+
+        if index_inside_slice <self.end_index:
+            value=self.delegate[index_inside_slice+self.start_index]
+            return value
+        else:
+            assert False, "index is larger than clipped length."
+
 class  SmallerDataset(Dataset):
     def __init__(self, delegate, new_size):
         assert new_size<=len(delegate) or new_size==sys.maxsize, "new size must be smaller or equal to delegate size."
@@ -113,6 +137,10 @@ class CachedGenotypeDataset(Dataset):
             # Write cache:
             VectorCache(basename,max_records=max_records).write_lines()
         self.delegate=GenotypeDataset(basename+"-cached",vector_names, sample_id)
+        self.basename=basename
+        self.vector_names=vector_names
+        self.sample_id=sample_id
+        self.max_records=max_records
 
     def file_exists(self, filename):
         return Path(filename).is_file()
@@ -122,6 +150,11 @@ class CachedGenotypeDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.delegate[idx]
+
+    def slice(self, num_slices, slice_index):
+        """Create a copy of this reader, focused on a slice of the data. """
+        return ClippedDataset(CachedGenotypeDataset(self.basename, self.vector_names, self.max_records/num_slices,self.sample_id),
+                              num_slices=num_slices, slice_index=slice_index)
 
 class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""
