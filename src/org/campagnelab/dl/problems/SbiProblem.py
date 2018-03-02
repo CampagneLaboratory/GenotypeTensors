@@ -99,8 +99,8 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def loader_for_dataset(self, dataset, shuffle=False):
-        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(), num_workers=4,
-                               pin_memory=False, drop_last=self.drop_last_batch))
+        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(),
+                               num_workers=self.num_workers, pin_memory=False, drop_last=self.drop_last_batch))
 
     def loss_function(self, output_name):
         return torch.nn.CrossEntropyLoss()
