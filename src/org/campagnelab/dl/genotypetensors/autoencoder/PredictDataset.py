@@ -112,6 +112,9 @@ elif args.dataset=="unlabeled":
 elif args.dataset=="test":
     args.n = min(args.n, len(problem.test_set()))
     iterator = problem.test_loader_range(0, args.n)
+elif args.dataset == "train":
+    args.n = min(args.n, len(problem.train_set()))
+    iterator = problem.train_loader_subset_range(0, args.n)
 
 else:
     print("Unsupported dataset: " + args.dataset)

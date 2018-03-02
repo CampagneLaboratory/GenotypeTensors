@@ -13,21 +13,24 @@ class VectorReaderBinary(VectorReaderBase):
     header_size = example_id_size + vector_id_size + sample_id_size + vector_length_size
     vector_element_size = 4
 
-    def __init__(self, path_to_vector, vector_reader_properties, num_bytes=None):
+    def __init__(self, path_to_vector, vector_reader_properties):
         """
         :param path_to_vector: Path to the binary vector file
         :param vector_reader_properties: Properties for binary vector file
-        :param num_bytes: Number of bytes in the binary vector file. Only set if precomputed in a previous call
-                          to check_file_size; vector reader operations will fail if num_bytes is incorrect.
-                          Useful only to avoid repeated integrity checking of number of bytes in file.
         """
         super().__init__(path_to_vector, vector_reader_properties)
-        if num_bytes is None or not type(num_bytes) == int:
-            self.num_bytes = VectorReaderBinary.check_file_size(path_to_vector, self.vector_properties.num_records,
-                                                                self.vector_properties.num_bytes_per_example)
-        else:
-            self.num_bytes = num_bytes
         self.vector_fp = open(self.path_to_vector, "rb")
+        # Get total number of bytes in file by going to end of file, checking position, and returning to start
+        self.vector_fp.seek(0, 2)
+        self.num_bytes = self.vector_fp.tell()
+        self.vector_fp.seek(0, 0)
+        expected_bytes_in_file = self.vector_properties.num_records * self.vector_properties.num_bytes_per_example
+        if self.num_bytes != expected_bytes_in_file:
+            error_msg = ("Bytes in file {} not equal to expected number of bytes {} "
+                         "based on {} examples and {} bytes per example")
+            raise ValueError(error_msg.format(self.num_bytes, expected_bytes_in_file,
+                                              self.vector_properties.num_records,
+                                              self.vector_properties.num_bytes_per_example))
 
     def get_next_vector_line(self):
         if self.vector_fp.tell() == self.num_bytes:
@@ -75,18 +78,3 @@ class VectorReaderBinary(VectorReaderBase):
 
     def close(self):
         self.vector_fp.close()
-
-    @staticmethod
-    def check_file_size(vector_fp_path, num_records, num_bytes_per_example):
-        with open(vector_fp_path, "rb") as vector_fp:
-            # Get total number of bytes in file by going to end of file, checking position, and returning to start
-            vector_fp.seek(0, 2)
-            num_bytes = vector_fp.tell()
-            vector_fp.seek(0, 0)
-            expected_bytes_in_file = num_records * num_bytes_per_example
-            if num_bytes != expected_bytes_in_file:
-                error_msg = ("Bytes in file {} not equal to expected number of bytes {} "
-                             "based on {} examples and {} bytes per example")
-                raise ValueError(error_msg.format(num_bytes, expected_bytes_in_file, num_records,
-                                                  num_bytes_per_example))
-        return num_bytes

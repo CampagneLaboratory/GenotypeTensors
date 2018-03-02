@@ -13,46 +13,29 @@ from org.campagnelab.dl.genotypetensors.VectorReaderBinary import VectorReaderBi
 
 from multiprocessing import Lock
 
+# Given n items and s sets to partition into, return ceiling of count in any partition (faster than math.ceil)
+def _ceiling_partition(n, s):
+    return -(-n // s)
 
-class ClippedDataset(Dataset):
-    """A dataset that is clipped to bounds on the index.
-    Used in combination with index dispatch to improve locality of access to a large dataset. """
-    def __init__(self, delegate, num_slices, slice_index):
-        assert slice_index>=0 and slice_index<num_slices, "slice_index must be between 0 and num_slices"
-        self.start_index=0
-        self.delegate=delegate
-        self.delegate_length=len(delegate)
-        self.slice_length=int(self.delegate_length/num_slices)
-        if slice_index>0:
-            self.start_index=int(self.slice_length*(slice_index-1))
-        self.end_index=self.start_index+self.slice_length
 
-    def __len__(self):
-        return self.slice_length
-
-    def __getitem__(self, index_inside_slice):
-
-        if index_inside_slice <self.end_index:
-            value=self.delegate[index_inside_slice+self.start_index]
-            return value
-        else:
-            assert False, "index is larger than clipped length."
-
-class  SmallerDataset(Dataset):
+class SmallerDataset(Dataset):
     def __init__(self, delegate, new_size):
-        assert new_size<=len(delegate) or new_size==sys.maxsize, "new size must be smaller or equal to delegate size."
-        self.length=new_size
-        self.delegate=delegate
+        super().__init__()
+        err = "new size must be smaller than or equal to delegate size."
+        assert new_size <= len(delegate) or new_size == sys.maxsize, err
+        self.length = new_size
+        self.delegate = delegate
 
     def __len__(self):
-        return min(self.length,len(self.delegate))
+        return min(self.length, len(self.delegate))
 
     def __getitem__(self, idx):
-        if idx <self.length:
-            value=self.delegate[idx]
+        if idx < self.length:
+            value = self.delegate[idx]
             return value
         else:
             assert False, "index is larger than trimmed length."
+
 
 class EmptyDataset(Dataset):
     def __len__(self):
@@ -61,47 +44,48 @@ class EmptyDataset(Dataset):
     def __getitem__(self, idx):
         pass
 
+
 class InterleavedReaderIndex:
     def __init__(self, reader_index, dataset):
-        self.reader_index=reader_index
-
-        self.dataset=dataset
-        self.num_elements=len(dataset)
-        self.index_in_reader=0
+        self.reader_index = reader_index
+        self.dataset = dataset
+        self.num_elements = len(dataset)
+        self.index_in_reader = 0
 
     def at_end(self):
-        return self.index_in_reader>=self.num_elements
+        return self.index_in_reader >= self.num_elements
 
     def advance(self):
-        new_index=self.index_in_reader
-        self.index_in_reader+=1
+        new_index = self.index_in_reader
+        self.index_in_reader += 1
         return new_index
 
     def reset(self):
-        self.index_in_reader=0
+        self.index_in_reader = 0
+
 
 class InterleaveDatasets(Dataset):
     """ A dataset that exposes delegates by interleaving their records.
     """
     def __init__(self, dataset_list):
-        self.dataset_list=dataset_list
-        self.num_readers=len(dataset_list)
-        self.index_delegates=[None]*self.num_readers
-        for reader_index, dataset in enumerate(dataset_list):
-            self.index_delegates[reader_index]=InterleavedReaderIndex(reader_index, dataset)
+        super().__init__()
+        self.dataset_list = dataset_list
+        self.num_readers = len(dataset_list)
+        self.index_delegates = [InterleavedReaderIndex(reader_index, dataset)
+                                for reader_index, dataset in enumerate(dataset_list)]
 
     def __len__(self):
-        len=0
-        for dataset in  self.dataset_list:
-            len+=len(dataset)
+        dataset_len = 0
+        for dataset in self.dataset_list:
+            dataset_len += len(dataset)
         return len
 
     def __getitem__(self, idx):
-        if len(self.index_delegates)==0:
+        if len(self.index_delegates) == 0:
             raise IndexError("CustomRange index out of range")
-        reader_index= idx % len(self.index_delegates)
+        reader_index = idx % len(self.index_delegates)
         delegate = self.index_delegates[reader_index]
-        index_in_reader= delegate.advance()
+        index_in_reader = delegate.advance()
         if delegate.at_end():
             self.index_delegates -= delegate
         return delegate[index_in_reader]
@@ -112,11 +96,11 @@ class CyclicInterleavedDatasets(Dataset):
         items are available in a dataset.
     """
     def __init__(self, dataset_list):
-        self.dataset_list=dataset_list
-        self.num_readers=len(dataset_list)
-        self.index_delegates=[None]*self.num_readers
-        for reader_index, dataset in enumerate(dataset_list):
-            self.index_delegates[reader_index]=InterleavedReaderIndex(reader_index, dataset)
+        super().__init__()
+        self.dataset_list = dataset_list
+        self.num_readers = len(dataset_list)
+        self.index_delegates = [InterleavedReaderIndex(reader_index, dataset)
+                                for reader_index, dataset in enumerate(dataset_list)]
 
     def __len__(self):
         """
@@ -126,29 +110,57 @@ class CyclicInterleavedDatasets(Dataset):
         return sys.maxsize
 
     def __getitem__(self, idx):
-
-        reader_index= idx % len(self.index_delegates)
+        reader_index = idx % len(self.index_delegates)
         delegate = self.index_delegates[reader_index]
-        index_in_reader= delegate.advance()
+        index_in_reader = delegate.advance()
         if delegate.at_end():
             delegate.reset()
         return delegate.dataset[index_in_reader]
 
 
+class ClippedDataset(Dataset):
+    """
+    A dataset that is clipped to bounds on the index.
+    Used in combination with index dispatch to improve locality of access to a large dataset.
+    """
+    def __init__(self, delegate, num_slices, slice_index):
+        super().__init__()
+        assert 0 <= slice_index < num_slices, "slice_index must be between 0 and num_slices"
+        self.start_index = 0
+        self.delegate = delegate
+        self.delegate_length = len(delegate)
+        self.slice_length = int(self.delegate_length / num_slices)
+        if slice_index > 0:
+            self.start_index = int(self.slice_length * (slice_index - 1))
+        self.end_index = self.start_index + self.slice_length
+
+    def __len__(self):
+        return self.slice_length
+
+    def __getitem__(self, idx):
+        if self.start_index <= idx < self.end_index:
+            value = self.delegate[idx]
+            return value
+        else:
+            assert False, "index is larger than clipped length."
+
 
 class CachedGenotypeDataset(Dataset):
-    def __init__(self, vec_basename,vector_names, max_records=sys.maxsize, sample_id=False):
+    def __init__(self, vec_basename, vector_names, max_records=sys.maxsize, sample_id=0):
+        super().__init__()
         basename, file_extension = os.path.splitext(vec_basename)
-        if not self.file_exists(basename+"-cached.vec") or not self.file_exists(basename+"-cached.vecp"):
+        if (not CachedGenotypeDataset.file_exists(basename + "-cached.vec")
+                or not CachedGenotypeDataset.file_exists(basename + "-cached.vecp")):
             # Write cache:
-            VectorCache(basename,max_records=max_records).write_lines()
-        self.delegate=GenotypeDataset(basename+"-cached",vector_names, sample_id)
-        self.basename=basename
-        self.vector_names=vector_names
-        self.sample_id=sample_id
-        self.max_records=max_records
+            VectorCache(basename, max_records=max_records).write_lines()
+        self.delegate = GenotypeDataset(basename + "-cached", vector_names, sample_id)
+        self.basename = basename
+        self.vector_names = vector_names
+        self.sample_id = sample_id
+        self.max_records = max_records
 
-    def file_exists(self, filename):
+    @staticmethod
+    def file_exists(filename):
         return Path(filename).is_file()
 
     def __len__(self):
@@ -159,12 +171,15 @@ class CachedGenotypeDataset(Dataset):
 
     def slice(self, num_slices, slice_index):
         """Create a copy of this reader, focused on a slice of the data. """
-        return ClippedDataset(CachedGenotypeDataset(self.basename, self.vector_names, self.max_records/num_slices,self.sample_id),
+        return ClippedDataset(CachedGenotypeDataset(self.basename, self.vector_names,
+                                                    _ceiling_partition(len(self), num_slices),
+                                                    self.sample_id),
                               num_slices=num_slices, slice_index=slice_index)
+
 
 class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""
-    def __init__(self, vec_basename,  vector_names,sample_id=False):
+    def __init__(self, vec_basename, vector_names, sample_id=0):
         super().__init__()
         # initialize vector reader with basename and selected vectors:
         self.reader = VectorReader(vec_basename, sample_id=sample_id, vector_names=vector_names,
@@ -172,145 +187,47 @@ class GenotypeDataset(Dataset):
         self.props = self.reader.vector_reader_properties
         # obtain number of examples from .vecp file:
         self.length = self.props.num_records
-        self.vector_names=vector_names
-        self.is_random_access=self.props.file_type == "binary"
-        self.previous_index=0
+        self.vector_names = vector_names
+        self.is_random_access = self.props.file_type == "binary"
+        self.previous_index = 0
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
-
         # get next example from .vec file and check that idx matches example index,
         # then return the features and outputs as tuple.
         if self.is_random_access:
-            if idx!=(self.previous_index+1):
-                self.reader._set_to_example_at_idx(idx)
+            if idx != (self.previous_index+1):
+                self.reader.set_to_example_at_idx(idx)
             example_tuple = next(self.reader)
         else:
             example_tuple = next(self.reader)
             assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
-
-        result={}
-        i=0
-        for tensor in example_tuple[1:]:
-            result[self.vector_names[i]]= torch.from_numpy(tensor)
-            i+=1
-        self.previous_index = idx
-        return  result
-
-
-class MultiProcessingPredictDataset(Dataset):
-    """
-    Implementation of dataset that supports multiple workers in predict phase by allowing each worker to separately
-    create a pointer to the vector file when reading in data
-    """
-    def __init__(self, vec_basename, vector_names, sample_id=0, cache_first=True, max_records=sys.maxsize,
-                 use_cuda=False):
-        super().__init__()
-        if cache_first:
-            vector_path = "{}-test-cached.vec".format(vec_basename)
-            properties_path = "{}-test-cached.vecp".format(vec_basename)
-            if not os.path.isfile(vector_path) or not os.path.isfile(properties_path):
-                with VectorCache(vec_basename, max_records) as vector_cache:
-                    vector_cache.write_lines()
-            vec_basename = "{}-test-cached".format(vec_basename)
-        else:
-            vec_basename = "{}-test".format(vec_basename)
-            vector_path = "{}-test.vec".format(vec_basename)
-            properties_path = "{}-test.vecp".format(vec_basename)
-        vector_properties = VectorPropertiesReader(properties_path)
-        num_bytes = VectorReaderBinary.check_file_size(vector_path, vector_properties.num_records,
-                                                       vector_properties.num_bytes_per_example)
-        self.reader = VectorReader(vec_basename, sample_id=sample_id, vector_names=vector_names,
-                                   return_example_id=True, parallel=True, num_bytes=num_bytes)
-        self.props = self.reader.vector_reader_properties
-        if not self.props.file_type == "binary":
-            raise TypeError("MultiProcessingPredictDataset expects a binary file but instead received a {} file"
-                            .format(self.props.file_type))
-        self.length = min(max_records, self.props.num_records)
-        self.vector_names = vector_names
-        self.use_cuda = use_cuda
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, idx):
-        example_tuple = self.reader.__getitem__(idx)
-        if example_tuple[0] != idx:
-            raise Exception("Mismatch between requested example id {} and returned id {}".format(idx, example_tuple[0]))
         result = {}
         i = 0
         for tensor in example_tuple[1:]:
-            var = torch.from_numpy(tensor)
-            if self.use_cuda:
-                var = var.cuda(async=True)
-            result[self.vector_names[i]] = var
+            result[self.vector_names[i]] = torch.from_numpy(tensor)
             i += 1
+        self.previous_index = idx
         return result
 
 
-class PartitionedPredictDataset(Dataset):
-    """
-    Implementation of dataset that supports multiple workers in predict phase by creating num_workers vector_reader
-    pointers, each of which will read only a subset of the records in the file, and assign each worker to one of these
-    pointers based on the index of the batch being requested
-    """
-    def __init__(self, vec_basename, vector_names, sample_id=0, cache_first=True, max_records=sys.maxsize,
-                 use_cuda=False, num_workers=0):
+class DispatchDataset(Dataset):
+    def __init__(self, base_delegate, num_workers):
         super().__init__()
-        # TODO: Make code DRY between MultiProcessingPredictDataset and PartitionedPredictDataset
-        if cache_first:
-            vector_path = "{}-test-cached.vec".format(vec_basename)
-            properties_path = "{}-test-cached.vecp".format(vec_basename)
-            if not os.path.isfile(vector_path) or not os.path.isfile(properties_path):
-                with VectorCache(vec_basename, max_records) as vector_cache:
-                    vector_cache.write_lines()
-            vec_basename = "{}-test-cached".format(vec_basename)
-        else:
-            vec_basename = "{}-test".format(vec_basename)
-            vector_path = "{}-test.vec".format(vec_basename)
-            properties_path = "{}-test.vecp".format(vec_basename)
-        vector_properties = VectorPropertiesReader(properties_path)
-        num_bytes = VectorReaderBinary.check_file_size(vector_path, vector_properties.num_records,
-                                                       vector_properties.num_bytes_per_example)
-        self.reader = VectorReader(vec_basename, sample_id=sample_id, vector_names=vector_names,
-                                   return_example_id=True, parallel=True, num_bytes=num_bytes)
-        self.props = self.reader.vector_reader_properties
-        if not self.props.file_type == "binary":
-            raise TypeError("PartitionedPredictDataset expects a binary file but instead received a {} file"
-                            .format(self.props.file_type))
-        self.length = min(max_records, self.props.num_records)
-        self.vector_names = vector_names
-        self.use_cuda = use_cuda
-        self.vector_fps = []
-        self.vector_fp_locks = []
-        path_to_vector = "{}.vec".format(vec_basename)
-        self.num_workers = 1 if num_workers <= 0 else num_workers
-        for _ in range(self.num_workers):
-            self.vector_fps.append(VectorReaderBinary(path_to_vector, self.props, num_bytes))
-            self.vector_fp_locks.append(Lock())
-        # Equivalent to ceiling of division- want last partition to be smaller
-        partition_size = -(-self.length / self.num_workers)
-        self.cumulative_sizes = [partition_size * i for i in range(1, self.num_workers)]
-        self.cumulative_sizes.append(self.length)
+        self.base_delegate = base_delegate
+        self.delegate_readers = [self.base_delegate.slice(worker_idx, num_workers) for worker_idx in range(num_workers)]
+        self.delegate_locks = [Lock() for _ in range(num_workers)]
+        self.delegate_cumulative_sizes = [len(self.delegate_readers[0])]
+        for delegate_reader in self.delegate_readers[1:]:
+            self.delegate_cumulative_sizes.append(len(delegate_reader) + self.delegate_cumulative_sizes[-1])
 
     def __len__(self):
-        return self.length
+        return len(self.base_delegate)
 
     def __getitem__(self, idx):
-        worker_idx = bisect.bisect_right(self.cumulative_sizes, idx)
-        self.vector_fp_locks[worker_idx].acquire()
-        example_tuple = self.reader.get_item_vector(idx, self.vector_fps[worker_idx])
-        self.vector_fp_locks[worker_idx].release()
-        if example_tuple[0] != idx:
-            raise Exception("Mismatch between requested example id {} and returned id {}".format(idx, example_tuple[0]))
-        result = {}
-        i = 0
-        for tensor in example_tuple[1:]:
-            var = torch.from_numpy(tensor)
-            if self.use_cuda:
-                var = var.cuda(async=True)
-            result[self.vector_names[i]] = var
-            i += 1
+        worker_idx = bisect.bisect_right(self.delegate_cumulative_sizes, idx)
+        with self.delegate_locks[worker_idx]:
+            result = self.delegate_readers[worker_idx][idx]
         return result
