@@ -7,15 +7,9 @@ import torch
 from torchnet.dataset.dataset import Dataset
 
 from org.campagnelab.dl.genotypetensors.VectorCache import VectorCache
-from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorPropertiesReader
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
-from org.campagnelab.dl.genotypetensors.VectorReaderBinary import VectorReaderBinary
 
 from multiprocessing import Lock
-
-# Given n items and s sets to partition into, return ceiling of count in any partition (faster than math.ceil)
-def _ceiling_partition(n, s):
-    return -(-n // s)
 
 
 class SmallerDataset(Dataset):
@@ -129,7 +123,7 @@ class ClippedDataset(Dataset):
         self.start_index = 0
         self.delegate = delegate
         self.delegate_length = len(delegate)
-        self.slice_length = int(self.delegate_length / num_slices)
+        self.slice_length = ClippedDataset._slice_length(self.delegate_length, num_slices, slice_index)
         if slice_index > 0:
             self.start_index = int(self.slice_length * (slice_index - 1))
         self.end_index = self.start_index + self.slice_length
@@ -143,6 +137,28 @@ class ClippedDataset(Dataset):
             return value
         else:
             assert False, "index is larger than clipped length."
+
+    @staticmethod
+    def ceiling_partition(n, s):
+        """
+        Given n items and s sets to partition into, return ceiling of count in any partition
+        faster than math.ceil
+        """
+        return -(-n // s)
+
+    @staticmethod
+    def _last_slice_length(n, s):
+        """
+        Return the number of elements in the last partition
+        """
+        return n - (ClippedDataset.ceiling_partition(n, s) * (s - 1))
+
+    @staticmethod
+    def _slice_length(n, s, i):
+        """
+        Return the length of the slice given n items, s slices, and index i
+        """
+        return ClippedDataset.ceiling_partition(n, s) if i < s - 1 else ClippedDataset._last_slice_length(n, s)
 
 
 class CachedGenotypeDataset(Dataset):
@@ -172,7 +188,7 @@ class CachedGenotypeDataset(Dataset):
     def slice(self, num_slices, slice_index):
         """Create a copy of this reader, focused on a slice of the data. """
         return ClippedDataset(CachedGenotypeDataset(self.basename, self.vector_names,
-                                                    _ceiling_partition(len(self), num_slices),
+                                                    ClippedDataset.ceiling_partition(len(self), num_slices),
                                                     self.sample_id),
                               num_slices=num_slices, slice_index=slice_index)
 
