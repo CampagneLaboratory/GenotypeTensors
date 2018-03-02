@@ -36,7 +36,6 @@ class SmallerDataset(Dataset):
         return min(self.length, len(self.delegate))
 
     def __getitem__(self, idx):
-        #print("Fetching index "+str(idx))
         if idx < self.length:
             value = self.delegate[idx]
             return value
@@ -74,7 +73,6 @@ class InterleavedReaderIndex:
 class InterleaveDatasets(Dataset):
     """ A dataset that exposes delegates by interleaving their records.
     """
-
     def __init__(self, dataset_list):
         super().__init__()
         self.dataset_list = dataset_list
@@ -103,7 +101,6 @@ class CyclicInterleavedDatasets(Dataset):
     """ A dataset that exposes delegates by interleaving their records and cycling through them when no more
         items are available in a dataset.
     """
-
     def __init__(self, dataset_list):
         super().__init__()
         self.dataset_list = dataset_list
