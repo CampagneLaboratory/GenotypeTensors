@@ -26,6 +26,7 @@ class VectorReader:
         self.path_to_vector = "{}.vec".format(basename)
         self.vector_reader_properties = VectorPropertiesReader(properties_path)
         self.sample_id = sample_id
+        self.vector_names=vector_names
         self.vector_ids = [self.vector_reader_properties.get_vector_idx_from_name(vector_name)
                            for vector_name in vector_names]
         self.assert_example_ids = assert_example_ids
@@ -70,7 +71,11 @@ class VectorReader:
                     break
             if not processed_vector_sample_ids == self.sample_vector_ids:
                 unprocessed_vector_sample_ids = self.sample_vector_ids - processed_vector_sample_ids
-                raise Exception("Missing vector index-sample index pairs for example {}: {}".format(
+                raise Exception("index {} vector-names= {} vector-ids= {} sample-index={} Missing vector index-sample index pairs for example {}: {}".format(
+                    idx,
+                    str(self.vector_names),
+                    str(self.vector_ids),
+                    str(self.sample_id),
                     curr_example.example_id,
                     unprocessed_vector_sample_ids
                 ))
@@ -145,7 +150,7 @@ if __name__ == "__main__":
     output_file = None
     if args.output is not None:
         output_file = open(args.output, "w")
-    with VectorReader(args.input, args.sample_id, args.vector_names,
+    with VectorReader(args.input, sample_id=args.sample_id, vector_names=args.vector_names,
                       assert_example_ids=True, return_example_id=True) as vector_reader:
         i = 0
         for next_example in vector_reader:

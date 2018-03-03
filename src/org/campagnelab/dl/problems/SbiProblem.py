@@ -27,12 +27,11 @@ class SbiProblem(Problem):
         return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
-        return DispatchDataset(CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names()),
-                               self.num_workers)
+        return CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
+
 
     def test_set(self):
-        return DispatchDataset(CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names()),
-                               num_workers=self.num_workers)
+        return CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names())
 
     def unlabeled_set(self):
 
@@ -41,28 +40,27 @@ class SbiProblem(Problem):
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines = list_file.readlines()
                 return ConcatDataset(
-                    [DispatchDataset(CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()),num_workers=self.num_workers).shuffle() for path in
+                    [CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()).shuffle() for path in
                      lines])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
-                return DispatchDataset(CachedGenotypeDataset(self.basename + "-unlabeled.vec",
-                                             vector_names=self.get_input_names()).shuffle(),self.num_workers)
+                return CachedGenotypeDataset(self.basename + "-unlabeled.vec",
+                                             vector_names=self.get_input_names()).shuffle()
             else:
                 return EmptyDataset()
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
-            return DispatchDataset(CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names()),
-                                   num_workers=self.num_workers)
+            return CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
 
     def __init__(self, mini_batch_size, code, drop_last_batch=True, num_workers=0):
         super().__init__(mini_batch_size)
         self.basename = code[len(self.basename_prefix()):]
-        self.num_workers = max(1,num_workers)
+        self.num_workers = num_workers
         self.drop_last_batch = drop_last_batch
-        self.meta_data = VectorReader(self.basename + "-train", False, vector_names=[]).vector_reader_properties
+        self.meta_data = VectorReader(self.basename + "-train", sample_id=0, return_example_id=False, vector_names=[]).vector_reader_properties
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
@@ -102,8 +100,8 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def loader_for_dataset(self, dataset, shuffle=False):
-        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(),
-                               num_workers=self.num_workers, pin_memory=False, drop_last=self.drop_last_batch))
+        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(), num_workers=0,
+                               pin_memory=True, drop_last=self.drop_last_batch))
 
     def loss_function(self, output_name):
         return torch.nn.CrossEntropyLoss()
