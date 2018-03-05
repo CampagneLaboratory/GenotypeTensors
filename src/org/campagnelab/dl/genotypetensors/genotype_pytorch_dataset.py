@@ -14,7 +14,7 @@ from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorProp
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 from org.campagnelab.dl.genotypetensors.VectorReaderBinary import VectorReaderBinary
 
-from multiprocessing import Lock
+from multiprocessing import Lock, RLock, current_process
 
 
 # Given n items and s sets to partition into, return ceiling of count in any partition (faster than math.ceil)
@@ -202,7 +202,6 @@ class GenotypeDataset(Dataset):
         self.vector_names = vector_names
         self.is_random_access = self.props.file_type == "binary"
         self.previous_index = 0
-        self.lock = threading.Lock()
 
     def __len__(self):
         return self.length
@@ -214,7 +213,7 @@ class GenotypeDataset(Dataset):
         if self.is_random_access:
             if idx != (self.previous_index + 1):
                 self.reader.set_to_example_at_idx(idx)
-            example_tuple = next(self.reader, idx)
+            example_tuple = next(self.reader)
         else:
             example_tuple = next(self.reader)
             assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
@@ -230,11 +229,13 @@ class GenotypeDataset(Dataset):
 class DispatchDataset(Dataset):
     def __init__(self, base_delegate, num_workers):
         super().__init__()
-        num_workers=max(1,num_workers)
-        self.base_delegate = base_delegate
-        self.delegate_readers = [self.base_delegate.slice(slice_index=worker_idx, num_slices=num_workers) for worker_idx
-                                 in range(num_workers)]
-        self.delegate_locks = [Lock() for _ in range(num_workers)]
+        num_workers = max(1, num_workers)
+        delegate_creation_lock = Lock()
+        with delegate_creation_lock:
+            self.base_delegate = base_delegate
+            self.delegate_readers = [self.base_delegate.slice(slice_index=worker_idx, num_slices=num_workers) for worker_idx
+                                     in range(num_workers)]
+        self.delegate_locks = [RLock() for _ in range(num_workers)]
         self.delegate_cumulative_sizes = numpy.cumsum([len(x) for x in self.delegate_readers])
 
     def __len__(self):
@@ -242,6 +243,8 @@ class DispatchDataset(Dataset):
 
     def __getitem__(self, idx):
         worker_index = self.delegate_cumulative_sizes.searchsorted(idx, 'right')
+        print("Process {} is requesting idx {}".format(current_process().pid, idx))
         with self.delegate_locks[worker_index]:
             result = self.delegate_readers[worker_index][idx]
+            print("RETURNED process {} idx {} worker_idx {}".format(current_process().pid, idx, worker_index))
         return result

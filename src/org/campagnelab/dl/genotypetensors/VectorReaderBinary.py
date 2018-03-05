@@ -1,6 +1,8 @@
 import struct
 import threading
 
+from multiprocessing import current_process
+
 from org.campagnelab.dl.genotypetensors.VectorReaderBase import VectorReaderBase, VectorLine
 
 import numpy as np
@@ -76,7 +78,10 @@ class VectorReaderBinary(VectorReaderBase):
             raise ValueError("Index greater than the maximum possible index, {}"
                              .format(self.vector_properties.num_records - 1))
         else:
-            self.vector_fp.seek(idx * self.vector_properties.num_bytes_per_example, 0)
+            print("CALLED seek idx {} bytes {} process {}".format(idx,
+                                                                  self.vector_properties.num_bytes_per_example,
+                                                                  current_process().pid))
+            self.vector_fp.seek(idx * self.vector_properties.num_bytes_per_example)
 
     def close(self):
         self.vector_fp.close()

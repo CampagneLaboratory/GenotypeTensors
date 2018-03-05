@@ -30,3 +30,10 @@ class VectorLine:
         self.line_sample_id = line_sample_id
         self.line_vector_id = line_vector_id
         self.line_vector_elements = line_vector_elements
+
+    def __str__(self):
+        return "Example ID: {}; Sample ID: {}; Vector ID: {}".format(
+            self.line_example_id,
+            self.line_sample_id,
+            self.line_vector_id,
+        )

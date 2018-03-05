@@ -7,6 +7,8 @@ from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import Dispatch
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.utils.utils import progress_bar
 
+from multiprocessing import Lock
+
 
 class PredictModel:
     def __init__(self, model, use_cuda, problem, domain_descriptor=None,
@@ -22,6 +24,7 @@ class PredictModel:
         self.input_files = input_files
         self.processing_type = processing_type
         self.num_workers = num_workers
+        self.writer_lock = Lock()
 
     def predict(self, iterator, output_filename, max_examples=sys.maxsize):
 

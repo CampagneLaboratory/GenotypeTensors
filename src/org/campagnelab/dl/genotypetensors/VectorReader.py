@@ -11,6 +11,8 @@ from org.campagnelab.dl.genotypetensors.VectorReaderText import VectorReaderText
 
 import os
 
+from multiprocessing import current_process
+
 
 class VectorReader:
     def __init__(self, path_to_vector, sample_id, vector_names, assert_example_ids=False, return_example_id=False):
@@ -46,16 +48,18 @@ class VectorReader:
             self.vector_reader = VectorReaderBinary(self.path_to_vector, self.vector_reader_properties)
         else:
             raise NotImplementedError
-        self.lock = threading.Lock()
 
     def __iter__(self):
         return self
 
     def __next__(self):
         curr_example = None
-        processed_vector_sample_ids = set()
+        processed_sample_vector_ids = set()
+        example_ids = []
         for _ in range(len(self.sample_vector_ids)):
             next_vector_line = self.vector_reader.get_next_vector_line()
+            print("Process {} vector line info {}".format(current_process().pid, next_vector_line))
+            example_ids.append(next_vector_line.line_example_id)
             if curr_example is None:
                 curr_example = ExampleVectorLines(next_vector_line.line_example_id, self.vector_ids, self.sample_id)
                 if self.assert_example_ids and curr_example.example_id in self.processed_example_ids:
@@ -63,19 +67,25 @@ class VectorReader:
                                 next_vector_line.line_example_id))
             if curr_example.same_example(next_vector_line.line_example_id):
                 curr_example.add_vector_line(next_vector_line)
-                processed_vector_sample_ids.add((next_vector_line.line_sample_id, next_vector_line.line_vector_id))
+                processed_sample_vector_ids.add((next_vector_line.line_sample_id, next_vector_line.line_vector_id))
             else:
                 break
-        if not processed_vector_sample_ids == self.sample_vector_ids:
-            unprocessed_vector_sample_ids = self.sample_vector_ids - processed_vector_sample_ids
+        if not processed_sample_vector_ids == self.sample_vector_ids:
+            unprocessed_sample_vector_ids = self.sample_vector_ids - processed_sample_vector_ids
+            print("ERR process {} example ids {}".format(current_process().pid, example_ids))
             raise Exception(
-                "vector-names= {} vector-ids= {} sample-index={}"
-                "Missing vector index-sample index pairs for example {}: {}".format(str(self.vector_names),
-                                                                                    str(self.vector_ids),
-                                                                                    str(self.sample_id),
-                                                                                    curr_example.example_id,
-                                                                                    unprocessed_vector_sample_ids
-                                                                                    )
+                "process= {} vector-names= {} vector-ids= {} sample-index={}\n"
+                "All sample-vector-ids={} processed sample-vector-ids={}\n"
+                "Missing sample index-vector index pairs for example {}: {}".format(
+                    current_process().pid,
+                    str(self.vector_names),
+                    str(self.vector_ids),
+                    str(self.sample_id),
+                    str(self.sample_vector_ids),
+                    str(processed_sample_vector_ids),
+                    curr_example.example_id,
+                    unprocessed_sample_vector_ids
+                )
             )
         else:
             return curr_example.get_tuples(self.return_example_id)

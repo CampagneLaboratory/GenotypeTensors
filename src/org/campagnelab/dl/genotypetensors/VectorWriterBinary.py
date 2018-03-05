@@ -122,13 +122,12 @@ class VectorWriterBinary:
                 vector_bytes_per_element = 4
             else:
                 raise NotImplementedError
-            if self.using_input_data:
-                fmt_string = ">IQII{}{}".format(self.vector_lengths[self.vector_names[tensor_id]], fmt_string_type)
-            else:
-                vector_length = VectorWriterBinary._get_vector_length(tensor[0].shape)
-                fmt_string = ">IQII{}{}".format(vector_length, fmt_string_type)
-                if not self.vector_props_written:
-                    self.num_bytes_per_example += vector_length * vector_bytes_per_element + self.header_size
+            vector_length = (self.vector_lengths[self.vector_names[tensor_id]]
+                             if self.using_input_data
+                             else VectorWriterBinary._get_vector_length(tensor[0].shape))
+            fmt_string = ">IQII{}{}".format(vector_length, fmt_string_type)
+            if not self.using_input_data and not self.vector_props_written:
+                self.num_bytes_per_example += vector_length * vector_bytes_per_element + self.header_size
             for row in range(num_rows):
                 flattened_row = np.ravel(tensor[row], "C")
                 self.vec_file.write(struct.pack(fmt_string,
@@ -142,7 +141,8 @@ class VectorWriterBinary:
                     "vectorName": self.vector_names[tensor_id],
                     "vectorDimension": tensor[0].shape,
                     "vectorType": str(tensor_dtype),
-                    "vectorNumBytesPerElement": vector_bytes_per_element
+                    "vectorElementSize": vector_bytes_per_element,
+                    "vectorNumBytesForElements": vector_bytes_per_element * vector_length
                 }
                 self.vector_names_for_props_written.add(self.vector_names[tensor_id])
                 if self.vector_names_for_props_written == set(self.vector_names):
@@ -156,8 +156,6 @@ class VectorWriterBinary:
         if num_bytes_written != expected_num_bytes:
             warnings.warn("Warning: num bytes written {} differs from expected {}".format(num_bytes_written,
                                                                                           expected_num_bytes))
-        print(self.vec_file.tell())
-        print(self.num_records * self.num_bytes_per_example)
         self.vec_file.close()
         self.output_properties["numRecords"] = self.num_records
         json.dump(self.output_properties, self.output_properties_file, indent=4)
