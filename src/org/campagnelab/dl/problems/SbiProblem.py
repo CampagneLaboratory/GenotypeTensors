@@ -27,11 +27,13 @@ class SbiProblem(Problem):
         return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
-        return CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
-
+        return DispatchDataset(
+            CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names()),
+            num_workers=self.num_workers)
 
     def test_set(self):
-        return CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names())
+        return DispatchDataset(CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names()),
+                               num_workers=self.num_workers)
 
     def unlabeled_set(self):
 
@@ -51,7 +53,9 @@ class SbiProblem(Problem):
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
-            return CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names())
+            return DispatchDataset(
+                CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names()),
+                num_workers=self.num_workers)
         else:
             return EmptyDataset()
 
@@ -60,7 +64,8 @@ class SbiProblem(Problem):
         self.basename = code[len(self.basename_prefix()):]
         self.num_workers = num_workers
         self.drop_last_batch = drop_last_batch
-        self.meta_data = VectorReader(self.basename + "-train", sample_id=0, return_example_id=False, vector_names=[]).vector_reader_properties
+        self.meta_data = VectorReader(self.basename + "-train", sample_id=0, return_example_id=False,
+                                      vector_names=[]).vector_reader_properties
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """

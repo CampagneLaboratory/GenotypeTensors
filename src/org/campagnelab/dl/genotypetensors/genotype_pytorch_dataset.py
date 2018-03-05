@@ -230,14 +230,11 @@ class GenotypeDataset(Dataset):
 class DispatchDataset(Dataset):
     def __init__(self, base_delegate, num_workers):
         super().__init__()
+        num_workers=max(1,num_workers)
         self.base_delegate = base_delegate
         self.delegate_readers = [self.base_delegate.slice(slice_index=worker_idx, num_slices=num_workers) for worker_idx
                                  in range(num_workers)]
         self.delegate_locks = [Lock() for _ in range(num_workers)]
-        self.delegate_cumulative_sizes = [len(self.delegate_readers[0])]
-        for delegate_reader in self.delegate_readers[1:]:
-            self.delegate_cumulative_sizes.append(len(delegate_reader) + self.delegate_cumulative_sizes[-1])
-
         self.delegate_cumulative_sizes = numpy.cumsum([len(x) for x in self.delegate_readers])
 
     def __len__(self):
