@@ -143,7 +143,7 @@ class ClippedDataset(Dataset):
 
         self.start_index = int(self.slice_length * slice_index)
         self.end_index = self.start_index + self.slice_length
-        #print("index {} start: {} end: {} ", slice_index, self.start_index, self.end_index)
+        # print("index {} start: {} end: {} ", slice_index, self.start_index, self.end_index)
 
     def __len__(self):
         return self.slice_length
@@ -191,7 +191,6 @@ class CachedGenotypeDataset(Dataset):
 
 class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""
-
     def __init__(self, vec_basename, vector_names, sample_id=0):
         super().__init__()
         # initialize vector reader with basename and selected vectors:
@@ -209,24 +208,23 @@ class GenotypeDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        assert idx>=0 and idx<self.length, "index {} out of reader bounds {} {}.".format(idx, 0, self.length)
-        with self.lock:
-            # get next example from .vec file and check that idx matches example index,
-            # then return the features and outputs as tuple.
-            if self.is_random_access:
-                #if idx != (self.previous_index + 1):
-
-                example_tuple =next(self.reader,idx)
-            else:
-                example_tuple = next(self.reader)
-                assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
-            result = {}
-            i = 0
-            for tensor in example_tuple[1:]:
-                result[self.vector_names[i]] = torch.from_numpy(tensor)
-                i += 1
-            self.previous_index = idx
-            return result
+        assert 0 <= idx < self.length, "index {} out of reader bounds {} {}.".format(idx, 0, self.length)
+        # get next example from .vec file and check that idx matches example index,
+        # then return the features and outputs as tuple.
+        if self.is_random_access:
+            if idx != (self.previous_index + 1):
+                self.reader.set_to_example_at_idx(idx)
+            example_tuple = next(self.reader, idx)
+        else:
+            example_tuple = next(self.reader)
+            assert example_tuple[0] == idx, "Requested example index out of order of .vec file."
+        result = {}
+        i = 0
+        for tensor in example_tuple[1:]:
+            result[self.vector_names[i]] = torch.from_numpy(tensor)
+            i += 1
+        self.previous_index = idx
+        return result
 
 
 class DispatchDataset(Dataset):
