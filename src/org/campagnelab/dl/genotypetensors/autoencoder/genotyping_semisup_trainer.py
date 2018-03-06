@@ -60,8 +60,9 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             input_u = dict["unlabeled"]["input"]
             num_batches += 1
 
-            # need a copy of input_u as output:
+            # need a copy of input_u and input_s as output:
             target_u = Variable(input_u.data, requires_grad=False)
+            target_output_s = Variable(input_s.data, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
 
@@ -72,12 +73,15 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
             output_s = self.net(input_s)
             output_u = self.net.autoencoder(input_u)
+            input_output_s = self.net.autoencoder(input_s)
             output_s_p = self.get_p(output_s)
 
             max, target_index = torch.max(target_s, dim=1)
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
-            optimized_loss = supervised_loss + self.args.gamma * reconstruction_loss
+            reconstruction_loss_unsup = self.criterion_autoencoder(output_u, target_u)
+            reconstruction_loss_sup = self.criterion_autoencoder(input_output_s, target_output_s)
+            reconstruction_loss=self.args.gamma * reconstruction_loss_unsup+reconstruction_loss_sup
+            optimized_loss = supervised_loss + reconstruction_loss
             optimized_loss.backward()
             self.optimizer_training.step()
             performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
