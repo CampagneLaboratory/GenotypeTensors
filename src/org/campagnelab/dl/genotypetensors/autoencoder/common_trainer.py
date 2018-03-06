@@ -315,10 +315,10 @@ class CommonTrainer:
 
         class_frequencies = {} # one frequency vector per output_name
         done=False
-        for batch_idx, dict in enumerate(data_provider):
+        for batch_idx, (_, data_dict) in enumerate(data_provider):
             if done: break
             for output_name in self.problem.get_output_names():
-                target_s = dict["training"][output_name]
+                target_s = data_dict["training"][output_name]
                 if output_name not in class_frequencies.keys():
                     class_frequencies[output_name] = torch.ones(target_s[0].size())
                 cf=class_frequencies[output_name]

@@ -28,8 +28,8 @@ class GenotypingAutoEncoderTrainer(CommonTrainer):
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
 
-        for batch_idx, dict in enumerate(train_loader_subset):
-            inputs = dict["input"]
+        for batch_idx, (_, data_dict) in enumerate(train_loader_subset):
+            inputs = data_dict["input"]
             num_batches += 1
 
             if self.use_cuda:
@@ -75,8 +75,8 @@ class GenotypingAutoEncoderTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
 
-        for batch_idx, dict in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
-            inputs = dict["input"]
+        for batch_idx, (_, data_dict) in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
+            inputs = data_dict["input"]
             if self.use_cuda:
                 inputs = inputs.cuda()
 

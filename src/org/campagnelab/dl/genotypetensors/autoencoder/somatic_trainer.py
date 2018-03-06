@@ -35,13 +35,13 @@ class SomaticTrainer(CommonTrainer):
         mse_loss = MSELoss()
         self.net.train()
 
-        for batch_idx, dict in enumerate(train_loader_subset):
-            inputs = dict["input"]
-            is_mutated_base_target = dict["isBaseMutated"]
+        for batch_idx, (_, data_dict) in enumerate(train_loader_subset):
+            inputs = data_dict["input"]
+            is_mutated_base_target = data_dict["isBaseMutated"]
             # transform one-hot encoding into a class index:
             max,indices=is_mutated_base_target.max(dim=1)
             is_mutated_base_target=indices
-            somatic_frequency_target = dict["somaticFrequency"]
+            somatic_frequency_target = data_dict["somaticFrequency"]
             num_batches += 1
 
             if self.use_cuda:
@@ -93,13 +93,13 @@ class SomaticTrainer(CommonTrainer):
             performance_estimator.init_performance_metrics()
         cross_entropy_loss = CrossEntropyLoss()
         mse_loss = MSELoss()
-        for batch_idx, dict in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
-            inputs = dict["input"]
-            is_mutated_base_target = dict["isBaseMutated"]
+        for batch_idx, (_, data_dict) in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
+            inputs = data_dict["input"]
+            is_mutated_base_target = data_dict["isBaseMutated"]
             # transform one-hot encoding into a class index:
             max, indices = is_mutated_base_target.max(dim=1)
             is_mutated_base_target = indices
-            somatic_frequency_target = dict["somaticFrequency"]
+            somatic_frequency_target = data_dict["somaticFrequency"]
             if self.use_cuda:
                 inputs, is_mutated_base_target, somatic_frequency_target = inputs.cuda(), \
                                                                            is_mutated_base_target.cuda(), \
