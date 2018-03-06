@@ -247,8 +247,8 @@ class DispatchDataset(Dataset):
 
     def __getitem__(self, idx):
         worker_index = self.delegate_cumulative_sizes.searchsorted(idx, 'right')
-        print("Process {} is requesting idx {}".format(current_process().pid, idx))
+        # print("Process {} is requesting idx {}".format(current_process().pid, idx))
         with self.delegate_locks[worker_index]:
             result = self.delegate_readers[worker_index][idx]
-            print("RETURNED process {} idx {} worker_idx {}".format(current_process().pid, idx, worker_index))
+        # print("RETURNED process {} idx {} worker_idx {}".format(current_process().pid, idx, worker_index))
         return result

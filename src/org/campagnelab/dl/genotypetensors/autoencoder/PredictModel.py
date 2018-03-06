@@ -27,7 +27,6 @@ class PredictModel:
         self.writer_lock = Lock()
 
     def predict(self, iterator, output_filename, max_examples=sys.maxsize):
-
         self.model.eval()
         if self.processing_type == "multithreaded":
             # Enable fake_GPU_on_CPU to debug on CPU

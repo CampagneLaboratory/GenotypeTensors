@@ -58,7 +58,7 @@ class VectorReader:
         example_ids = []
         for _ in range(len(self.sample_vector_ids)):
             next_vector_line = self.vector_reader.get_next_vector_line()
-            print("Process {} vector line info {}".format(current_process().pid, next_vector_line))
+            # print("Process {} vector line info {}".format(current_process().pid, next_vector_line))
             example_ids.append(next_vector_line.line_example_id)
             if curr_example is None:
                 curr_example = ExampleVectorLines(next_vector_line.line_example_id, self.vector_ids, self.sample_id)
@@ -72,7 +72,7 @@ class VectorReader:
                 break
         if not processed_sample_vector_ids == self.sample_vector_ids:
             unprocessed_sample_vector_ids = self.sample_vector_ids - processed_sample_vector_ids
-            print("ERR process {} example ids {}".format(current_process().pid, example_ids))
+            # print("ERR process {} example ids {}".format(current_process().pid, example_ids))
             raise Exception(
                 "process= {} vector-names= {} vector-ids= {} sample-index={}\n"
                 "All sample-vector-ids={} processed sample-vector-ids={}\n"

@@ -78,9 +78,9 @@ class VectorReaderBinary(VectorReaderBase):
             raise ValueError("Index greater than the maximum possible index, {}"
                              .format(self.vector_properties.num_records - 1))
         else:
-            print("CALLED seek idx {} bytes {} process {}".format(idx,
-                                                                  self.vector_properties.num_bytes_per_example,
-                                                                  current_process().pid))
+            # print("CALLED seek idx {} bytes {} process {}".format(idx,
+            #                                                       self.vector_properties.num_bytes_per_example,
+            #                                                       current_process().pid))
             self.vector_fp.seek(idx * self.vector_properties.num_bytes_per_example)
 
     def close(self):

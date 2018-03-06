@@ -27,16 +27,18 @@ class SbiProblem(Problem):
         return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
-        return DispatchDataset(
-            CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names()),
-            num_workers=self.num_workers)
+        # return DispatchDataset(
+        #     CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names()),
+        #     num_workers=self.num_workers)
+        return CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
 
     def test_set(self):
-        return DispatchDataset(CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names()),
-                               num_workers=self.num_workers)
+        # return DispatchDataset(
+        #     CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names()),
+        #     num_workers=self.num_workers)
+        return CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names())
 
     def unlabeled_set(self):
-
         if self.file_exists(self.basename + "-unlabeled.list"):
             # Use a list of datasets and interleave their records:
             with open(self.basename + "-unlabeled.list") as list_file:
@@ -53,9 +55,10 @@ class SbiProblem(Problem):
 
     def validation_set(self):
         if self.file_exists(self.basename + "-validation.vec"):
-            return DispatchDataset(
-                CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names()),
-                num_workers=self.num_workers)
+            # return DispatchDataset(
+            #     CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names()),
+            #     num_workers=self.num_workers)
+            return CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
 
