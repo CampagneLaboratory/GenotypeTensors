@@ -229,7 +229,7 @@ class GenotypeDataset(Dataset):
             result[self.vector_names[i]] = torch.from_numpy(tensor)
             i += 1
         self.previous_index = idx
-        return result
+        return idx, result
 
 
 class DispatchDataset(Dataset):

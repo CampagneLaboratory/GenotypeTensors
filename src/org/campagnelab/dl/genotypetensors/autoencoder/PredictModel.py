@@ -34,7 +34,7 @@ class PredictModel:
                                                             is_cuda=self.use_cuda,
                                                             batch_names=["unlabeled"],
                                                             volatile={"unlabeled": ["input"]},
-                                                            fake_GPU_on_CPU=False)
+                                                            fake_gpu_on_cpu=False)
 
         elif self.processing_type == "sequential":
             data_provider = DataProvider(iterator=zip(iterator),
@@ -48,10 +48,11 @@ class PredictModel:
                                 tensor_names=self.problem.get_output_names(),
                                 domain_descriptor=self.domain_descriptor, feature_mapper=self.feature_mapper,
                                 samples=self.samples, input_files=self.input_files) as writer:
-            for batch_idx, data_dict in enumerate(data_provider):
+            for batch_idx, (idxs_dict, data_dict) in enumerate(data_provider):
                 input_u = data_dict["unlabeled"]["input"]
+                idxs_u = idxs_dict["unlabeled"]
                 outputs = self.model(input_u)
-                writer.append(0, outputs, inverse_logit=True)
+                writer.append(list(idxs_u), outputs, inverse_logit=True)
                 progress_bar(batch_idx * self.mini_batch_size, max_examples)
 
                 if ((batch_idx + 1) * self.mini_batch_size) > max_examples:

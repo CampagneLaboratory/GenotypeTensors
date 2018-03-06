@@ -15,8 +15,8 @@ class GenotypingSemiSupTrainer(CommonTrainer):
     """Train a genotyping model using supervised and reconstruction on unlabeled set."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
-        self.criterion_classifier=None
-        self.criterion_autoencoder=None
+        self.criterion_classifier = None
+        self.criterion_autoencoder = None
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -27,10 +27,9 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         return "test_supervised_loss"
 
     def is_better(self, metric, previous_metric):
-        return metric< previous_metric
+        return metric < previous_metric
 
     def train_semisup(self, epoch):
-
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("optimized_loss")]
         performance_estimators += [FloatHelper("supervised_loss")]
@@ -48,16 +47,19 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader = self.problem.unlabeled_loader()
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),is_cuda=self.use_cuda,
-                                     batch_names=["training", "unlabeled"],
-                                     requires_grad={"training": ["input"], "unlabeled": ["input"]},
-                                     volatile={"training": [], "unlabeled": []},
-                                     recode_functions={"softmaxGenotype": recode_for_label_smoothing})
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),
+                                                        is_cuda=self.use_cuda,
+                                                        batch_names=["training", "unlabeled"],
+                                                        requires_grad={"training": ["input"], "unlabeled": ["input"]},
+                                                        volatile={"training": [], "unlabeled": []},
+                                                        recode_functions={
+                                                            "softmaxGenotype": recode_for_label_smoothing
+                                                        })
         self.net.autoencoder.train()
-        for batch_idx, dict in enumerate(data_provider):
-            input_s = dict["training"]["input"]
-            target_s = dict["training"]["softmaxGenotype"]
-            input_u = dict["unlabeled"]["input"]
+        for batch_idx, (_, data_dict) in enumerate(data_provider):
+            input_s = data_dict["training"]["input"]
+            target_s = data_dict["training"]["softmaxGenotype"]
+            input_u = data_dict["unlabeled"]["input"]
             num_batches += 1
 
             # need a copy of input_u and input_s as output:
@@ -76,11 +78,11 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             input_output_s = self.net.autoencoder(input_s)
             output_s_p = self.get_p(output_s)
 
-            max, target_index = torch.max(target_s, dim=1)
+            _, target_index = torch.max(target_s, dim=1)
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
             reconstruction_loss_unsup = self.criterion_autoencoder(output_u, target_u)
             reconstruction_loss_sup = self.criterion_autoencoder(input_output_s, target_output_s)
-            reconstruction_loss=self.args.gamma * reconstruction_loss_unsup+reconstruction_loss_sup
+            reconstruction_loss = self.args.gamma * reconstruction_loss_unsup+reconstruction_loss_sup
             optimized_loss = supervised_loss + reconstruction_loss
             optimized_loss.backward()
             self.optimizer_training.step()
@@ -92,15 +94,14 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
-                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss","train_accuracy"]))
+                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss",
+                                                                  "train_accuracy"]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
         data_provider.close()
 
         return performance_estimators
-
-
 
     def test_semi_sup(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
@@ -113,14 +114,14 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        validation_loader_subset=self.problem.validation_loader_range(0, self.args.num_validation)
+        validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(validation_loader_subset), is_cuda=self.use_cuda,
-                                     batch_names=["validation"],
-                                     requires_grad={"validation": []},
-                                     volatile={"validation": ["input","softmaxGenotype"]})
-        for batch_idx, dict in enumerate(data_provider):
-            input_s = dict["validation"]["input"]
-            target_s = dict["validation"]["softmaxGenotype"]
+                                                        batch_names=["validation"],
+                                                        requires_grad={"validation": []},
+                                                        volatile={"validation": ["input", "softmaxGenotype"]})
+        for batch_idx, (_, data_dict) in enumerate(data_provider):
+            input_s = data_dict["validation"]["input"]
+            target_s = data_dict["validation"]["softmaxGenotype"]
             # we need copies of the same tensors:
             input_u, target_u = Variable(input_s.data, volatile=True), Variable(input_s.data, volatile=True)
 
@@ -128,7 +129,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
             output_u = self.net.autoencoder(input_u)
             output_s_p = self.get_p(output_s)
 
-            max, target_index = torch.max(target_s, dim=1)
+            _, target_index = torch.max(target_s, dim=1)
 
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
             reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
@@ -139,7 +140,8 @@ class GenotypingSemiSupTrainer(CommonTrainer):
                                                            output_s_p, targets=target_index)
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_supervised_loss","test_reconstruction_loss","test_accuracy"]))
+                         performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
+                                                                  "test_accuracy"]))
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
