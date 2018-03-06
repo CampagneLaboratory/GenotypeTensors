@@ -14,7 +14,7 @@ from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorProp
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 from org.campagnelab.dl.genotypetensors.VectorReaderBinary import VectorReaderBinary
 
-from multiprocessing import Lock, RLock, current_process
+from multiprocessing import Lock, current_process
 
 
 # Given n items and s sets to partition into, return ceiling of count in any partition (faster than math.ceil)
@@ -193,15 +193,17 @@ class GenotypeDataset(Dataset):
     """" Implement a dataset that can be traversed only once, in increasing and contiguous index number."""
     def __init__(self, vec_basename, vector_names, sample_id=0):
         super().__init__()
-        # initialize vector reader with basename and selected vectors:
-        self.reader = VectorReader(vec_basename, sample_id=sample_id, vector_names=vector_names,
-                                   return_example_id=True)
-        self.props = self.reader.vector_reader_properties
+        self.props = VectorPropertiesReader("{}.vecp".format(os.path.splitext(vec_basename)[0]))
         # obtain number of examples from .vecp file:
         self.length = self.props.num_records
         self.vector_names = vector_names
         self.is_random_access = self.props.file_type == "binary"
         self.previous_index = 0
+        # Delegate reader lazily created in first __getitem__ call- for multiprocessing
+        self.reader = None
+        self.vec_basename = vec_basename
+        self.sample_id = sample_id
+        self.vector_names = vector_names
 
     def __len__(self):
         return self.length
@@ -210,6 +212,10 @@ class GenotypeDataset(Dataset):
         assert 0 <= idx < self.length, "index {} out of reader bounds {} {}.".format(idx, 0, self.length)
         # get next example from .vec file and check that idx matches example index,
         # then return the features and outputs as tuple.
+        # Lazily create delegate reader- for multiprocessing
+        if self.reader is None:
+            self.reader = VectorReader(self.vec_basename, sample_id=self.sample_id, vector_names=self.vector_names,
+                                       return_example_id=True)
         if self.is_random_access:
             if idx != (self.previous_index + 1):
                 self.reader.set_to_example_at_idx(idx)
@@ -230,12 +236,10 @@ class DispatchDataset(Dataset):
     def __init__(self, base_delegate, num_workers):
         super().__init__()
         num_workers = max(1, num_workers)
-        delegate_creation_lock = Lock()
-        with delegate_creation_lock:
-            self.base_delegate = base_delegate
-            self.delegate_readers = [self.base_delegate.slice(slice_index=worker_idx, num_slices=num_workers) for worker_idx
-                                     in range(num_workers)]
-        self.delegate_locks = [RLock() for _ in range(num_workers)]
+        self.base_delegate = base_delegate
+        self.delegate_readers = [self.base_delegate.slice(slice_index=worker_idx, num_slices=num_workers) for worker_idx
+                                 in range(num_workers)]
+        self.delegate_locks = [Lock() for _ in range(num_workers)]
         self.delegate_cumulative_sizes = numpy.cumsum([len(x) for x in self.delegate_readers])
 
     def __len__(self):
