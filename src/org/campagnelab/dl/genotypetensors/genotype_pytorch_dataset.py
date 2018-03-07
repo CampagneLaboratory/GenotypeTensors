@@ -231,6 +231,11 @@ class GenotypeDataset(Dataset):
         self.previous_index = idx
         return idx, result
 
+    def __del__(self):
+        """Destructor for cases when the dataset is used inside an iterator. """
+        if self.reader is not None:
+            self.reader.close()
+
 
 class DispatchDataset(Dataset):
     def __init__(self, base_delegate, num_workers):
