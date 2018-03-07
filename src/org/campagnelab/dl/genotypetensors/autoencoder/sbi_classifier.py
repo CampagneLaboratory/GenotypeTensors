@@ -52,7 +52,7 @@ class SbiGenotypeClassifier(nn.Module):
 
 def create_classifier_model(model_name, problem, encoded_size=32,
                             somatic=True, ngpus=1,dropout_p=0.2, num_layers=3,
-                            autoencoder_type=2):
+                            autoencoder_type=2, drop_decoder=False):
     input_size = problem.input_size("input")
 
     assert len(input_size) == 1, "Classifier require 1D input features."
@@ -66,13 +66,15 @@ def create_classifier_model(model_name, problem, encoded_size=32,
         assert len(mut_base_size) == 1, "Classifier require 1D isBaseMutated features."
         # create an auto-encoder, we need the encoder part and discard the rest:
 
-
         del autoencoder.decode
         autoencoder.decoder = None
         classifier = SbiSomaticClassifier(input_size=encoded_size, target_size=mut_base_size[0],num_layers=num_layers)
         classifier = nn.Sequential(autoencoder.encoder, classifier)
     else:
         output_size = problem.output_size("softmaxGenotype")
+        if drop_decoder:
+            del autoencoder.decoder
+            autoencoder.decoder = None
         # Store it in the classifier, so we can retrieve it for unsupervised reconstruction and to optimize its parameters:
         classifier = SbiGenotypeClassifier(input_size=encoded_size, target_size=output_size[0],
                                            autoencoder=autoencoder, dropout_p=dropout_p, num_layers=num_layers)

@@ -185,7 +185,8 @@ if __name__ == '__main__':
                                                                                           ngpus=args.num_gpus,
                                                                                           dropout_p=args.dropout_probability,
                                                                                           num_layers=args.num_layers,
-                                                                                          autoencoder_type=args.autoencoder_type)))
+                                                                                          autoencoder_type=args.autoencoder_type,
+                                                                                          drop_decoder=True)))
             training_loop_method = model_trainer.train_supervised
             testing_loop_method = model_trainer.test_supervised
         else:
