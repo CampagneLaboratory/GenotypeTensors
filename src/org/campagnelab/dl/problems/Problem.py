@@ -65,7 +65,7 @@ class Problem:
         """Returns the torch dataloader over the training set, shuffled,
         but limited to the example range start-end."""
         if start==0:
-            return self.loader_for_dataset(SmallerDataset(delegate=self.train_set(), new_size=end))
+            return self.loader_for_dataset(SmallerDataset(delegate=self.train_set(), new_size=end),shuffle=True)
         else:
             return self.train_loader_subset(range(start, end))
 
