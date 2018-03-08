@@ -96,7 +96,9 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def unlabeled_loader(self):
-        return self.loader_for_dataset(dataset=self.unlabeled_set(), shuffle=True)
+        dataset = self.unlabeled_set()
+        use_shuffle = not isinstance(dataset, EmptyDataset)
+        return self.loader_for_dataset(dataset=dataset, shuffle=use_shuffle)
 
     def test_loader(self):
         return self.loader_for_dataset(dataset=self.test_set(), shuffle=False)
