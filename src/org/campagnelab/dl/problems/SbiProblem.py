@@ -44,12 +44,12 @@ class SbiProblem(Problem):
             with open(self.basename + "-unlabeled.list") as list_file:
                 lines = list_file.readlines()
                 return ConcatDataset(
-                    [CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()).shuffle() for path in
+                    [CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()) for path in
                      lines])
         else:
             if self.file_exists(self.basename + "-unlabeled.vec"):
                 return CachedGenotypeDataset(self.basename + "-unlabeled.vec",
-                                             vector_names=self.get_input_names()).shuffle()
+                                             vector_names=self.get_input_names())
             else:
                 return EmptyDataset()
 
