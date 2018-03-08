@@ -92,7 +92,9 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             weights[is_indel.data != 0] = indel_weight
             weights[is_indel.data == 0] = snp_weight
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            weighted_supervised_loss = supervised_loss*torch.sum(weights)/batch_size
+            batch_weight=torch.sum(weights)/batch_size
+
+            weighted_supervised_loss = supervised_loss*batch_weight
             optimized_loss = weighted_supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
