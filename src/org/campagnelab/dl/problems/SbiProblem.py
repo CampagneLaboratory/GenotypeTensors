@@ -162,7 +162,7 @@ class SbiGenotypingProblem(SbiProblem):
         return ["input"]
 
     def get_vector_names(self):
-        return ["input", "softmaxGenotype"]
+        return ["input", "softmaxGenotype","metaData"]
 
     def get_output_names(self):
-        return ["softmaxGenotype"]
+        return ["softmaxGenotype", "metaData"]

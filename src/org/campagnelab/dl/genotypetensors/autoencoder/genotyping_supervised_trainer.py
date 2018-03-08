@@ -2,7 +2,7 @@ import torch
 from torch.nn import MultiLabelSoftMarginLoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -10,30 +10,33 @@ from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar
 
 
-def toBinary(n,max_value):
+def toBinary(n, max_value):
     for index in range(max_value)[::-1]:
         yield 1 & int(n) >> index
 
-enable_recode=False
+
+enable_recode = False
+
 def recode_as_multi_label(one_hot_vector):
     if not enable_recode:
         return one_hot_vector
-    coded=torch.zeros(one_hot_vector.size())
-    for example_index in range(0,len(one_hot_vector)):
-        value, index=torch.max(one_hot_vector[example_index],dim=0)
-        count_indices=list(toBinary(index.data[0],len(one_hot_vector)))
+    coded = torch.zeros(one_hot_vector.size())
+    for example_index in range(0, len(one_hot_vector)):
+        value, index = torch.max(one_hot_vector[example_index], dim=0)
+        count_indices = list(toBinary(index.data[0], len(one_hot_vector)))
         for count_index in count_indices:
-            coded[example_index,count_index]=1
+            coded[example_index, count_index] = 1
 
-    #print(coded)
+    # print(coded)
     return coded
 
 
 class GenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
+
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
-        self.criterion_classifier=None
+        self.criterion_classifier = None
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -43,7 +46,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         return "test_supervised_loss"
 
     def is_better(self, metric, previous_metric):
-        return metric< previous_metric
+        return metric < previous_metric
 
     def train_supervised(self, epoch):
 
@@ -61,16 +64,20 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset),is_cuda=self.use_cuda,
-                                     batch_names=["training"],
-                                     requires_grad={"training": ["input"]},
-                                     volatile={"training": [] },
-                                     recode_functions={"softmaxGenotype":recode_for_label_smoothing}
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=self.use_cuda,
+                                                        batch_names=["training"],
+                                                        requires_grad={"training": ["input"]},
+                                                        volatile={"training": ["metaData"]},
+                                                        recode_functions={"softmaxGenotype": recode_for_label_smoothing}
                                                         )
-
+        indel_weight = 10.0
+        snp_weight = 1.0
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["training"]["input"]
             target_s = dict["training"]["softmaxGenotype"]
+            metadata = dict["training"]["metaData"]
+            is_indel = metadata.split(dim=1, split_size=1)[1]
+            batch_size = len(is_indel)
 
             num_batches += 1
 
@@ -81,19 +88,23 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             self.net.zero_grad()
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
-            max, target_index= torch.max(target_s, dim=1)
-
+            max, target_index = torch.max(target_s, dim=1)
+            weights=is_indel.data.clone()
+            weights[is_indel.data != 0] = indel_weight
+            weights[is_indel.data == 0] = snp_weight
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            optimized_loss = supervised_loss
+            weighted_supervised_loss = supervised_loss*torch.sum(weights)/batch_size
+            optimized_loss = weighted_supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
             performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
             performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
-                                                           output_s_p,targets=target_index)
+                                                           output_s_p, targets=target_index)
 
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
-                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss","train_accuracy"]))
+                         performance_estimators.progress_message(
+                             ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -119,31 +130,33 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        validation_loader_subset=self.problem.validation_loader_range(0, self.args.num_validation)
+        validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(validation_loader_subset), is_cuda=self.use_cuda,
-                                     batch_names=["validation"],
-                                     requires_grad={"validation": []},
-                                     volatile={"validation": ["input","softmaxGenotype"]})
+                                                        batch_names=["validation"],
+                                                        requires_grad={"validation": []},
+                                                        volatile={"validation": ["input", "softmaxGenotype"]})
         for batch_idx, dict in enumerate(data_provider):
             input_s = dict["validation"]["input"]
             target_s = dict["validation"]["softmaxGenotype"]
 
             if errors is None:
-                errors=torch.zeros(target_s[0].size())
+                errors = torch.zeros(target_s[0].size())
 
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
 
             max, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
             max, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p,target_s)
-            errors[target_index.cpu().data] += torch.ne(target_index.cpu().data, output_index.cpu().data).type(torch.FloatTensor)
+            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+            errors[target_index.cpu().data] += torch.ne(target_index.cpu().data, output_index.cpu().data).type(
+                torch.FloatTensor)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
             performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
                                                            output_s_p, targets=target_index)
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_supervised_loss","test_reconstruction_loss","test_accuracy"]))
+                         performance_estimators.progress_message(
+                             ["test_supervised_loss", "test_reconstruction_loss", "test_accuracy"]))
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
