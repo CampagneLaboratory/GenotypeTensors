@@ -101,7 +101,7 @@ class VectorWriterBinary:
     def _get_vector_length(dims):
         return reduce(mul, dims, 1)
 
-    def append(self, example_index, tensors, inverse_logit=False):
+    def append(self, example_indices, tensors, inverse_logit=False):
         num_rows = None
         if isinstance(tensors, Variable):
             tensors = (tensors,)
@@ -132,7 +132,7 @@ class VectorWriterBinary:
                 flattened_row = np.ravel(tensor[row], "C")
                 self.vec_file.write(struct.pack(fmt_string,
                                                 self.sample_id,
-                                                example_index,
+                                                example_indices[row],
                                                 tensor_id,
                                                 len(flattened_row),
                                                 *flattened_row))

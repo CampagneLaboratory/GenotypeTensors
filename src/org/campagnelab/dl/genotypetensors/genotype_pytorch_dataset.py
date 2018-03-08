@@ -229,7 +229,12 @@ class GenotypeDataset(Dataset):
             result[self.vector_names[i]] = torch.from_numpy(tensor)
             i += 1
         self.previous_index = idx
-        return result
+        return idx, result
+
+    def __del__(self):
+        """Destructor for cases when the dataset is used inside an iterator. """
+        if self.reader is not None:
+            self.reader.close()
 
 
 class DispatchDataset(Dataset):

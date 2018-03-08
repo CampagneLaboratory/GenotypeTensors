@@ -88,7 +88,7 @@ if __name__ == '__main__':
                         help='Reset learning rate to initial value every n epochs.')
 
     parser.add_argument("--num-gpus", type=int, default=1, help='Number of GPUs to run on.')
-    parser.add_argument("--num-workers", type=int, default=1, help='Number of workers to feed data to the GPUs.')
+    parser.add_argument("--num-workers", type=int, default=0, help='Number of workers to feed data to the GPUs.')
     parser.add_argument("--autoencoder-type", type=int, default=1, help='Choose a variant of auto-encoder. Type 1 or 2 are currently available.')
 
     parser.add_argument('--abort-when-failed-to-improve', default=sys.maxsize, type=int,
@@ -185,7 +185,8 @@ if __name__ == '__main__':
                                                                                           ngpus=args.num_gpus,
                                                                                           dropout_p=args.dropout_probability,
                                                                                           num_layers=args.num_layers,
-                                                                                          autoencoder_type=args.autoencoder_type)))
+                                                                                          autoencoder_type=args.autoencoder_type,
+                                                                                          drop_decoder=True)))
             training_loop_method = model_trainer.train_supervised
             testing_loop_method = model_trainer.test_supervised
         else:
