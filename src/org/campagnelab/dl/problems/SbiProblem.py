@@ -167,4 +167,4 @@ class SbiGenotypingProblem(SbiProblem):
         return ["input", "softmaxGenotype","metaData"]
 
     def get_output_names(self):
-        return ["softmaxGenotype", "metaData"]
+        return ["softmaxGenotype"]
