@@ -71,10 +71,10 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                                                         )
         indel_weight = 10.0
         snp_weight = 1.0
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = dict["training"]["input"]
-            target_s = dict["training"]["softmaxGenotype"]
-            metadata = dict["training"]["metaData"]
+        for batch_idx, (indices, data_dict) in enumerate(data_provider):
+            input_s = data_dict["training"]["input"]
+            target_s = data_dict["training"]["softmaxGenotype"]
+            metadata = data_dict["training"]["metaData"]
             is_indel = metadata.split(dim=1, split_size=1)[1]
             batch_size = len(is_indel)
 

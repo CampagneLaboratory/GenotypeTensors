@@ -20,7 +20,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
-            self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
+            self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights,size_average=False)
             self.criterion_autoencoder = MSELoss()
 
     def get_test_metric_name(self):
@@ -47,19 +47,17 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader = self.problem.unlabeled_loader()
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),
-                                                        is_cuda=self.use_cuda,
-                                                        batch_names=["training", "unlabeled"],
-                                                        requires_grad={"training": ["input"], "unlabeled": ["input"]},
-                                                        volatile={"training": [], "unlabeled": []},
-                                                        recode_functions={
-                                                            "softmaxGenotype": recode_for_label_smoothing
-                                                        })
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),is_cuda=self.use_cuda,
+                                     batch_names=["training", "unlabeled"],
+                                     requires_grad={"training": ["input"], "unlabeled": ["input"]},
+                                     volatile={"training": ["metaData"], "unlabeled": []},
+                                     recode_functions={"softmaxGenotype": recode_for_label_smoothing})
         self.net.autoencoder.train()
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["training"]["input"]
-            target_s = data_dict["training"]["softmaxGenotype"]
-            input_u = data_dict["unlabeled"]["input"]
+        for batch_idx, dict in enumerate(data_provider):
+            input_s = dict["training"]["input"]
+            metadata = dict["training"]["metaData"]
+            target_s = dict["training"]["softmaxGenotype"]
+            input_u = dict["unlabeled"]["input"]
             num_batches += 1
 
             # need a copy of input_u and input_s as output:
