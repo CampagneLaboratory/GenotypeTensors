@@ -3,13 +3,13 @@ from torch.nn import BatchNorm1d
 
 
 class AutoEncoder2(nn.Module):
-    def __init__(self, input_size=512, encoded_size=32, ngpus=1, dropout_p=0):
+    def __init__(self, input_size=512, encoded_size=32, ngpus=1, dropout_p=0, nreplicas=0):
         """
 
         :param input_size:
         :param encoded_size:
-        :param ngpu: Number of gpus to run on.
-        :param num_replica: Number of model replica per GPUs, if ngpu>1
+        :param ngpus: Number of gpus to run on.
+        :param nreplicas: Number of model replica per GPUs, if ngpu>1
         """
         super().__init__()
         self.ngpu = ngpus
@@ -20,7 +20,7 @@ class AutoEncoder2(nn.Module):
         encoder_list += [nn.Dropout(dropout_p),
                          nn.BatchNorm1d(encoder_input_size), nn.Linear(input_size, input_size * 2),
                          nn.Dropout(0.5),
-                         nn.BatchNorm1d(input_size * 2), nn.Linear(input_size * 2, input_size) ]
+                         nn.BatchNorm1d(input_size * 2), nn.Linear(input_size * 2, input_size)]
         while encoder_output_size > encoded_size:
             encoder_list += [nn.BatchNorm1d(encoder_input_size), nn.Linear(encoder_input_size, encoder_output_size)]
 
@@ -44,9 +44,9 @@ class AutoEncoder2(nn.Module):
 
         self.decoder = nn.Sequential(*decoder_list)
 
-    def forward(self, input):
-        if input.data.is_cuda and self.ngpu > 1:
-            encoded = nn.parallel.data_parallel(self.encoder, input, self.device_list)
+    def forward(self, model_input):
+        if model_input.data.is_cuda and self.ngpu > 1:
+            encoded = nn.parallel.data_parallel(self.encoder, model_input, self.device_list)
             decoded = nn.parallel.data_parallel(self.decoder, encoded, self.device_list)
         else:
             encoded = self.encoder(input)
@@ -58,7 +58,7 @@ def create_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1, nrep
     input_size = problem.input_size("input")
     assert len(input_size) == 1, "AutoEncoders required 1D input features."
 
-    autoencoder = AutoEncoder(input_size=input_size[0], encoded_size=encoded_size, ngpus=ngpus, nreplicas=nreplicas,
-                              dropout_p=dropout_p)
+    autoencoder = AutoEncoder2(input_size=input_size[0], encoded_size=encoded_size, ngpus=ngpus, nreplicas=nreplicas,
+                               dropout_p=dropout_p)
     print("model" + str(autoencoder))
     return autoencoder

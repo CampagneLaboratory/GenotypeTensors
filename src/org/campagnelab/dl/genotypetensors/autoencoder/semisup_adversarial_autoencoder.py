@@ -1,7 +1,7 @@
 from torch import nn
 
 
-class SemiSupAdvEncoder(nn.Module):
+class _SemiSupAdvEncoder(nn.Module):
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, z_dim=2):
         super().__init__()
         self.ngpus = ngpus
@@ -35,7 +35,7 @@ class SemiSupAdvEncoder(nn.Module):
         return cat_encoded, prior_encoded
 
 
-class SemiSupAdvDecoder(nn.Module):
+class _SemiSupAdvDecoder(nn.Module):
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, z_dim=2):
         super().__init__()
         self.ngpus = ngpus
@@ -69,7 +69,7 @@ class SemiSupAdvDecoder(nn.Module):
         return decoded
 
 
-class SemiSupAdvDiscriminatorCat(nn.Module):
+class _SemiSupAdvDiscriminatorCat(nn.Module):
     def __init__(self, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10):
         super().__init__()
         self.ngpus = ngpus
@@ -105,7 +105,7 @@ class SemiSupAdvDiscriminatorCat(nn.Module):
         return category
 
 
-class SemiSupAdvDiscriminatorPrior(nn.Module):
+class _SemiSupAdvDiscriminatorPrior(nn.Module):
     def __init__(self, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, z_dim=2):
         super().__init__()
         self.ngpus = ngpus
@@ -141,24 +141,29 @@ class SemiSupAdvDiscriminatorPrior(nn.Module):
         return prior_val
 
 
+class SemiSupAdvAutoencoder(nn.Module):
+    def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, z_dim=2):
+        super().__init__()
+        self.encoder = _SemiSupAdvEncoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
+                                          num_hidden_layers=num_hidden_layers, num_classes=num_classes, z_dim=z_dim)
+        self.decoder = _SemiSupAdvDecoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
+                                          num_hidden_layers=num_hidden_layers, num_classes=num_classes, z_dim=z_dim)
+        self.discriminator_cat = _SemiSupAdvDiscriminatorCat(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
+                                                             num_hidden_layers=num_hidden_layers,
+                                                             num_classes=num_classes)
+        self.discriminator_prior = _SemiSupAdvDiscriminatorPrior(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
+                                                                 num_hidden_layers=num_hidden_layers,
+                                                                 z_dim=z_dim)
+
+    def forward(self, model_input):
+        pass
+
+
 def create_semisup_adv_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1, nreplicas=1, dropout_p=0,
                                          n_dim=500, num_hidden_layers=1, z_dim=2):
     input_size = problem.input_size("input")
     assert len(input_size) == 1, "AutoEncoders required 1D input features."
-
-    encoder = SemiSupAdvEncoder(input_size=input_size[0], n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
-                                num_hidden_layers=num_hidden_layers, num_classes=encoded_size, z_dim=z_dim)
-    decoder = SemiSupAdvDecoder(input_size=input_size[0], n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
-                                num_hidden_layers=num_hidden_layers, num_classes=encoded_size, z_dim=z_dim)
-    discriminator_cat = SemiSupAdvDiscriminatorCat(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
-                                                   num_hidden_layers=num_hidden_layers, num_classes=encoded_size)
-    discriminator_prior = SemiSupAdvDiscriminatorPrior(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
-                                                       num_hidden_layers=num_hidden_layers, z_dim=z_dim)
-
-    print("encoder: {}\ndecoder: {}\ncategory discriminator: {}\nprior discriminator: {}".format(
-        str(encoder),
-        str(decoder),
-        str(discriminator_cat),
-        str(discriminator_prior)
-    ))
-    return encoder, decoder, discriminator_cat, discriminator_prior
+    semisup_adv_autoencoder = SemiSupAdvAutoencoder(input_size=input_size[0], n_dim=n_dim, ngpus=ngpus,
+                                                    dropout_p=dropout_p, num_hidden_layers=num_hidden_layers,
+                                                    num_classes=encoded_size, z_dim=z_dim)
+    return semisup_adv_autoencoder
