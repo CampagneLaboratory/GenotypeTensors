@@ -2,6 +2,7 @@ import os
 import sys
 
 import torch
+from memory_profiler import profile
 from torch.backends import cudnn
 from torch.nn import MSELoss, CrossEntropyLoss, MultiLabelSoftMarginLoss
 

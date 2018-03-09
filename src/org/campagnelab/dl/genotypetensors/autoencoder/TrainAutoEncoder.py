@@ -9,7 +9,7 @@ import threading
 
 import os
 import torch
-from memory_profiler import profile
+
 # MIT License
 #
 # Copyright (c) 2017 Fabien Campagne
@@ -31,7 +31,7 @@ from memory_profiler import profile
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from memory_profiler import profile
+
 
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
@@ -126,14 +126,12 @@ if __name__ == '__main__':
         print("Unsupported problem: " + args.problem)
         exit(1)
 
-
     def get_metric_value(all_perfs, query_metric_name):
         for perf in all_perfs:
             metric = perf.get_metric(query_metric_name)
             if metric is not None:
                 return metric
 
-    @profile
     def train_once(args, problem, use_cuda):
         problem.describe()
         training_loop_method = None
@@ -160,7 +158,7 @@ if __name__ == '__main__':
                                                                                           ngpus=args.num_gpus,
                                                                                           num_layers=args.num_layers,
                                                                                           autoencoder_type=args.autoencoder_type)))
-            training_loop_method = model_trainer.train_autoencoder
+            training_loop_method = model_trainer.supervised_somatic
             testing_loop_method = model_trainer.test_somatic_classifer
         elif args.mode == "semisupervised_genotypes":
             model_trainer = GenotypingSemiSupTrainer(args=args, problem=problem, use_cuda=use_cuda)
@@ -203,7 +201,6 @@ if __name__ == '__main__':
 
         return model_trainer.training_loops(training_loop_method=training_loop_method,
                                             testing_loop_method=testing_loop_method)
-
 
     train_once(args, problem, use_cuda)
     # don't wait for threads to die, just exit:

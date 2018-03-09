@@ -62,7 +62,7 @@ class SbiProblem(Problem):
             return CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
-    @profile
+
     def __init__(self, mini_batch_size, code, drop_last_batch=True, num_workers=0):
         super().__init__(mini_batch_size)
         self.basename = code[len(self.basename_prefix()):]
