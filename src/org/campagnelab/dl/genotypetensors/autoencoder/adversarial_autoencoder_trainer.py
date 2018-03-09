@@ -10,18 +10,39 @@ from org.campagnelab.dl.utils.utils import progress_bar
 
 
 class AdversarialAutoencoderTrainer(CommonTrainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.encoder_semisup_opt = None
+        self.encoder_generator_opt = None
+        self.encoder_reconstruction_opt = None
+        self.decoder_opt = None
+        self.discriminator_prior_opt = None
+        self.discriminator_cat_opt = None
+        self.optimizers = []
+
     def init_model(self, create_model_function):
         super().init_model(create_model_function)
         # TODO: review list of params, names don't match between optimizers and source of parameters.
-        self.encoder_semisup_generator_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
-                                                        momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.encoder_generator_opt = torch.optim.SGD(self.net.decoder.parameters(), lr=self.args.lr,
-                                                momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.encoder_cat_opt = torch.optim.SGD(self.net.discriminator_cat.parameters(), lr=self.args.lr,
-                                          momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.decoder_opt = torch.optim.SGD(self.net.discriminator_prior.parameters(), lr=self.args.lr,
-                                      momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.optimizers=[self.encoder_semisup_generator_opt, self.encoder_generator_opt,self.encoder_cat_opt, self.decoder_opt]
+        self.encoder_semisup_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
+                                                   momentum=self.args.momentum, weight_decay=self.args.L2)
+        self.encoder_generator_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
+                                                     momentum=self.args.momentum, weight_decay=self.args.L2)
+        self.encoder_reconstruction_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
+                                                          momentum=self.args.momentum, weight_decay=self.args.L2)
+        self.decoder_opt = torch.optim.SGD(self.net.decoder.parameters(), lr=self.args.lr,
+                                           momentum=self.args.momentum, weight_decay=self.args.L2)
+        self.discriminator_prior_opt = torch.optim.SGD(self.net.discriminator_prior.parameters(), lr=self.args.lr,
+                                                       momentum=self.args.momentum, weight_decay=self.args.L2)
+        self.discriminator_cat_opt = torch.optim.SGD(self.net.discriminator_cat.parameters(), lr=self.args.lr,
+                                                     momentum=self.args.momentum, weight_decay=self.args.L2)
+        self.optimizers = [
+            self.encoder_semisup_opt,
+            self.encoder_generator_opt,
+            self.encoder_reconstruction_opt,
+            self.decoder_opt,
+            self.discriminator_prior_opt,
+            self.discriminator_cat_opt,
+        ]
 
     def train_semisup_aae(self, epoch,
                           performance_estimators=None):
@@ -32,7 +53,6 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             print('\nTraining, epoch: %d' % epoch)
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-
 
         self.net.train()
         supervised_grad_norm = 1.
@@ -54,16 +74,26 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             })
 
         for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["training"]["input"]
-            input_u = data_dict["unlabeled"]["input"]
-            target_s = data_dict["training"]["softmaxGenotype"]
+            input_s = Variable(data_dict["training"]["input"])
+            target_s = Variable(data_dict["training"]["softmaxGenotype"])
+            input_u = Variable(data_dict["unlabeled"]["input"])
             num_batches += 1
             for optimizer in self.optimizers:
                 optimizer.zero_grad()
-
-            # net delegates to zub-modules:
-            self.net.zero_grad()
-
+            # TODO: Check for proper criterion in reconstruction, semisup losses
+            # TODO: Use losses for model evaluation
+            reconstruction_loss = self.net.get_reconstruction_loss(input_u, self.criterion, self.decoder_opt,
+                                                                   self.encoder_reconstruction_opt)
+            discriminator_loss = self.net.get_discriminator_loss(input_u, self.discriminator_cat_opt,
+                                                                 self.discriminator_prior_opt)
+            generator_loss = self.net.get_generator_loss(input_u, self.encoder_generator_opt)
+            semisup_loss = self.net.get_semisup_loss(input_s, target_s, self.criterion, self.encoder_semisup_opt)
+            print("Losses are: reconstruction={} discriminator={} generator={} semisup={}".format(
+                reconstruction_loss,
+                discriminator_loss,
+                generator_loss,
+                semisup_loss
+            ))
 
     def test_semisup_aae(self, epoch, performance_estimators=None):
         print('\nTesting, epoch: %d' % epoch)
@@ -82,8 +112,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             inputs, targets = Variable(inputs, volatile=True), Variable(inputs, volatile=True)
 
-            # TODO: Obtain outputs properly from network
-            outputs = None
+            # Forward pass of semisup AAE returns reconstructed inputs
+            outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
 
             performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", loss.data[0], outputs, targets)

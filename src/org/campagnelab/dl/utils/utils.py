@@ -36,6 +36,10 @@ import torch.nn.init as init
 from itertools import islice, chain
 import platform
 
+import numpy as np
+from torch.autograd import Variable
+
+
 def get_mean_and_std(dataset):
     '''Compute the mean and std value of dataset.'''
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=2)
@@ -198,4 +202,13 @@ def batch(iterable, size):
         if not chunk:
             raise StopIteration
         yield chunk
+
+
+def draw_from_categorical(num_classes, length):
+    cat_vals = torch.IntTensor(length).random_(to=num_classes)
+    return Variable(torch.eye(num_classes)[cat_vals])
+
+
+def draw_from_gaussian(dim, length):
+    return Variable(torch.randn(length, dim))
 

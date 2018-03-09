@@ -164,7 +164,8 @@ class CachedGenotypeDataset(Dataset):
         if (not CachedGenotypeDataset.file_exists(basename + "-cached.vec")
                 or not CachedGenotypeDataset.file_exists(basename + "-cached.vecp")):
             # Write cache:
-            VectorCache(basename, max_records=max_records).write_lines()
+            with VectorCache(basename, max_records=max_records) as vector_cache:
+                vector_cache.write_lines()
         self.delegate = GenotypeDataset(basename + "-cached", vector_names, sample_id)
         self.basename = basename
         self.vector_names = vector_names
@@ -229,6 +230,7 @@ class GenotypeDataset(Dataset):
             result[self.vector_names[i]] = torch.from_numpy(tensor)
             i += 1
         self.previous_index = idx
+        # TODO: Maybe make idx returnable based on flag, to avoid (_, data) code present in uses of DataProvider
         return idx, result
 
     def __del__(self):

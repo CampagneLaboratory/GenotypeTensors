@@ -1,8 +1,12 @@
+import torch
 from torch import nn
+
+from org.campagnelab.dl.utils.utils import draw_from_categorical, draw_from_gaussian
 
 
 class _SemiSupAdvEncoder(nn.Module):
-    def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, z_dim=2):
+    def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10,
+                 prior_dim=2):
         super().__init__()
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
@@ -23,7 +27,7 @@ class _SemiSupAdvEncoder(nn.Module):
             ]
         self.encoder_base = nn.Sequential(*encoder_list)
         self.cat_encoder = nn.Linear(n_dim, num_classes)
-        self.prior_encoder = nn.Linear(n_dim, z_dim)
+        self.prior_encoder = nn.Linear(n_dim, prior_dim)
     
     def forward(self, model_input):
         if model_input.data.is_cuda and self.ngpus > 1:
@@ -36,15 +40,16 @@ class _SemiSupAdvEncoder(nn.Module):
 
 
 class _SemiSupAdvDecoder(nn.Module):
-    def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, z_dim=2):
+    def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10,
+                 prior_dim=2):
         super().__init__()
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
 
         # Create decoder
         decoder_list = [
-            nn.BatchNorm1d(z_dim + num_classes),
-            nn.Linear(z_dim + num_classes, n_dim),
+            nn.BatchNorm1d(prior_dim + num_classes),
+            nn.Linear(prior_dim + num_classes, n_dim),
             nn.Dropout(dropout_p),
             nn.SELU(),
         ]
@@ -106,14 +111,14 @@ class _SemiSupAdvDiscriminatorCat(nn.Module):
 
 
 class _SemiSupAdvDiscriminatorPrior(nn.Module):
-    def __init__(self, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, z_dim=2):
+    def __init__(self, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, prior_dim=2):
         super().__init__()
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
 
         layer_list = [
-            nn.BatchNorm1d(z_dim),
-            nn.Linear(z_dim, n_dim),
+            nn.BatchNorm1d(prior_dim),
+            nn.Linear(prior_dim, n_dim),
             nn.Dropout(dropout_p),
             nn.SELU()
         ]
@@ -142,28 +147,103 @@ class _SemiSupAdvDiscriminatorPrior(nn.Module):
 
 
 class SemiSupAdvAutoencoder(nn.Module):
-    def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, z_dim=2):
+    def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, prior_dim=2,
+                 delta=1E-15, seed=None):
         super().__init__()
         self.encoder = _SemiSupAdvEncoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
-                                          num_hidden_layers=num_hidden_layers, num_classes=num_classes, z_dim=z_dim)
+                                          num_hidden_layers=num_hidden_layers, num_classes=num_classes,
+                                          prior_dim=prior_dim)
         self.decoder = _SemiSupAdvDecoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
-                                          num_hidden_layers=num_hidden_layers, num_classes=num_classes, z_dim=z_dim)
+                                          num_hidden_layers=num_hidden_layers, num_classes=num_classes,
+                                          prior_dim=prior_dim)
         self.discriminator_cat = _SemiSupAdvDiscriminatorCat(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                                              num_hidden_layers=num_hidden_layers,
                                                              num_classes=num_classes)
         self.discriminator_prior = _SemiSupAdvDiscriminatorPrior(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                                                  num_hidden_layers=num_hidden_layers,
-                                                                 z_dim=z_dim)
+                                                                 prior_dim=prior_dim)
+        self.delta = delta
+        self.prior_dim = prior_dim
+        self.num_classes = num_classes
+        self.seed = seed
 
     def forward(self, model_input):
-        pass
+        return self.decoder(self._get_concat_code(model_input))
+
+    def _get_concat_code(self, model_input):
+        latent_categorical_code, latent_gaussian_code = self.encoder(model_input)
+        return torch.cat(latent_categorical_code, latent_gaussian_code, 1)
+
+    def get_reconstruction_loss(self, model_input, criterion, *opts):
+        self.decoder.train()
+        latent_code = self._get_concat_code(model_input)
+        reconstructed_model_input = self.decoder(latent_code)
+        recon_loss_backward = criterion(model_input + self.delta, reconstructed_model_input + self.delta)
+        recon_loss = recon_loss_backward
+        recon_loss_backward.backward()
+        for opt in opts:
+            opt.step()
+        self.zero_grad()
+        return recon_loss
+
+    def get_discriminator_loss(self, model_input, *opts):
+        self.encoder.eval()
+        mini_batch_size = model_input.data.size()[0]
+        categories_real = draw_from_categorical(self.num_classes, mini_batch_size)
+        prior_real = draw_from_gaussian(self.prior_dim, mini_batch_size)
+        if model_input.data.is_cuda:
+            categories_real.cuda()
+            prior_real.cuda()
+        categories_input, prior_input = self.encoder(model_input)
+        cat_prob_real = self.discriminator_cat(categories_real)
+        cat_prob_input = self.discriminator_cat(categories_input)
+        prior_prob_real = self.discriminator_prior(prior_real)
+        prior_prob_input = self.discriminator_prior(prior_input)
+        cat_discriminator_loss = -torch.mean(
+            torch.log(cat_prob_real + self.delta) + torch.log(1 - cat_prob_input + self.delta)
+        )
+        prior_discriminator_loss = -torch.mean(
+            torch.log(prior_prob_real + self.delta) + torch.log(1 - prior_prob_input + self.delta)
+        )
+        discriminator_loss_backward = cat_discriminator_loss + prior_discriminator_loss
+        discriminator_loss = discriminator_loss_backward
+        discriminator_loss_backward.backward()
+        for opt in opts:
+            opt.step()
+        self.zero_grad()
+        return discriminator_loss
+
+    def get_generator_loss(self, model_input, *opts):
+        self.encoder.train()
+        categories_input, prior_input = self.encoder(model_input)
+        cat_prob_input = self.discriminator_cat(categories_input)
+        prior_prob_input = self.discriminator_prior(prior_input)
+        generator_loss_backward = -torch.mean(torch.log(cat_prob_input + self.delta))
+        generator_loss_backward -= torch.mean(torch.log(prior_prob_input + self.delta))
+        generator_loss = generator_loss_backward
+        generator_loss_backward.backward()
+        for opt in opts:
+            opt.step()
+        self.zero_grad()
+        return generator_loss
+
+    def get_semisup_loss(self, model_input, categories_target, criterion, *opts):
+        self.encoder.train()
+        categories_input, _ = self.encoder(model_input)
+        semisup_loss_backward = criterion(categories_input, categories_target)
+        semisup_loss = semisup_loss_backward
+        semisup_loss_backward.backward()
+        for opt in opts:
+            opt.step()
+        self.zero_grad()
+        return semisup_loss
 
 
 def create_semisup_adv_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1, nreplicas=1, dropout_p=0,
-                                         n_dim=500, num_hidden_layers=1, z_dim=2):
+                                         n_dim=500, num_hidden_layers=1, prior_dim=2):
     input_size = problem.input_size("input")
     assert len(input_size) == 1, "AutoEncoders required 1D input features."
     semisup_adv_autoencoder = SemiSupAdvAutoencoder(input_size=input_size[0], n_dim=n_dim, ngpus=ngpus,
                                                     dropout_p=dropout_p, num_hidden_layers=num_hidden_layers,
-                                                    num_classes=encoded_size, z_dim=z_dim)
+                                                    num_classes=encoded_size, prior_dim=prior_dim)
     return semisup_adv_autoencoder

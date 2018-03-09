@@ -69,7 +69,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                                                         volatile={"training": ["metaData"]},
                                                         recode_functions={"softmaxGenotype": recode_for_label_smoothing}
                                                         )
-        indel_weight = 10.0
+        indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
         for batch_idx, (indices, data_dict) in enumerate(data_provider):
             input_s = data_dict["training"]["input"]
