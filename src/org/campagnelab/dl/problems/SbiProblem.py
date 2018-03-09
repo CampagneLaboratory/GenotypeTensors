@@ -2,6 +2,7 @@ from pathlib import Path
 
 import copy
 import torch
+from memory_profiler import profile
 from torch.utils.data import DataLoader, ConcatDataset
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
@@ -61,14 +62,15 @@ class SbiProblem(Problem):
             return CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names())
         else:
             return EmptyDataset()
-
+    @profile
     def __init__(self, mini_batch_size, code, drop_last_batch=True, num_workers=0):
         super().__init__(mini_batch_size)
         self.basename = code[len(self.basename_prefix()):]
         self.num_workers = num_workers
         self.drop_last_batch = drop_last_batch
-        self.meta_data = VectorReader(self.basename + "-train", sample_id=0, return_example_id=False,
-                                      vector_names=[]).vector_reader_properties
+        reader = VectorReader(self.basename + "-train", sample_id=0, return_example_id=False, vector_names=[])
+        self.meta_data = reader.vector_reader_properties
+        reader.close()
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """

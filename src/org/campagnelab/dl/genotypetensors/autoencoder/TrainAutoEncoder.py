@@ -9,7 +9,7 @@ import threading
 
 import os
 import torch
-
+from memory_profiler import profile
 # MIT License
 #
 # Copyright (c) 2017 Fabien Campagne
@@ -31,6 +31,7 @@ import torch
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from memory_profiler import profile
 
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
@@ -61,6 +62,8 @@ if __name__ == '__main__':
     parser.add_argument('--num-unlabeled', '-u', type=int, help='Maximum number of unlabeled examples to use.',
                         default=sys.maxsize)
     parser.add_argument('--num-layers', type=int, help='Number of layers in the classifier.', default=3)
+    parser.add_argument('--indel-weight-factor', type=float,
+                        help='Weight multiplying factor (with respect to SNPs) to increase loss contribution for indels.', default=10.0)
 
     parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number of examples scanned in an epoch'
                                                                    '(e.g., for ureg model training). By default, equal to the '
@@ -130,7 +133,7 @@ if __name__ == '__main__':
             if metric is not None:
                 return metric
 
-
+    @profile
     def train_once(args, problem, use_cuda):
         problem.describe()
         training_loop_method = None
