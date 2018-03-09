@@ -21,17 +21,17 @@ def _format_nice(n):
                 return "{0:.3E}".format(n)
             else:
                 return "{0:.4f}".format(n)
-    except:
+    except ValueError:
         return str(n)
+
 
 def recode_for_label_smoothing(one_hot_vector):
         epsilon = 0.2
         num_classes = len(one_hot_vector[0])
-
         one_hot_vector[one_hot_vector == 1] = 1.0 - epsilon
         one_hot_vector[one_hot_vector == 0] = epsilon / num_classes
-
         return one_hot_vector
+
 
 def print_params(epoch, net):
     params = []
@@ -41,7 +41,8 @@ def print_params(epoch, net):
 
 
 class CommonTrainer:
-    """Common code to train and test models and log their performance.
+    """
+    Common code to train and test models and log their performance.
     """
 
     def __init__(self, args, problem, use_cuda):
@@ -57,7 +58,9 @@ class CommonTrainer:
         self.max_validation_examples = args.num_validation if hasattr(args, "num_validation") else 0
         self.max_training_examples = args.num_training if hasattr(args, "num_training") else 0
         max_examples_per_epoch = args.max_examples_per_epoch if hasattr(args, 'max_examples_per_epoch') else None
-        self.max_examples_per_epoch = max_examples_per_epoch if max_examples_per_epoch is not None else self.max_regularization_examples
+        self.max_examples_per_epoch = (max_examples_per_epoch
+                                       if max_examples_per_epoch is not None
+                                       else self.max_regularization_examples)
         self.criterion = MSELoss()
 
         self.args = args
@@ -78,6 +81,8 @@ class CommonTrainer:
         self.confusion_matrix = None
         self.best_model_confusion_matrix = None
         self.published_reconstruction_loss = False
+        self.best_model = None
+        self.agreement_loss = MSELoss()
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -105,13 +110,9 @@ class CommonTrainer:
         self.max_training_examples = args.num_training if hasattr(args, 'num_training') else 0
         self.unsuploader = self.problem.unlabeled_loader()
         model_built = False
-        self.best_performance_metrics = None
-        self.best_model = None
 
-        self.agreement_loss = MSELoss()
         if hasattr(args, 'resume') and args.resume:
             # Load checkpoint.
-
             print('==> Resuming from checkpoint..')
 
             assert os.path.isdir('models'), 'Error: no models directory found!'
@@ -121,7 +122,6 @@ class CommonTrainer:
             except FileNotFoundError:
                 pass
             if checkpoint is not None:
-
                 self.net = checkpoint['model']
                 self.best_test_loss = checkpoint['best_test_loss']
                 self.start_epoch = checkpoint['epoch']
@@ -146,21 +146,20 @@ class CommonTrainer:
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
 
-        self.scheduler_train = \
-            construct_scheduler(self.optimizer_training, 'min', factor=0.5,
-                                lr_patience=self.args.lr_patience if hasattr(self.args, 'lr_patience') else 10,
-                                ureg_reset_every_n_epoch=self.args.reset_lr_every_n_epochs
-                                if hasattr(self.args, 'reset_lr_every_n_epochs')
-                                else None)
+        self.scheduler_train = construct_scheduler(
+            self.optimizer_training, 'min', factor=0.5,
+            lr_patience=self.args.lr_patience if hasattr(self.args, 'lr_patience') else 10,
+            ureg_reset_every_n_epoch=(self.args.reset_lr_every_n_epochs
+                                      if hasattr(self.args, 'reset_lr_every_n_epochs')
+                                      else None)
+        )
 
     def log_performance_header(self, performance_estimators, kind="perfs"):
-
-        if (self.args.resume):
+        if self.args.resume:
             return
-
         metrics = ["epoch", "checkpoint"]
 
-        metrics = metrics + performance_estimators.metric_names()
+        metrics += performance_estimators.metric_names()
 
         if not self.args.resume:
             with open("all-{}-{}.tsv".format(kind, self.args.checkpoint_key), "w") as perf_file:
@@ -176,12 +175,13 @@ class CommonTrainer:
         Log metrics and returns the best performance metrics seen so far.
         :param epoch:
         :param performance_estimators:
+        :param kind
         :return: a list of performance metrics corresponding to the epoch where test accuracy was maximum.
         """
         metrics = [epoch, self.args.checkpoint_key]
-        metrics = metrics + performance_estimators.estimates_of_metrics()
-
+        metrics += performance_estimators.estimates_of_metrics()
         early_stop = False
+
         with open("all-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
             perf_file.write(" ".join(map(_format_nice, metrics)))
             perf_file.write("\n")
@@ -212,9 +212,7 @@ class CommonTrainer:
         return early_stop, self.best_performance_metrics
 
     def save_checkpoint(self, epoch, test_loss):
-
         # Save checkpoint.
-
         if test_loss < self.best_test_loss:
             print('Saving..')
 
@@ -243,7 +241,6 @@ class CommonTrainer:
         torch.save(state, './models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
 
     def load_checkpoint(self, model_label="best"):
-
         if not os.path.isdir('models'):
             os.mkdir('models')
         state = torch.load('./models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
@@ -280,7 +277,7 @@ class CommonTrainer:
             if previous_test_perfs is None or self.epoch_is_test_epoch(epoch):
                 perfs += testing_loop_method(epoch)
 
-            if (not header_written):
+            if not header_written:
                 header_written = True
                 self.log_performance_header(perfs)
 
@@ -309,22 +306,23 @@ class CommonTrainer:
 
         train_loader_subset = self.problem.train_loader_subset_range(0, min(100000, self.args.num_training))
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
-                                                    batch_names=["training"],
-                                                    volatile={"training": self.problem.get_vector_names()}
-                                                    )
+                                                        batch_names=["training"],
+                                                        volatile={"training": self.problem.get_vector_names()}
+                                                        )
 
-        class_frequencies = {} # one frequency vector per output_name
-        done=False
+        class_frequencies = {}  # one frequency vector per output_name
+        done = False
         for batch_idx, (_, data_dict) in enumerate(data_provider):
-            if done: break
+            if done:
+                break
             for output_name in self.problem.get_output_names():
                 target_s = data_dict["training"][output_name]
                 if output_name not in class_frequencies.keys():
                     class_frequencies[output_name] = torch.ones(target_s[0].size())
-                cf=class_frequencies[output_name]
-                indices=torch.nonzero(target_s.data)
+                cf = class_frequencies[output_name]
+                indices = torch.nonzero(target_s.data)
                 for example_index in range(len(target_s)):
-                    cf[indices[example_index,1]] += 1
+                    cf[indices[example_index, 1]] += 1
 
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
@@ -334,8 +332,8 @@ class CommonTrainer:
 
             class_frequencies_output = class_frequencies[output_name]
             # normalize with 1-f, where f is normalized frequency vector:
-            weights = torch.ones(class_frequencies_output.size()) - (
-            class_frequencies_output / torch.norm(class_frequencies_output, p=1, dim=0))
+            weights = torch.ones(class_frequencies_output.size())
+            weights -= class_frequencies_output / torch.norm(class_frequencies_output, p=1, dim=0)
             if self.use_cuda:
                 weights = weights.cuda()
 
