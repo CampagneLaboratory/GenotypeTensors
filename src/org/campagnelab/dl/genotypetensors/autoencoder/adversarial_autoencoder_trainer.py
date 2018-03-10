@@ -74,9 +74,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             })
 
         for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = Variable(data_dict["training"]["input"])
-            target_s = Variable(data_dict["training"]["softmaxGenotype"])
-            input_u = Variable(data_dict["unlabeled"]["input"])
+            input_s = data_dict["training"]["input"]
+            target_s = data_dict["training"]["softmaxGenotype"]
+            input_u = data_dict["unlabeled"]["input"]
             num_batches += 1
             for optimizer in self.optimizers:
                 optimizer.zero_grad()
