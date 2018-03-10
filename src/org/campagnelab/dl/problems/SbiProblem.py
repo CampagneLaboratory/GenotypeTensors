@@ -2,7 +2,6 @@ from pathlib import Path
 
 import copy
 import torch
-from memory_profiler import profile
 from torch.utils.data import DataLoader, ConcatDataset
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
