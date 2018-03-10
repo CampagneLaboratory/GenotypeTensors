@@ -3,6 +3,7 @@ from torch.autograd import Variable
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
@@ -137,29 +138,38 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         print('\nTesting, epoch: %d' % epoch)
         if performance_estimators is None:
             performance_estimators = PerformanceList()
+            performance_estimators += [FloatHelper("reconstruction_loss")]
             performance_estimators += [LossHelper("test_loss")]
+            performance_estimators += [AccuracyHelper("test_")]
 
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
+        validation_loader_subset=self.problem.validation_loader_range(0, self.args.num_validation)
+        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(validation_loader_subset),
+                                                        is_cuda=self.use_cuda,
+                                                        batch_names=["validation"],
+                                                        requires_grad={"validation": []},
+                                                        volatile={"validation": ["input", "softmaxGenotype"]})
 
-        for batch_idx, (_, data_dict) in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
-            inputs = data_dict["input"]
-            if self.use_cuda:
-                inputs = inputs.cuda()
-
-            inputs, targets = Variable(inputs, volatile=True), Variable(inputs, volatile=True)
+        for batch_idx, (_, data_dict) in enumerate(data_provider):
+            input_s = data_dict["validation"]["input"]
+            target_s = data_dict["validation"]["softmaxGenotype"]
 
             # Forward pass of semisup AAE returns reconstructed inputs
-            outputs = self.net(inputs)
-            categories_predicted, latent_code = self.encoder(inputs)
+            reconstruction_loss=self.net.get_reconstruction_loss(input_s)
+            # now evaluate prediction of categories:
+            categories_predicted, latent_code = self.net.encoder(input_s)
+            categories_predicted_p = self.get_p(categories_predicted)
+            _, target_index = torch.max(target_s, dim=1)
+            categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
 
-            loss = self.criterion(outputs, targets)
-
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", loss.data[0], outputs, targets)
+            performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],categories_predicted,target_index)
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0], categories_predicted, target_s)
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_loss"]))
+                         performance_estimators.progress_message(["test_loss","test_accuracy","reconstruction_loss"]))
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break

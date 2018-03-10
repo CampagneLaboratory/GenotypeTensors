@@ -263,12 +263,12 @@ class SemiSupAdvAutoencoder(nn.Module):
 
 
 def create_semisup_adv_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1, nreplicas=1, dropout_p=0,
-                                         n_dim=500, num_hidden_layers=1, prior_dim=2):
+                                         n_dim=500, num_hidden_layers=1):
     input_size = problem.input_size("input")
     num_classes = problem.output_size("softmaxGenotype")
     assert len(input_size) == 1, "AutoEncoders require 1D input features."
     assert len(num_classes) == 1, "AutoEncoders require 1D output features."
     semisup_adv_autoencoder = SemiSupAdvAutoencoder(input_size=input_size[0], n_dim=n_dim, ngpus=ngpus,
                                                     dropout_p=dropout_p, num_hidden_layers=num_hidden_layers,
-                                                    num_classes=num_classes[0], prior_dim=prior_dim)
+                                                    num_classes=num_classes[0], prior_dim=encoded_size)
     return semisup_adv_autoencoder
