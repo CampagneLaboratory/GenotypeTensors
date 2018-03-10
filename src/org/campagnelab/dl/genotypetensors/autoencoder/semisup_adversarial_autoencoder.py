@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.distributions import Categorical
+from torch.nn import MSELoss, MultiLabelSoftMarginLoss
 
 from org.campagnelab.dl.utils.utils import draw_from_categorical, draw_from_gaussian
 
@@ -174,7 +175,13 @@ class SemiSupAdvAutoencoder(nn.Module):
         self.prior_dim = prior_dim
         self.num_classes = num_classes
         self.seed = seed
+        self.reconstruction_criterion=MSELoss()
+        self.semisup_loss_criterion=MultiLabelSoftMarginLoss()
         self.categorical_distribution=None
+
+    def rebuild_criterions(self, output_name, weights=None):
+        if output_name == "softmaxGenotype":
+            self.semisup_loss_criterion = MultiLabelSoftMarginLoss(weight=weights)
 
     def forward(self, model_input):
         return self.decoder(self._get_concat_code(model_input))
@@ -183,24 +190,25 @@ class SemiSupAdvAutoencoder(nn.Module):
         category_code, latent_code = self.encoder(model_input)
         return torch.cat([category_code, latent_code], 1)
 
-    def get_reconstruction_loss(self, model_input, criterion, *opts):
+    def get_reconstruction_loss(self, model_input):
         self.decoder.train()
         latent_code = self._get_concat_code(model_input)
         reconstructed_model_input = self.decoder(latent_code)
         model_output=Variable(model_input.data + self.epsilon, requires_grad=False)
-        recon_loss_backward = criterion(reconstructed_model_input + self.epsilon, model_output)
-        recon_loss = recon_loss_backward
-        recon_loss_backward.backward()
-        for opt in opts:
-            opt.step()
-        self.zero_grad()
-        return recon_loss
+        reconstruction_loss = self.reconstruction_criterion(reconstructed_model_input + self.epsilon, model_output)
 
-    def get_category_sample(self,mini_batch_size, num_classes):
+        return reconstruction_loss
+
+    def get_category_sample(self,mini_batch_size, num_classes,category_prior):
         if self.categorical_distribution is None:
             # initialize a distribution to sample from num_classes with equal probability:
+            if category_prior is None:
+                category_prior=[1.0 / num_classes] * num_classes
+            else:
+                # Convert from numpy to a list of floats:
+                category_prior=list(numpy.asarray(category_prior,dtype=float))
             self.categorical_distribution = Categorical(
-            probs=numpy.reshape(torch.FloatTensor([1.0 / num_classes] * num_classes * mini_batch_size),
+            probs=numpy.reshape(torch.FloatTensor(category_prior * mini_batch_size),
                                     (mini_batch_size, num_classes)))
             self.categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
 
@@ -211,11 +219,11 @@ class SemiSupAdvAutoencoder(nn.Module):
         categories_real = Variable(self.categories_one_hot.clone(), requires_grad=True)
         return categories_real
 
-    def get_discriminator_loss(self, model_input, *opts):
-        self.encoder.eval()
-        mini_batch_size = model_input.data.size()[0]
+    def get_discriminator_loss(self, model_input, category_prior=None):
 
-        categories_real=self.get_category_sample(mini_batch_size,num_classes=self.num_classes)
+        mini_batch_size = model_input.data.size()[0]
+        categories_real=self.get_category_sample(mini_batch_size,num_classes=self.num_classes,
+                                                 category_prior=category_prior)
         prior_real = draw_from_gaussian(self.prior_dim, mini_batch_size)
 
         if model_input.data.is_cuda:
@@ -232,37 +240,25 @@ class SemiSupAdvAutoencoder(nn.Module):
         prior_discriminator_loss = -torch.mean(
             torch.log(prior_prob_real + self.epsilon) + torch.log(1 - prior_prob_input + self.epsilon)
         )
-        discriminator_loss_backward = cat_discriminator_loss + prior_discriminator_loss
-        discriminator_loss = discriminator_loss_backward
-        discriminator_loss_backward.backward()
-        for opt in opts:
-            opt.step()
-        self.zero_grad()
+        discriminator_loss = cat_discriminator_loss + prior_discriminator_loss
+
+
         return discriminator_loss
 
-    def get_generator_loss(self, model_input, *opts):
-        self.encoder.train()
+    def get_generator_loss(self, model_input):
+
         categories_input, prior_input = self.encoder(model_input)
         cat_prob_input = self.discriminator_cat(categories_input)
         prior_prob_input = self.discriminator_prior(prior_input)
-        generator_loss_backward = -torch.mean(torch.log(cat_prob_input + self.epsilon))
-        generator_loss_backward -= torch.mean(torch.log(prior_prob_input + self.epsilon))
-        generator_loss = generator_loss_backward
-        generator_loss_backward.backward()
-        for opt in opts:
-            opt.step()
-        self.zero_grad()
+        generator_loss =  -torch.mean(torch.log(cat_prob_input + self.epsilon))
+        generator_loss += -torch.mean(torch.log(prior_prob_input + self.epsilon))
+
         return generator_loss
 
-    def get_semisup_loss(self, model_input, categories_target, criterion, *opts):
-        self.encoder.train()
+    def get_semisup_loss(self, model_input, categories_target):
+
         categories_input, _ = self.encoder(model_input)
-        semisup_loss_backward = criterion(categories_input, categories_target)
-        semisup_loss = semisup_loss_backward
-        semisup_loss_backward.backward()
-        for opt in opts:
-            opt.step()
-        self.zero_grad()
+        semisup_loss = self.semisup_loss_criterion(categories_input, categories_target)
         return semisup_loss
 
 

@@ -80,22 +80,44 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             target_s = data_dict["training"]["softmaxGenotype"]
             input_u = data_dict["unlabeled"]["input"]
             num_batches += 1
-            for optimizer in self.optimizers:
-                optimizer.zero_grad()
+            self.zero_grad_all_optimizers()
             # TODO: Check for proper criterion in reconstruction, semisup losses
             # TODO: Use losses for model evaluation
-            reconstruction_loss = self.net.get_reconstruction_loss(input_u, self.criterion, self.decoder_opt,
-                                                                   self.encoder_reconstruction_opt)
-            discriminator_loss = self.net.get_discriminator_loss(input_u, self.discriminator_cat_opt,
-                                                                 self.discriminator_prior_opt)
-            generator_loss = self.net.get_generator_loss(input_u, self.encoder_generator_opt)
-            semisup_loss = self.net.get_semisup_loss(input_s, target_s, self.criterion, self.encoder_semisup_opt)
-            #print("Losses are: reconstruction={} discriminator={} generator={} semisup={}".format(
-            #    reconstruction_loss,
-            #    discriminator_loss,
-            #    generator_loss,
-            #    semisup_loss
-            #))
+            # Train reconstruction phase:
+            reconstruction_loss = self.net.get_reconstruction_loss(input_u)
+            reconstruction_loss.backward()
+            for opt in [self.decoder_opt, self.encoder_reconstruction_opt]:
+                opt.step()
+
+            # Train discriminators:
+            self.net.encoder.eval()
+            self.net.discriminator_cat.train()
+            self.net.discriminator_prior.train()
+            self.zero_grad_all_optimizers()
+            genotype_frequencies = self.class_frequencies["softmaxGenotype"]
+            category_prior = ( genotype_frequencies/torch.sum(genotype_frequencies)).numpy()
+            discriminator_loss = self.net.get_discriminator_loss(input_u, category_prior=category_prior)
+            discriminator_loss.backward()
+            for opt in [self.discriminator_cat_opt, self.discriminator_prior_opt]:
+                opt.step()
+            self.zero_grad_all_optimizers()
+
+            # Train generator:
+            self.net.encoder.train()
+            generator_loss = self.net.get_generator_loss(input_u )
+            generator_loss.backward()
+            for opt in [self.encoder_generator_opt]:
+                opt.step()
+            self.zero_grad_all_optimizers()
+
+            self.net.encoder.train()
+            semisup_loss = self.net.get_semisup_loss(input_s, target_s)
+            semisup_loss.backward()
+
+            for opt in [self.encoder_semisup_opt]:
+                opt.step()
+            self.zero_grad_all_optimizers()
+
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
             performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
@@ -106,6 +128,10 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
                 break
         return performance_estimators
+
+    def zero_grad_all_optimizers(self):
+        for optimizer in self.optimizers:
+            optimizer.zero_grad()
 
     def test_semisup_aae(self, epoch, performance_estimators=None):
         print('\nTesting, epoch: %d' % epoch)
@@ -126,6 +152,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             # Forward pass of semisup AAE returns reconstructed inputs
             outputs = self.net(inputs)
+            categories_predicted, latent_code = self.encoder(inputs)
+
             loss = self.criterion(outputs, targets)
 
             performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", loss.data[0], outputs, targets)

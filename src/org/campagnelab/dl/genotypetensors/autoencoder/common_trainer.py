@@ -83,6 +83,7 @@ class CommonTrainer:
         self.published_reconstruction_loss = False
         self.best_model = None
         self.agreement_loss = MSELoss()
+        self.class_frequencies=None
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -140,8 +141,8 @@ class CommonTrainer:
             self.net.cuda()
         cudnn.benchmark = True
 
-        class_frequency = self.class_frequency()
-        print("class_frequency " + str(class_frequency))
+        self.class_frequencies = self.class_frequency()
+        print("class_frequency " + str(self.class_frequencies))
 
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
