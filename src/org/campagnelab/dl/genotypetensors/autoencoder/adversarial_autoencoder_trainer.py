@@ -76,10 +76,14 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 "softmaxGenotype": recode_for_label_smoothing
             })
 
+        indel_weight = self.args.indel_weight_factor
+        snp_weight = 1.0
+
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["training"]["input"]
             target_s = data_dict["training"]["softmaxGenotype"]
             input_u = data_dict["unlabeled"]["input"]
+            meta_data = data_dict["training"]["metaData"]
             num_batches += 1
             self.zero_grad_all_optimizers()
             # TODO: Check for proper criterion in reconstruction, semisup losses
@@ -112,7 +116,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.zero_grad_all_optimizers()
 
             self.net.encoder.train()
-            semisup_loss = self.net.get_semisup_loss(input_s, target_s)
+            semisup_loss = self.net.get_semisup_loss(input_s, target_s) \
+                * self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
+                                       snp_weight=snp_weight)
             semisup_loss.backward()
 
             for opt in [self.encoder_semisup_opt]:

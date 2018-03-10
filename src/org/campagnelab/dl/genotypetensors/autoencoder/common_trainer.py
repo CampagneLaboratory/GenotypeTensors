@@ -347,3 +347,16 @@ class CommonTrainer:
         output_s_exp = torch.exp(output_s)
         output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
         return output_s_p
+
+    def estimate_batch_weight(self, meta_data, indel_weight, snp_weight):
+        """Estimate a weight that gives more importance to batches with more indels in them.
+        Helps optimization focus on indel predictions. Indel information is extracted
+        from the meta_data field. """
+        is_indel = meta_data.split(dim=1, split_size=1)[1]
+        batch_size = len(is_indel)
+
+        weights = is_indel.data.clone()
+        weights[is_indel.data != 0] = indel_weight
+        weights[is_indel.data == 0] = snp_weight
+        batch_weight = torch.sum(weights) / batch_size
+        return batch_weight

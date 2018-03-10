@@ -38,6 +38,8 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         super().__init__(args, problem, use_cuda)
         self.criterion_classifier = None
 
+
+
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
             self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
@@ -75,8 +77,6 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             input_s = data_dict["training"]["input"]
             target_s = data_dict["training"]["softmaxGenotype"]
             metadata = data_dict["training"]["metaData"]
-            is_indel = metadata.split(dim=1, split_size=1)[1]
-            batch_size = len(is_indel)
 
             num_batches += 1
 
@@ -88,11 +88,10 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
             max, target_index = torch.max(target_s, dim=1)
-            weights=is_indel.data.clone()
-            weights[is_indel.data != 0] = indel_weight
-            weights[is_indel.data == 0] = snp_weight
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            batch_weight=torch.sum(weights)/batch_size
+
+            batch_weight=self.estimate_batch_weight(metadata,indel_weight=indel_weight,
+                                                    snp_weight=snp_weight)
 
             weighted_supervised_loss = supervised_loss*batch_weight
             optimized_loss = weighted_supervised_loss
