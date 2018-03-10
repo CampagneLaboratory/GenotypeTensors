@@ -48,8 +48,10 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                           performance_estimators=None):
         if performance_estimators is None:
             performance_estimators = PerformanceList()
-            performance_estimators += [LossHelper("train_loss")]
-            performance_estimators += [FloatHelper("train_grad_norm")]
+            performance_estimators += [FloatHelper("reconstruction_loss")]
+            performance_estimators += [FloatHelper("discriminator_loss")]
+            performance_estimators += [FloatHelper("generator_loss")]
+            performance_estimators += [FloatHelper("semisup_loss")]
             print('\nTraining, epoch: %d' % epoch)
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
@@ -88,13 +90,23 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                                                                  self.discriminator_prior_opt)
             generator_loss = self.net.get_generator_loss(input_u, self.encoder_generator_opt)
             semisup_loss = self.net.get_semisup_loss(input_s, target_s, self.criterion, self.encoder_semisup_opt)
-            print("Losses are: reconstruction={} discriminator={} generator={} semisup={}".format(
-                reconstruction_loss,
-                discriminator_loss,
-                generator_loss,
-                semisup_loss
-            ))
-            return performance_estimators
+            #print("Losses are: reconstruction={} discriminator={} generator={} semisup={}".format(
+            #    reconstruction_loss,
+            #    discriminator_loss,
+            #    generator_loss,
+            #    semisup_loss
+            #))
+            performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+            performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
+            performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
+            performance_estimators.set_metric(batch_idx, "semisup_loss", semisup_loss.data[0])
+
+            progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
+                         performance_estimators.progress_message(["reconstruction_loss","discriminator_loss","generator_loss","semisup_loss"]))
+            if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
+                break
+        return performance_estimators
+
     def test_semisup_aae(self, epoch, performance_estimators=None):
         print('\nTesting, epoch: %d' % epoch)
         if performance_estimators is None:
