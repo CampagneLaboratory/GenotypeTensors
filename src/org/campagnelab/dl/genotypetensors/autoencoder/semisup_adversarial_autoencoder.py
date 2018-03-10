@@ -1,12 +1,14 @@
 import torch
 from torch import nn
+from torch.autograd import Variable
 
 from org.campagnelab.dl.utils.utils import draw_from_categorical, draw_from_gaussian
 
 
 class _SemiSupAdvEncoder(nn.Module):
+    """The encoder takes inputs and maps them to the latent space (of dimension latent_code_dim). """
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10,
-                 prior_dim=2):
+                 latent_code_dim=2):
         super().__init__()
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
@@ -26,17 +28,20 @@ class _SemiSupAdvEncoder(nn.Module):
                 nn.SELU()
             ]
         self.encoder_base = nn.Sequential(*encoder_list)
-        self.cat_encoder = nn.Linear(n_dim, num_classes)
-        self.prior_encoder = nn.Linear(n_dim, prior_dim)
+        self.latent_encoder = nn.Linear(n_dim, latent_code_dim)
+        self.category_encoder = nn.Linear(n_dim, num_classes)
     
     def forward(self, model_input):
+        """Accepts inputs and produces a tuple of predicted categories and latent code."""
         if model_input.data.is_cuda and self.ngpus > 1:
-            cat_encoded = nn.parallel.data_parallel(self.cat_encoder, model_input, self.device_list)
-            prior_encoded = nn.parallel.data_parallel(self.prior_encoder, model_input, self.device_list)
+            base = nn.parallel.data_parallel(self.encoder_base, model_input, self.device_list)
+            latent_code = nn.parallel.data_parallel(self.latent_encoder, base, self.device_list)
+            category_encoded = nn.parallel.data_parallel(self.category_encoder, base, self.device_list)
         else:
-            cat_encoded = self.cat_encoder(model_input)
-            prior_encoded = self.prior_encoder(model_input)
-        return cat_encoded, prior_encoded
+            base = self.encoder_base(model_input)
+            latent_code = self.latent_encoder(base)
+            category_encoded = self.category_encoder(base)
+        return  category_encoded, latent_code
 
 
 class _SemiSupAdvDecoder(nn.Module):
@@ -152,7 +157,7 @@ class SemiSupAdvAutoencoder(nn.Module):
         super().__init__()
         self.encoder = _SemiSupAdvEncoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                           num_hidden_layers=num_hidden_layers, num_classes=num_classes,
-                                          prior_dim=prior_dim)
+                                          latent_code_dim=prior_dim)
         self.decoder = _SemiSupAdvDecoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                           num_hidden_layers=num_hidden_layers, num_classes=num_classes,
                                           prior_dim=prior_dim)
@@ -171,14 +176,15 @@ class SemiSupAdvAutoencoder(nn.Module):
         return self.decoder(self._get_concat_code(model_input))
 
     def _get_concat_code(self, model_input):
-        latent_categorical_code, latent_gaussian_code = self.encoder(model_input)
-        return torch.cat(latent_categorical_code, latent_gaussian_code, 1)
+        category_code, latent_code = self.encoder(model_input)
+        return torch.cat([category_code, latent_code], 1)
 
     def get_reconstruction_loss(self, model_input, criterion, *opts):
         self.decoder.train()
         latent_code = self._get_concat_code(model_input)
         reconstructed_model_input = self.decoder(latent_code)
-        recon_loss_backward = criterion(model_input + self.delta, reconstructed_model_input + self.delta)
+        model_output=Variable(model_input.data+self.delta,requires_grad=False)
+        recon_loss_backward = criterion(reconstructed_model_input + self.delta,model_output)
         recon_loss = recon_loss_backward
         recon_loss_backward.backward()
         for opt in opts:
@@ -242,8 +248,10 @@ class SemiSupAdvAutoencoder(nn.Module):
 def create_semisup_adv_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1, nreplicas=1, dropout_p=0,
                                          n_dim=500, num_hidden_layers=1, prior_dim=2):
     input_size = problem.input_size("input")
-    assert len(input_size) == 1, "AutoEncoders required 1D input features."
+    num_classes = problem.output_size("softmaxGenotype")
+    assert len(input_size) == 1, "AutoEncoders require 1D input features."
+    assert len(num_classes) == 1, "AutoEncoders require 1D output features."
     semisup_adv_autoencoder = SemiSupAdvAutoencoder(input_size=input_size[0], n_dim=n_dim, ngpus=ngpus,
                                                     dropout_p=dropout_p, num_hidden_layers=num_hidden_layers,
-                                                    num_classes=encoded_size, prior_dim=prior_dim)
+                                                    num_classes=num_classes[0], prior_dim=prior_dim)
     return semisup_adv_autoencoder
