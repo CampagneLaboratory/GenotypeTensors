@@ -100,7 +100,7 @@ class _SemiSupAdvDiscriminatorCat(nn.Module):
             nn.Linear(n_dim, 1),
             nn.Sigmoid()
         ]
-        self.cat_discriminator = nn.Sequential(*self.layer_list)
+        self.cat_discriminator = nn.Sequential(*layer_list)
     
     def forward(self, model_input):
         if model_input.data.is_cuda and self.ngpus > 1:
@@ -136,7 +136,7 @@ class _SemiSupAdvDiscriminatorPrior(nn.Module):
             nn.Linear(n_dim, 1),
             nn.Sigmoid()
         ]
-        self.prior_discriminator = nn.Sequential(*self.layer_list)
+        self.prior_discriminator = nn.Sequential(*layer_list)
     
     def forward(self, model_input):
         if model_input.data.is_cuda and self.ngpus > 1:
