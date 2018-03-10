@@ -1,6 +1,8 @@
+import numpy
 import torch
 from torch import nn
 from torch.autograd import Variable
+from torch.distributions import Categorical
 
 from org.campagnelab.dl.utils.utils import draw_from_categorical, draw_from_gaussian
 
@@ -84,6 +86,7 @@ class _SemiSupAdvDiscriminatorCat(nn.Module):
         super().__init__()
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
+        self.num_classes=num_classes
 
         layer_list = [
             nn.BatchNorm1d(num_classes),
@@ -107,11 +110,11 @@ class _SemiSupAdvDiscriminatorCat(nn.Module):
         ]
         self.cat_discriminator = nn.Sequential(*layer_list)
     
-    def forward(self, model_input):
-        if model_input.data.is_cuda and self.ngpus > 1:
-            category = nn.parallel.data_parallel(self.cat_discriminator, model_input, self.device_list)
+    def forward(self, categories):
+        if categories.data.is_cuda and self.ngpus > 1:
+            category = nn.parallel.data_parallel(self.cat_discriminator, categories, self.device_list)
         else:
-            category = self.cat_discriminator(model_input)
+            category = self.cat_discriminator(categories)
         return category
 
 
@@ -153,7 +156,7 @@ class _SemiSupAdvDiscriminatorPrior(nn.Module):
 
 class SemiSupAdvAutoencoder(nn.Module):
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, prior_dim=2,
-                 delta=1E-15, seed=None):
+                 delta=1E-15, seed=None, mini_batch=7):
         super().__init__()
         self.encoder = _SemiSupAdvEncoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                           num_hidden_layers=num_hidden_layers, num_classes=num_classes,
@@ -171,6 +174,7 @@ class SemiSupAdvAutoencoder(nn.Module):
         self.prior_dim = prior_dim
         self.num_classes = num_classes
         self.seed = seed
+        self.categorical_distribution=None
 
     def forward(self, model_input):
         return self.decoder(self._get_concat_code(model_input))
@@ -192,14 +196,31 @@ class SemiSupAdvAutoencoder(nn.Module):
         self.zero_grad()
         return recon_loss
 
+    def get_category_sample(self,mini_batch_size, num_classes):
+        if self.categorical_distribution is None:
+            # initialize a distribution to sample from num_classes with equal probability:
+            self.categorical_distribution = Categorical(
+            probs=numpy.reshape(torch.FloatTensor([1.0 / num_classes] * num_classes * mini_batch_size),
+                                    (mini_batch_size, num_classes)))
+            self.categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
+
+        categories_as_int = self.categorical_distribution.sample().view(mini_batch_size, -1)
+        self.categories_one_hot.zero_()
+        self.categories_one_hot.scatter_(1,categories_as_int,1)
+
+        categories_real = Variable(self.categories_one_hot.clone(), requires_grad=True)
+        return categories_real
+
     def get_discriminator_loss(self, model_input, *opts):
         self.encoder.eval()
         mini_batch_size = model_input.data.size()[0]
-        categories_real = draw_from_categorical(self.num_classes, mini_batch_size)
+
+        categories_real=self.get_category_sample(mini_batch_size,num_classes=self.num_classes)
         prior_real = draw_from_gaussian(self.prior_dim, mini_batch_size)
+
         if model_input.data.is_cuda:
-            categories_real.cuda()
-            prior_real.cuda()
+            categories_real=categories_real.cuda()
+            prior_real=prior_real.cuda()
         categories_input, prior_input = self.encoder(model_input)
         cat_prob_real = self.discriminator_cat(categories_real)
         cat_prob_input = self.discriminator_cat(categories_input)

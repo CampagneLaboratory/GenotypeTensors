@@ -94,7 +94,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 generator_loss,
                 semisup_loss
             ))
-
+            return performance_estimators
     def test_semisup_aae(self, epoch, performance_estimators=None):
         print('\nTesting, epoch: %d' % epoch)
         if performance_estimators is None:
