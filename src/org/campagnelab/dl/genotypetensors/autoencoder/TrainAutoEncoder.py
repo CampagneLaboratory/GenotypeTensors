@@ -111,7 +111,7 @@ if __name__ == '__main__':
                              'performances are reported in the log until new ones are available.'
                              'This parameter does not affect testing for the last 10 epochs of a run, each test is '
                              'performed for these epochs.', default=1)
-    parser.add_argument('--n-dim', type=int,
+    parser.add_argument('--n-dim', type=int, default=500,
                         help='Number of units in hidden layers for semisupervised adversarial autoencoders')
 
     args = parser.parse_args()
