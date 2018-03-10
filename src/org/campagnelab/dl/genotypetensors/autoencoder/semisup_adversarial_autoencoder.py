@@ -184,7 +184,10 @@ class SemiSupAdvAutoencoder(nn.Module):
             self.semisup_loss_criterion = MultiLabelSoftMarginLoss(weight=weights)
 
     def forward(self, model_input):
-        return self.decoder(self._get_concat_code(model_input))
+        """Return the predicted category (as one hot encoding)."""
+        category_code, latent_code = self.encoder(model_input)
+        return category_code
+
 
     def _get_concat_code(self, model_input):
         category_code, latent_code = self.encoder(model_input)
@@ -247,9 +250,9 @@ class SemiSupAdvAutoencoder(nn.Module):
 
     def get_generator_loss(self, model_input):
 
-        categories_input, prior_input = self.encoder(model_input)
+        categories_input, hidden_state = self.encoder(model_input)
         cat_prob_input = self.discriminator_cat(categories_input)
-        prior_prob_input = self.discriminator_prior(prior_input)
+        prior_prob_input = self.discriminator_prior(hidden_state)
         generator_loss =  -torch.mean(torch.log(cat_prob_input + self.epsilon))
         generator_loss += -torch.mean(torch.log(prior_prob_input + self.epsilon))
 

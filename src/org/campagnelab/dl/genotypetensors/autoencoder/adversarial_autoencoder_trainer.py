@@ -156,8 +156,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             input_s = data_dict["validation"]["input"]
             target_s = data_dict["validation"]["softmaxGenotype"]
 
-            # Forward pass of semisup AAE returns reconstructed inputs
+            # Estimate the reconstruction loss on validation examples:
             reconstruction_loss=self.net.get_reconstruction_loss(input_s)
+
             # now evaluate prediction of categories:
             categories_predicted, latent_code = self.net.encoder(input_s)
             categories_predicted_p = self.get_p(categories_predicted)
