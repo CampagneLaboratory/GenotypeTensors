@@ -156,7 +156,7 @@ class _SemiSupAdvDiscriminatorPrior(nn.Module):
 
 class SemiSupAdvAutoencoder(nn.Module):
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, prior_dim=2,
-                 delta=1E-15, seed=None, mini_batch=7):
+                 epsilon=1E-15, seed=None, mini_batch=7):
         super().__init__()
         self.encoder = _SemiSupAdvEncoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                           num_hidden_layers=num_hidden_layers, num_classes=num_classes,
@@ -170,7 +170,7 @@ class SemiSupAdvAutoencoder(nn.Module):
         self.discriminator_prior = _SemiSupAdvDiscriminatorPrior(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                                                  num_hidden_layers=num_hidden_layers,
                                                                  prior_dim=prior_dim)
-        self.delta = delta
+        self.epsilon = epsilon
         self.prior_dim = prior_dim
         self.num_classes = num_classes
         self.seed = seed
@@ -187,8 +187,8 @@ class SemiSupAdvAutoencoder(nn.Module):
         self.decoder.train()
         latent_code = self._get_concat_code(model_input)
         reconstructed_model_input = self.decoder(latent_code)
-        model_output=Variable(model_input.data+self.delta,requires_grad=False)
-        recon_loss_backward = criterion(reconstructed_model_input + self.delta,model_output)
+        model_output=Variable(model_input.data + self.epsilon, requires_grad=False)
+        recon_loss_backward = criterion(reconstructed_model_input + self.epsilon, model_output)
         recon_loss = recon_loss_backward
         recon_loss_backward.backward()
         for opt in opts:
@@ -227,10 +227,10 @@ class SemiSupAdvAutoencoder(nn.Module):
         prior_prob_real = self.discriminator_prior(prior_real)
         prior_prob_input = self.discriminator_prior(prior_input)
         cat_discriminator_loss = -torch.mean(
-            torch.log(cat_prob_real + self.delta) + torch.log(1 - cat_prob_input + self.delta)
+            torch.log(cat_prob_real + self.epsilon) + torch.log(1 - cat_prob_input + self.epsilon)
         )
         prior_discriminator_loss = -torch.mean(
-            torch.log(prior_prob_real + self.delta) + torch.log(1 - prior_prob_input + self.delta)
+            torch.log(prior_prob_real + self.epsilon) + torch.log(1 - prior_prob_input + self.epsilon)
         )
         discriminator_loss_backward = cat_discriminator_loss + prior_discriminator_loss
         discriminator_loss = discriminator_loss_backward
@@ -245,8 +245,8 @@ class SemiSupAdvAutoencoder(nn.Module):
         categories_input, prior_input = self.encoder(model_input)
         cat_prob_input = self.discriminator_cat(categories_input)
         prior_prob_input = self.discriminator_prior(prior_input)
-        generator_loss_backward = -torch.mean(torch.log(cat_prob_input + self.delta))
-        generator_loss_backward -= torch.mean(torch.log(prior_prob_input + self.delta))
+        generator_loss_backward = -torch.mean(torch.log(cat_prob_input + self.epsilon))
+        generator_loss_backward -= torch.mean(torch.log(prior_prob_input + self.epsilon))
         generator_loss = generator_loss_backward
         generator_loss_backward.backward()
         for opt in opts:
