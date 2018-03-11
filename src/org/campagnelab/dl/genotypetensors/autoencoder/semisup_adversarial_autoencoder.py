@@ -194,7 +194,7 @@ class SemiSupAdvAutoencoder(nn.Module):
         return torch.cat([category_code, latent_code], 1)
 
     def get_reconstruction_loss(self, model_input):
-        self.decoder.train()
+
         latent_code = self._get_concat_code(model_input)
         reconstructed_model_input = self.decoder(latent_code)
         model_output=Variable(model_input.data + self.epsilon, requires_grad=False)

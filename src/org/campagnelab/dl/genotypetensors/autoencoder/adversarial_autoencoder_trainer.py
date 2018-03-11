@@ -24,9 +24,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
     def init_model(self, create_model_function):
         super().init_model(create_model_function)
 
-        self.encoder_semisup_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
+        self.encoder_semisup_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr,
                                                    momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.encoder_generator_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
+        self.encoder_generator_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr,
                                                      momentum=self.args.momentum, weight_decay=self.args.L2)
         self.encoder_reconstruction_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
                                                           momentum=self.args.momentum, weight_decay=self.args.L2)
@@ -89,6 +89,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             # Train reconstruction phase:
             #TODO why are we not using the training example as well to train the reconstruction loss?
+            self.decoder.train()
             reconstruction_loss = self.net.get_reconstruction_loss(input_u)
             reconstruction_loss.backward()
             for opt in [self.decoder_opt, self.encoder_reconstruction_opt]:
