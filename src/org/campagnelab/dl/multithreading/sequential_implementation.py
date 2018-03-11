@@ -6,13 +6,14 @@ from torch.autograd import Variable
 
 
 class DataProvider:
-    def __init__(self, iterator, batch_names, is_cuda=False, volatile=None, requires_grad=None, recode_functions=None):
+    def __init__(self, iterator, batch_names, is_cuda=False, volatile=None, requires_grad=None, recode_functions={}):
         self.iterator = iterator
         self.batch_names = batch_names
         self.batch_index = 0
         self.is_cuda = is_cuda
         self.volatile = {} if volatile is None else volatile
         self.requires_grad = {} if requires_grad is None else requires_grad
+        self.recode_functions = recode_functions
 
     def __iter__(self):
         return self
@@ -32,6 +33,7 @@ class DataProvider:
             batch = next(self.iterator)
         except StopIteration:
             raise StopIteration
+
         for loader_index, (batch_indices, batch_data) in enumerate(batch):
             loader_name = self.batch_names[loader_index]
             data_dict[loader_name] = {}
@@ -40,6 +42,8 @@ class DataProvider:
             if len(self.volatile) == 0:
                 self.volatile[loader_name] = []
             for var_name in batch_data.keys():
+                if var_name in self.recode_functions.keys():
+                    batch_data[var_name] = self.recode_functions[var_name](batch_data[var_name])
                 var_batch = Variable(batch_data[var_name], requires_grad=(var_name in self.requires_grad[loader_name]),
                                      volatile=(var_name in self.volatile[loader_name]))
                 if is_cuda:
@@ -54,10 +58,10 @@ class DataProvider:
 
 class CpuGpuDataProvider(DataProvider):
     def __init__(self, iterator, batch_names, is_cuda=False, volatile=None, requires_grad=None, preload_n=3,
-                 preload_cuda_n=3, fake_gpu_on_cpu=False):
+                 preload_cuda_n=3, fake_gpu_on_cpu=False,recode_functions={}):
         # do not put on GPU in super
         super(CpuGpuDataProvider, self).__init__(iterator=iterator, batch_names=batch_names, is_cuda=False,
-                                                 volatile=volatile, requires_grad=requires_grad)
+                                                 volatile=volatile, requires_grad=requires_grad, recode_functions=recode_functions)
         self.is_cuda = is_cuda
         self.cpu_batches_queue = Queue(maxsize=preload_n)
         self.batch_index = 0
@@ -84,14 +88,14 @@ class CpuGpuDataProvider(DataProvider):
             raise StopIteration
 
     def populate_cpu_queue(self, recode_functions=None):
-        recode_functions = {} if recode_functions is None else recode_functions
+        #recode_functions = {} if recode_functions is None else recode_functions
         try:
             next_indices, next_data = self.__next_tuple__(False)
-            for batch_name in self.batch_names:
-                batch = next_data[batch_name]
-                for var_name in recode_functions.keys():
-                    if var_name in batch.keys():
-                        batch[var_name] = recode_functions[var_name](batch[var_name])
+            #for batch_name in self.batch_names:
+            #    batch = next_data[batch_name]
+                #for var_name in recode_functions.keys():
+                #    if var_name in batch.keys():
+                #        batch[var_name] = recode_functions[var_name](batch[var_name])
 
             self.cpu_batches_queue.put((next_indices, next_data), block=True)
         except StopIteration:
@@ -109,10 +113,10 @@ class CpuGpuDataProvider(DataProvider):
 
 class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
     def __init__(self, iterator, batch_names, is_cuda=False, volatile=None, requires_grad=None, preload_n=20,
-                 preload_cuda_n=20, recode_functions=None, fake_gpu_on_cpu=False):
+                 preload_cuda_n=20, recode_functions={}, fake_gpu_on_cpu=False):
         super().__init__(iterator, batch_names, is_cuda=is_cuda,
                          volatile=volatile, requires_grad=requires_grad, preload_n=preload_n,
-                         preload_cuda_n=preload_cuda_n, fake_gpu_on_cpu=fake_gpu_on_cpu)
+                         preload_cuda_n=preload_cuda_n, fake_gpu_on_cpu=fake_gpu_on_cpu,recode_functions=recode_functions)
         self.stop_iteration = False
         self.kill_threads = False
 
