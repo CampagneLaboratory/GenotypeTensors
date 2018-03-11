@@ -1,6 +1,6 @@
-import numpy
-import torch
 
+import torch
+import pickle
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import SmallerDataset
 
 
@@ -15,6 +15,12 @@ class Problem:
             len(self.validation_loader()) * self.mini_batch_size(),
             len(self.unlabeled_loader()) * self.mini_batch_size(),
         ))
+
+    def load_tensor(self, vector_name, tensor_kind):
+        """Return a tensor associated with this problem. Tensors are written to disk for specific problems, vectors and kinds of
+        tensor (e.g., kind=mean stores the mean of each element of the tensor across a problem)."""
+        with open(self.basename+"_"+vector_name+"."+tensor_kind, mode="rb") as tensor_file:
+            return pickle.load(tensor_file)
 
     def name(self):
         pass

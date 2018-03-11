@@ -10,6 +10,12 @@ from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar
 
 
+def normalize_mean_std(x, problem_mean, problem_std, epsilon=1E-15):
+    x -= problem_mean
+    x /= (problem_std + epsilon)
+    return x
+
+
 class AdversarialAutoencoderTrainer(CommonTrainer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -44,6 +50,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.discriminator_prior_opt,
             self.discriminator_cat_opt,
         ]
+        self.problem_mean = self.problem.load_tensor("input", "mean")
+        self.problem_std = self.problem.load_tensor("input", "std")
 
     def train_semisup_aae(self, epoch,
                           performance_estimators=None):
@@ -66,6 +74,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader = self.problem.unlabeled_loader()
+
         data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader),
             is_cuda=self.use_cuda,
@@ -73,7 +82,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             requires_grad={"training": ["input"], "unlabeled": ["input"]},
             volatile={"training": ["metaData"], "unlabeled": []},
             recode_functions={
-                "softmaxGenotype": recode_for_label_smoothing
+                "softmaxGenotype": recode_for_label_smoothing,
+                "input": lambda x: normalize_mean_std(x, problem_mean=self.problem_mean, problem_std=self.problem_std)
             })
 
         indel_weight = self.args.indel_weight_factor
@@ -87,6 +97,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             num_batches += 1
             self.zero_grad_all_optimizers()
 
+            # input_s=normalize_mean_std(input_s)
+            # input_u=normalize_mean_std(input_u)
+            # print(torch.mean(input_s,dim=0))
             # Train reconstruction phase:
             #TODO why are we not using the training example as well to train the reconstruction loss?
             self.net.decoder.train()
@@ -157,7 +170,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                                                         is_cuda=self.use_cuda,
                                                         batch_names=["validation"],
                                                         requires_grad={"validation": []},
-                                                        volatile={"validation": ["input", "softmaxGenotype"]})
+                                                        volatile={"validation": ["input", "softmaxGenotype"],
+                                                                  },
+                                                        recode_functions={
+                                                            "input": lambda x: normalize_mean_std(x,
+                                                                                                  problem_mean=self.problem_mean,
+                                                                                                  problem_std=self.problem_std)
+                                                        })
 
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["validation"]["input"]
