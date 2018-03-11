@@ -89,7 +89,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             # Train reconstruction phase:
             #TODO why are we not using the training example as well to train the reconstruction loss?
-            self.decoder.train()
+            self.net.decoder.train()
             reconstruction_loss = self.net.get_reconstruction_loss(input_u)
             reconstruction_loss.backward()
             for opt in [self.decoder_opt, self.encoder_reconstruction_opt]:
