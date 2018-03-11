@@ -42,11 +42,11 @@ if __name__ == '__main__':
         if mean is None:
             # Use the first batch to estimate mean and std:
             mean = torch.mean(x, dim=0)
-            std = torch.std(x, dim=0) + epsilon
+            std = torch.std(x, dim=0)
             n=1
         else:
             mean += torch.mean(x, dim=0)
-            std += torch.std(x, dim=0) + epsilon
+            std += torch.std(x, dim=0)
             n=n+1
         return x
 
