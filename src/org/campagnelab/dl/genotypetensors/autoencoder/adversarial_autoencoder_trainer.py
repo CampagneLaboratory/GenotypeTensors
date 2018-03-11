@@ -24,18 +24,18 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
     def init_model(self, create_model_function):
         super().init_model(create_model_function)
 
-        self.encoder_semisup_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
-                                                   momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.encoder_generator_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
-                                                     momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.encoder_reconstruction_opt = torch.optim.SGD(self.net.encoder.parameters(), lr=self.args.lr,
-                                                          momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.decoder_opt = torch.optim.SGD(self.net.decoder.parameters(), lr=self.args.lr,
-                                           momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.discriminator_prior_opt = torch.optim.SGD(self.net.discriminator_prior.parameters(), lr=self.args.lr,
-                                                       momentum=self.args.momentum, weight_decay=self.args.L2)
-        self.discriminator_cat_opt = torch.optim.SGD(self.net.discriminator_cat.parameters(), lr=self.args.lr,
-                                                     momentum=self.args.momentum, weight_decay=self.args.L2)
+        self.encoder_semisup_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr,
+                                                    weight_decay=self.args.L2)
+        self.encoder_generator_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr*0.8,
+                                                      weight_decay=self.args.L2)
+        self.encoder_reconstruction_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr*0.8,
+                                                           weight_decay=self.args.L2)
+        self.decoder_opt = torch.optim.Adam(self.net.decoder.parameters(), lr=self.args.lr*0.8,
+                                           weight_decay=self.args.L2)
+        self.discriminator_prior_opt = torch.optim.Adam(self.net.discriminator_prior.parameters(), lr=self.args.lr*0.6,
+                                                        weight_decay=self.args.L2)
+        self.discriminator_cat_opt = torch.optim.Adam(self.net.discriminator_cat.parameters(), lr=self.args.lr*0.6,
+                                                     weight_decay=self.args.L2)
         self.optimizers = [
             self.encoder_semisup_opt,
             self.encoder_generator_opt,
