@@ -211,7 +211,8 @@ if __name__ == '__main__':
                     dropout_p=train_args.dropout_probability,
                     num_layers=train_args.num_layers,
                     autoencoder_type=train_args.autoencoder_type,
-                    drop_decoder=True
+                    drop_decoder=True,
+                    prenormalized_inputs=args.normalize
                 )))
             training_loop_method = model_trainer.train_supervised
             testing_loop_method = model_trainer.test_supervised

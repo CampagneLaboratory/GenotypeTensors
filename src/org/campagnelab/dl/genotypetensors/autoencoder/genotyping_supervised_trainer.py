@@ -7,7 +7,7 @@ from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
-from org.campagnelab.dl.utils.utils import progress_bar
+from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
 
 def to_binary(n, max_value):
@@ -37,8 +37,13 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
         self.criterion_classifier = None
+        if self.args.normalize:
+            problem_mean = self.problem.load_tensor("input", "mean")
+            problem_std = self.problem.load_tensor("input", "std")
 
-
+        self.normalize_inputs = lambda x: normalize_mean_std(x, problem_mean=problem_mean,
+                                                             problem_std=problem_std) if \
+            self.args.normalize else x
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -69,7 +74,9 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                                                         batch_names=["training"],
                                                         requires_grad={"training": ["input"]},
                                                         volatile={"training": ["metaData"]},
-                                                        recode_functions={"softmaxGenotype": recode_for_label_smoothing}
+                                                        recode_functions={
+                                                            "softmaxGenotype": recode_for_label_smoothing,
+                                                             "input": self.normalize_inputs}
                                                         )
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
@@ -90,10 +97,10 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             max, target_index = torch.max(target_s, dim=1)
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
 
-            batch_weight=self.estimate_batch_weight(metadata,indel_weight=indel_weight,
-                                                    snp_weight=snp_weight)
+            batch_weight = self.estimate_batch_weight(metadata, indel_weight=indel_weight,
+                                                      snp_weight=snp_weight)
 
-            weighted_supervised_loss = supervised_loss*batch_weight
+            weighted_supervised_loss = supervised_loss * batch_weight
             optimized_loss = weighted_supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
@@ -135,7 +142,14 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                                                         is_cuda=self.use_cuda,
                                                         batch_names=["validation"],
                                                         requires_grad={"validation": []},
-                                                        volatile={"validation": ["input", "softmaxGenotype"]})
+                                                        volatile={
+                                                            "validation": ["input", "softmaxGenotype"]
+                                                        },
+                                                        recode_functions={
+                                                            "input": self.normalize_inputs
+                                                        }
+                                                        )
+
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["validation"]["input"]
             target_s = data_dict["validation"]["softmaxGenotype"]

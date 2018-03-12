@@ -45,8 +45,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.discriminator_prior_opt,
             self.discriminator_cat_opt,
         ]
-        self.problem_mean = self.problem.load_tensor("input", "mean")
-        self.problem_std = self.problem.load_tensor("input", "std")
+        if self.args.normalize:
+            problem_mean = self.problem.load_tensor("input", "mean")
+            problem_std = self.problem.load_tensor("input", "std")
+
+        self.normalize_inputs = lambda x: normalize_mean_std(x, problem_mean=problem_mean,
+                                                             problem_std=problem_std) if \
+            self.args.normalize else x
 
     def train_semisup_aae(self, epoch,
                           performance_estimators=None):
@@ -78,9 +83,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             volatile={"training": ["metaData"], "unlabeled": []},
             recode_functions={
                 "softmaxGenotype": recode_for_label_smoothing,
-                "input": lambda x: normalize_mean_std(x, problem_mean=self.problem_mean,
-                                                      problem_std=self.problem_std) if
-                self.args.normalize else x
+                "input": self.normalize_inputs
             })
 
         indel_weight = self.args.indel_weight_factor
@@ -171,10 +174,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                                                         volatile={"validation": ["input", "softmaxGenotype"],
                                                                   },
                                                         recode_functions={
-                                                            "input": lambda x: normalize_mean_std(x,
-                                                                                                  problem_mean=self.problem_mean,
-                                                                                                  problem_std=self.problem_std) if
-                                                            self.args.normalize else x
+                                                            "input": self.normalize_inputs
                                                         })
 
         for batch_idx, (_, data_dict) in enumerate(data_provider):
