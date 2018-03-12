@@ -32,45 +32,44 @@ class PredictModel:
                                                                problem_std=problem_std) if normalize \
             else x
 
+    def predict(self, iterator, output_filename, max_examples=sys.maxsize):
+        self.model.eval()
+        if self.processing_type == "multithreaded":
+            # Enable fake_GPU_on_CPU to debug on CPU
+            data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
+                                                            is_cuda=self.use_cuda,
+                                                            batch_names=["unlabeled"],
+                                                            volatile={"unlabeled": ["input"]},
+                                                            fake_gpu_on_cpu=False,
+                                                            recode_functions={
+                                                                "input": self.normalize_function
+                                                            }
+                                                            )
 
-def predict(self, iterator, output_filename, max_examples=sys.maxsize):
-    self.model.eval()
-    if self.processing_type == "multithreaded":
-        # Enable fake_GPU_on_CPU to debug on CPU
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
-                                                        is_cuda=self.use_cuda,
-                                                        batch_names=["unlabeled"],
-                                                        volatile={"unlabeled": ["input"]},
-                                                        fake_gpu_on_cpu=False,
-                                                        recode_functions={
-                                                            "input": self.normalize_function
-                                                        }
-                                                        )
+        elif self.processing_type == "sequential":
+            data_provider = DataProvider(iterator=zip(iterator),
+                                         is_cuda=self.use_cuda,
+                                         batch_names=["unlabeled"],
+                                         volatile={"unlabeled": ["input"]},
+                                         recode_functions={
+                                             "input": self.normalize_function
+                                         }
+                                         )
+        else:
+            raise Exception("Unrecognized processing type {}".format(self.processing_type))
 
-    elif self.processing_type == "sequential":
-        data_provider = DataProvider(iterator=zip(iterator),
-                                     is_cuda=self.use_cuda,
-                                     batch_names=["unlabeled"],
-                                     volatile={"unlabeled": ["input"]},
-                                     recode_functions={
-                                         "input": self.normalize_function
-                                     }
-                                     )
-    else:
-        raise Exception("Unrecognized processing type {}".format(self.processing_type))
+        with VectorWriterBinary(sample_id=0, path_with_basename=output_filename,
+                                tensor_names=self.problem.get_output_names(),
+                                domain_descriptor=self.domain_descriptor, feature_mapper=self.feature_mapper,
+                                samples=self.samples, input_files=self.input_files) as writer:
+            for batch_idx, (indices_dict, data_dict) in enumerate(data_provider):
+                input_u = data_dict["unlabeled"]["input"]
+                idxs_u = indices_dict["unlabeled"]
+                outputs = self.model(input_u)
+                writer.append(list(idxs_u), outputs, inverse_logit=True)
+                progress_bar(batch_idx * self.mini_batch_size, max_examples)
 
-    with VectorWriterBinary(sample_id=0, path_with_basename=output_filename,
-                            tensor_names=self.problem.get_output_names(),
-                            domain_descriptor=self.domain_descriptor, feature_mapper=self.feature_mapper,
-                            samples=self.samples, input_files=self.input_files) as writer:
-        for batch_idx, (indices_dict, data_dict) in enumerate(data_provider):
-            input_u = data_dict["unlabeled"]["input"]
-            idxs_u = indices_dict["unlabeled"]
-            outputs = self.model(input_u)
-            writer.append(list(idxs_u), outputs, inverse_logit=True)
-            progress_bar(batch_idx * self.mini_batch_size, max_examples)
-
-            if ((batch_idx + 1) * self.mini_batch_size) > max_examples:
-                break
-    data_provider.close()
-    print("Done")
+                if ((batch_idx + 1) * self.mini_batch_size) > max_examples:
+                    break
+        data_provider.close()
+        print("Done")
