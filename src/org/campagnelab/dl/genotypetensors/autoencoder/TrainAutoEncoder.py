@@ -113,6 +113,8 @@ if __name__ == '__main__':
                              'performed for these epochs.', default=1)
     parser.add_argument('--n-dim', type=int, default=500,
                         help='Number of units in hidden layers for semisupervised adversarial autoencoders')
+    parser.add_argument('--normalize', type=bool, default=False,
+                        help='Normalize input by mean and standard deviation.')
 
     args = parser.parse_args()
 
@@ -209,7 +211,8 @@ if __name__ == '__main__':
                     dropout_p=train_args.dropout_probability,
                     num_layers=train_args.num_layers,
                     autoencoder_type=train_args.autoencoder_type,
-                    drop_decoder=True
+                    drop_decoder=True,
+                    prenormalized_inputs=args.normalize
                 )))
             training_loop_method = model_trainer.train_supervised
             testing_loop_method = model_trainer.test_supervised
@@ -224,7 +227,8 @@ if __name__ == '__main__':
                     encoded_size=train_args.encoded_size,
                     dropout_p=train_args.dropout_probability,
                     num_hidden_layers=train_args.num_layers,
-                    n_dim=train_args.n_dim
+                    n_dim=train_args.n_dim,
+                    prenormalized_inputs=args.normalize
                 )))
             training_loop_method = model_trainer.train_semisup_aae
             testing_loop_method = model_trainer.test_semisup_aae

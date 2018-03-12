@@ -8,13 +8,7 @@ from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
-from org.campagnelab.dl.utils.utils import progress_bar
-
-
-def normalize_mean_std(x, problem_mean, problem_std, epsilon=1E-5):
-    x -= problem_mean
-    x /= (problem_std + epsilon)
-    return x
+from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
 
 class AdversarialAutoencoderTrainer(CommonTrainer):
@@ -33,16 +27,17 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
         self.encoder_semisup_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr,
                                                     weight_decay=self.args.L2)
-        self.encoder_generator_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr*0.8,
+        self.encoder_generator_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr * 0.8,
                                                       weight_decay=self.args.L2)
-        self.encoder_reconstruction_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr*0.8,
+        self.encoder_reconstruction_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr * 0.8,
                                                            weight_decay=self.args.L2)
-        self.decoder_opt = torch.optim.Adam(self.net.decoder.parameters(), lr=self.args.lr*0.8,
-                                           weight_decay=self.args.L2)
-        self.discriminator_prior_opt = torch.optim.Adam(self.net.discriminator_prior.parameters(), lr=self.args.lr*0.6,
+        self.decoder_opt = torch.optim.Adam(self.net.decoder.parameters(), lr=self.args.lr * 0.8,
+                                            weight_decay=self.args.L2)
+        self.discriminator_prior_opt = torch.optim.Adam(self.net.discriminator_prior.parameters(),
+                                                        lr=self.args.lr * 0.6,
                                                         weight_decay=self.args.L2)
-        self.discriminator_cat_opt = torch.optim.Adam(self.net.discriminator_cat.parameters(), lr=self.args.lr*0.6,
-                                                     weight_decay=self.args.L2)
+        self.discriminator_cat_opt = torch.optim.Adam(self.net.discriminator_cat.parameters(), lr=self.args.lr * 0.6,
+                                                      weight_decay=self.args.L2)
         self.optimizers = [
             self.encoder_semisup_opt,
             self.encoder_generator_opt,
@@ -51,8 +46,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.discriminator_prior_opt,
             self.discriminator_cat_opt,
         ]
-        self.problem_mean = self.problem.load_tensor("input", "mean")
-        self.problem_std = self.problem.load_tensor("input", "std")
+        if self.args.normalize:
+            problem_mean = self.problem.load_tensor("input", "mean")
+            problem_std = self.problem.load_tensor("input", "std")
+
+        self.normalize_inputs = lambda x: normalize_mean_std(x, problem_mean=problem_mean,
+                                                             problem_std=problem_std) if \
+            self.args.normalize else x
 
     def train_semisup_aae(self, epoch,
                           performance_estimators=None):
@@ -84,7 +84,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             volatile={"training": ["metaData"], "unlabeled": []},
             recode_functions={
                 "softmaxGenotype": recode_for_label_smoothing,
-                "input": lambda x: normalize_mean_std(x, problem_mean=self.problem_mean, problem_std=self.problem_std)
+                "input": self.normalize_inputs
             })
 
         indel_weight = self.args.indel_weight_factor
@@ -102,7 +102,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             # input_u=normalize_mean_std(input_u)
             # print(torch.mean(input_s,dim=0))
             # Train reconstruction phase:
-            #TODO why are we not using the training example as well to train the reconstruction loss?
+            # TODO why are we not using the training example as well to train the reconstruction loss?
             self.net.decoder.train()
             reconstruction_loss = self.net.get_reconstruction_loss(input_u)
             reconstruction_loss.backward()
@@ -115,7 +115,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.net.discriminator_prior.train()
             self.zero_grad_all_optimizers()
             genotype_frequencies = self.class_frequencies["softmaxGenotype"]
-            category_prior = ( genotype_frequencies/torch.sum(genotype_frequencies)).numpy()
+            category_prior = (genotype_frequencies / torch.sum(genotype_frequencies)).numpy()
             discriminator_loss = self.net.get_discriminator_loss(input_u, category_prior=category_prior)
             discriminator_loss.backward()
             for opt in [self.discriminator_cat_opt, self.discriminator_prior_opt]:
@@ -124,7 +124,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             # Train generator:
             self.net.encoder.train()
-            generator_loss = self.net.get_generator_loss(input_u )
+            generator_loss = self.net.get_generator_loss(input_u)
             generator_loss.backward()
             for opt in [self.encoder_generator_opt]:
                 opt.step()
@@ -132,8 +132,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             self.net.encoder.train()
             semisup_loss = self.net.get_semisup_loss(input_s, target_s) \
-                * self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
-                                       snp_weight=snp_weight)
+                           * self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
+                                                        snp_weight=snp_weight)
             semisup_loss.backward()
 
             for opt in [self.encoder_semisup_opt]:
@@ -146,7 +146,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             performance_estimators.set_metric(batch_idx, "semisup_loss", semisup_loss.data[0])
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
-                         performance_estimators.progress_message(["reconstruction_loss","discriminator_loss","generator_loss","semisup_loss"]))
+                         performance_estimators.progress_message(
+                             ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
                 break
         return performance_estimators
@@ -166,7 +167,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         self.net.eval()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-        validation_loader_subset=self.problem.validation_loader_range(0, self.args.num_validation)
+        validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
         data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(validation_loader_subset),
                                                         is_cuda=self.use_cuda,
                                                         batch_names=["validation"],
@@ -174,9 +175,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                                                         volatile={"validation": ["input", "softmaxGenotype"],
                                                                   },
                                                         recode_functions={
-                                                            "input": lambda x: normalize_mean_std(x,
-                                                                                                  problem_mean=self.problem_mean,
-                                                                                                  problem_std=self.problem_std)
+                                                            "input": self.normalize_inputs
                                                         })
 
         for batch_idx, (_, data_dict) in enumerate(data_provider):
@@ -184,7 +183,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             target_s = data_dict["validation"]["softmaxGenotype"]
 
             # Estimate the reconstruction loss on validation examples:
-            reconstruction_loss=self.net.get_reconstruction_loss(input_s)
+            reconstruction_loss = self.net.get_reconstruction_loss(input_s)
 
             # now evaluate prediction of categories:
             categories_predicted, latent_code = self.net.encoder(input_s)
@@ -196,11 +195,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             #if numpy.isnan(categories_loss.data[0]):
             #    print("nan")
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],categories_predicted,target_index)
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0], categories_predicted, target_s)
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
+                                                           categories_predicted, target_index)
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0],
+                                                           categories_predicted, target_s)
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_loss","test_accuracy","reconstruction_loss"]))
+                         performance_estimators.progress_message(["test_loss", "test_accuracy", "reconstruction_loss"]))
 
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break

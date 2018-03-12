@@ -99,10 +99,14 @@ feature_mapper = checkpoint["feature_mapper"] if "domain_descriptor" in checkpoi
 samples = checkpoint["samples"] if "domain_descriptor" in checkpoint else None
 input_files = checkpoint["input_files"] if "domain_descriptor" in checkpoint else None
 
+
+normalize=hasattr(model,"prenormalized_inputs") and model.prenormalized_inputs
+
 tester = PredictModel(model=model, problem=problem, use_cuda=use_cuda,
                       domain_descriptor=domain_descriptor,
                       feature_mapper=feature_mapper, samples=samples, input_files=input_files,
-                      processing_type=args.processing, num_workers=args.num_workers)
+                      processing_type=args.processing, num_workers=args.num_workers,
+                      normalize=normalize)
 
 iterator=None
 if args.dataset=="validation":

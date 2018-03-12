@@ -29,7 +29,8 @@ class SbiSomaticClassifier(nn.Module):
 class SbiGenotypeClassifier(nn.Module):
     """ A classifier that predicts genotypes with a softmax. forward returns the output. """
 
-    def __init__(self, input_size=32, num_layers=3, target_size=10, autoencoder=None, dropout_p=0.2):
+    def __init__(self, input_size=32, num_layers=3, target_size=10, autoencoder=None,
+                 dropout_p=0.2,prenormalized_inputs=False):
         super().__init__()
         layer_list = []
         for layer in range(0, num_layers):
@@ -38,6 +39,7 @@ class SbiGenotypeClassifier(nn.Module):
         self.features = nn.Sequential(*layer_list)
         self.softmax_genotype_linear = nn.Sequential(nn.Dropout(dropout_p),nn.BatchNorm1d(input_size),nn.Linear(input_size, target_size))
         self.autoencoder = autoencoder
+        self.prenormalized_inputs=prenormalized_inputs
 
     def forward(self, input):
         """ Predicts (is_mutated_output, somatic_frequency_output) from the input. """
@@ -52,7 +54,7 @@ class SbiGenotypeClassifier(nn.Module):
 
 def create_classifier_model(model_name, problem, encoded_size=32,
                             somatic=True, ngpus=1,dropout_p=0.2, num_layers=3,
-                            autoencoder_type=2, drop_decoder=False):
+                            autoencoder_type=2, drop_decoder=False,prenormalized_inputs=False):
     input_size = problem.input_size("input")
 
     assert len(input_size) == 1, "Classifier require 1D input features."
@@ -77,6 +79,7 @@ def create_classifier_model(model_name, problem, encoded_size=32,
             autoencoder.decoder = None
         # Store it in the classifier, so we can retrieve it for unsupervised reconstruction and to optimize its parameters:
         classifier = SbiGenotypeClassifier(input_size=encoded_size, target_size=output_size[0],
-                                           autoencoder=autoencoder, dropout_p=dropout_p, num_layers=num_layers)
+                                           autoencoder=autoencoder, dropout_p=dropout_p, num_layers=num_layers,
+                                           prenormalized_inputs=prenormalized_inputs)
     print("classifier:" + str(classifier))
     return classifier
