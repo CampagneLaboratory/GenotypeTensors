@@ -223,6 +223,7 @@ class CommonTrainer:
             if self.best_model is not None:
                 self.save_model(test_loss, epoch, self.best_model, "best")
                 self.best_test_loss = test_loss
+                self.best_epoch =epoch
             else:
                 # not best model, latest is best:
                 self.save_model(test_loss, epoch, self.net, "best")
