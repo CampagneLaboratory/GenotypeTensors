@@ -114,6 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-dim', type=int, default=500,
                         help='Number of units in hidden layers for semisupervised adversarial autoencoders')
     parser.add_argument('--normalize', action='store_true', help='Normalize input by mean and standard deviation.')
+    parser.add_argument('--use_density_weights', action='store_true', help='Weight loss by the abundance of each minibatch example in the unlabled set.')
 
     args = parser.parse_args()
 
