@@ -46,6 +46,10 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.discriminator_prior_opt,
             self.discriminator_cat_opt,
         ]
+        self.schedulers=[]
+        for optimizer in self.optimizers:
+            self.schedulers += [self.create_scheduler_for_optimizer(optimizer)]
+
         if self.args.normalize:
             problem_mean = self.problem.load_tensor("input", "mean")
             problem_std = self.problem.load_tensor("input", "std")
@@ -207,9 +211,11 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 break
         # print()
 
-        # Apply learning rate schedule:
+        # Apply learning rate schedules:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
         assert test_metric is not None, self.get_test_metric_name()+"must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
-            self.scheduler_train.step(test_metric, epoch)
+            for scheduler in self.schedulers:
+                scheduler.step(test_metric, epoch)
+
         return performance_estimators

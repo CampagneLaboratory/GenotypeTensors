@@ -147,14 +147,16 @@ class CommonTrainer:
         self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
                                                   weight_decay=args.L2)
 
-        self.scheduler_train = construct_scheduler(
-            self.optimizer_training, "min", factor=0.5,
+        self.scheduler_train = self.create_scheduler_for_optimizer(self.optimizer_training)
+
+    def create_scheduler_for_optimizer(self,optimizer):
+        return construct_scheduler(
+            optimizer, "max" if self.is_better(1,0) else "min", factor=0.5,
             lr_patience=self.args.lr_patience if hasattr(self.args, 'lr_patience') else 10,
             ureg_reset_every_n_epoch=(self.args.reset_lr_every_n_epochs
                                       if hasattr(self.args, 'reset_lr_every_n_epochs')
                                       else None)
         )
-
     def log_performance_header(self, performance_estimators, kind="perfs"):
         if self.args.resume:
             return
