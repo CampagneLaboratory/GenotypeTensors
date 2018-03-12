@@ -113,8 +113,7 @@ if __name__ == '__main__':
                              'performed for these epochs.', default=1)
     parser.add_argument('--n-dim', type=int, default=500,
                         help='Number of units in hidden layers for semisupervised adversarial autoencoders')
-    parser.add_argument('--normalize', type=bool, default=False,
-                        help='Normalize input by mean and standard deviation.')
+    parser.add_argument('--normalize', action='store_true', help='Normalize input by mean and standard deviation.')
 
     args = parser.parse_args()
 
