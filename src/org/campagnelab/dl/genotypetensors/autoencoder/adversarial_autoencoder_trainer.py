@@ -172,6 +172,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                              ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
                 break
+
+        data_provider.close()
         return performance_estimators
 
     def estimate_example_density_weight(self, latent_code):
@@ -179,10 +181,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         cumulative_pdf = 0
         n_pdf = 0
         for z in latent_code:
-            cumulative_pdf += numpy.sum(norm.pdf(z.data))
-            n_pdf = n_pdf + len(z[0])
+            pdf = norm.pdf(z.data)
+            # in the early stages of training, pdf larger than 1 if latent variable far from normally distributed
+            valid_pdf=pdf[pdf <= 1]
+            cumulative_pdf += numpy.sum(valid_pdf)
+            n_pdf = n_pdf + len(valid_pdf)
         cumulative_pdf /= n_pdf
-        return 1.0 - min(1, cumulative_pdf)
+        return max(cumulative_pdf, 1-cumulative_pdf)
 
     def zero_grad_all_optimizers(self):
         for optimizer in self.optimizers:
@@ -239,12 +244,14 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                 break
         # print()
-
+        data_provider.close()
         # Apply learning rate schedules:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
         assert test_metric is not None, self.get_test_metric_name() + "must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
             for scheduler in self.schedulers:
                 scheduler.step(test_metric, epoch)
-
+        # Run the garbage collector to try to release memory we no longer need:
+        import gc
+        gc.collect()
         return performance_estimators
