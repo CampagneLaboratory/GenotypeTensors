@@ -22,6 +22,12 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         self.discriminator_cat_opt = None
         self.optimizers = []
 
+    def get_test_metric_name(self):
+        return "test_accuracy"
+
+    def is_better(self, metric, previous_metric):
+        return metric > previous_metric
+
     def init_model(self, create_model_function):
         super().init_model(create_model_function)
 

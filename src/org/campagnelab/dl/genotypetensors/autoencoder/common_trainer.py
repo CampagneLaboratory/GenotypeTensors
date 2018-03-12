@@ -198,6 +198,7 @@ class CommonTrainer:
             with open("best-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
                 perf_file.write(" ".join(map(_format_nice, metrics)))
                 perf_file.write("\n")
+            self.best_test_loss=metric
 
         self.save_model(metric, epoch, self.net, "latest")
 
@@ -221,10 +222,11 @@ class CommonTrainer:
 
             if self.best_model is not None:
                 self.save_model(test_loss, epoch, self.best_model, "best")
+                self.best_test_loss = test_loss
             else:
                 # not best model, latest is best:
                 self.save_model(test_loss, epoch, self.net, "best")
-            self.best_test_loss = test_loss
+
 
     def save_model(self, acc, epoch, model, model_label):
         model.eval()
