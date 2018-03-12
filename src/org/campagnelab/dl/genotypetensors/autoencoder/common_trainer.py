@@ -65,7 +65,7 @@ class CommonTrainer:
 
         self.args = args
         self.problem = problem
-        self.best_test_loss = sys.maxsize
+        self.best_test_loss = sys.maxsize if not self.is_better(1, 0) else -1
         self.start_epoch = 0
         self.use_cuda = use_cuda
         self.mini_batch_size = problem.mini_batch_size()
@@ -132,7 +132,7 @@ class CommonTrainer:
                 model_built = False
 
         if not model_built:
-            print('==> Building model {}'.format(args.model))
+            print('==> Building model...')
 
             self.net = create_model_function(args.model, self.problem)
             self.net.apply(init_params)
@@ -148,7 +148,7 @@ class CommonTrainer:
                                                   weight_decay=args.L2)
 
         self.scheduler_train = construct_scheduler(
-            self.optimizer_training, 'min', factor=0.5,
+            self.optimizer_training, "min", factor=0.5,
             lr_patience=self.args.lr_patience if hasattr(self.args, 'lr_patience') else 10,
             ureg_reset_every_n_epoch=(self.args.reset_lr_every_n_epochs
                                       if hasattr(self.args, 'reset_lr_every_n_epochs')
@@ -290,10 +290,10 @@ class CommonTrainer:
         return perfs
 
     def get_test_metric_name(self):
-        return "test_loss"
+        return "test_accuracy"
 
     def is_better(self, metric, best_test_loss):
-        return metric < best_test_loss
+        return metric > best_test_loss
 
     def rebuild_criterions(self, output_name, weights=None):
         """ This method set the criterions for the problem outputs. """

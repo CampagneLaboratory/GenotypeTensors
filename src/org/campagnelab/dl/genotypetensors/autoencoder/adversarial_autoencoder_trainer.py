@@ -208,8 +208,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         # print()
 
         # Apply learning rate schedule:
-        test_accuracy = performance_estimators.get_metric("test_loss")
-        assert test_accuracy is not None, "test_loss must be found among estimated performance metrics"
+        test_metric = performance_estimators.get_metric(self.get_test_metric_name())
+        assert test_metric is not None, self.get_test_metric_name()+"must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:
-            self.scheduler_train.step(test_accuracy, epoch)
+            self.scheduler_train.step(test_metric, epoch)
         return performance_estimators
