@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from torch.distributions import Categorical
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
 
+from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import recode_for_label_smoothing
 from org.campagnelab.dl.utils.utils import draw_from_categorical, draw_from_gaussian
 
 
@@ -217,7 +218,7 @@ class SemiSupAdvAutoencoder(nn.Module):
 
         return reconstruction_loss
 
-    def get_category_sample(self,mini_batch_size, num_classes,category_prior):
+    def get_category_sample(self,mini_batch_size, num_classes,category_prior, recode_labels=None):
         if self.categorical_distribution is None:
             # initialize a distribution to sample from num_classes with equal probability:
             if category_prior is None:
@@ -233,15 +234,18 @@ class SemiSupAdvAutoencoder(nn.Module):
         categories_as_int = self.categorical_distribution.sample().view(mini_batch_size, -1)
         self.categories_one_hot.zero_()
         self.categories_one_hot.scatter_(1,categories_as_int,1)
-
+        if recode_labels is not None:
+            # apply label recode function:
+            self.categories_one_hot=recode_labels(self.categories_one_hot)
         categories_real = Variable(self.categories_one_hot.clone(), requires_grad=True)
         return categories_real
 
-    def get_discriminator_loss(self, model_input, category_prior=None):
+    def get_discriminator_loss(self, model_input, category_prior=None, recode_labels=True):
 
         mini_batch_size = model_input.data.size()[0]
         categories_real=self.get_category_sample(mini_batch_size,num_classes=self.num_classes,
-                                                 category_prior=category_prior)
+                                                 category_prior=category_prior, recode_labels=recode_for_label_smoothing)
+
         prior_real = draw_from_gaussian(self.prior_dim, mini_batch_size)
 
         if model_input.data.is_cuda:

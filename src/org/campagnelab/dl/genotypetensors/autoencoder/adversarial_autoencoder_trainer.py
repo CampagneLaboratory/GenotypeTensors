@@ -112,7 +112,6 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             # input_u=normalize_mean_std(input_u)
             # print(torch.mean(input_s,dim=0))
             # Train reconstruction phase:
-            # TODO why are we not using the training example as well to train the reconstruction loss?
             self.net.decoder.train()
             reconstruction_loss = self.net.get_reconstruction_loss(input_u)
             reconstruction_loss.backward()
