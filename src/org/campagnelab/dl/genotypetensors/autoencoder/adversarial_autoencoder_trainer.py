@@ -21,6 +21,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         self.discriminator_prior_opt = None
         self.discriminator_cat_opt = None
         self.optimizers = []
+        self.normalize_inputs = None
+        self.schedulers = None
 
     def get_test_metric_name(self):
         return "test_accuracy"
@@ -52,7 +54,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.discriminator_prior_opt,
             self.discriminator_cat_opt,
         ]
-        self.schedulers=[]
+        self.schedulers = []
         for optimizer in self.optimizers:
             self.schedulers += [self.create_scheduler_for_optimizer(optimizer)]
 
@@ -61,8 +63,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             problem_std = self.problem.load_tensor("input", "std")
 
         self.normalize_inputs = lambda x: normalize_mean_std(x, problem_mean=problem_mean,
-                                                             problem_std=problem_std) if \
-            self.args.normalize else x
+                                                             problem_std=problem_std) if self.args.normalize else x
 
     def train_semisup_aae(self, epoch,
                           performance_estimators=None):
@@ -140,9 +141,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.zero_grad_all_optimizers()
 
             self.net.encoder.train()
-            semisup_loss = self.net.get_semisup_loss(input_s, target_s) \
-                           * self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
-                                                        snp_weight=snp_weight)
+            semisup_loss = (self.net.get_semisup_loss(input_s, target_s) *
+                            self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
+                                                       snp_weight=snp_weight))
             semisup_loss.backward()
 
             for opt in [self.encoder_semisup_opt]:
@@ -197,11 +198,11 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             # now evaluate prediction of categories:
             categories_predicted, latent_code = self.net.encoder(input_s)
             categories_predicted_p = self.get_p(categories_predicted)
-            categories_predicted_p[categories_predicted_p!=categories_predicted_p]=0.0
+            categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
             _, target_index = torch.max(target_s, dim=1)
             categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
 
-            #if numpy.isnan(categories_loss.data[0]):
+            # if numpy.isnan(categories_loss.data[0]):
             #    print("nan")
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
