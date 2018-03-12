@@ -226,7 +226,8 @@ if __name__ == '__main__':
                     encoded_size=train_args.encoded_size,
                     dropout_p=train_args.dropout_probability,
                     num_hidden_layers=train_args.num_layers,
-                    n_dim=train_args.n_dim
+                    n_dim=train_args.n_dim,
+                    prenormalized_inputs=args.normalize
                 )))
             training_loop_method = model_trainer.train_semisup_aae
             testing_loop_method = model_trainer.test_semisup_aae

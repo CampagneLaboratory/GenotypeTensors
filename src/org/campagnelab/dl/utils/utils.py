@@ -212,3 +212,8 @@ def draw_from_categorical(num_classes, length):
 def draw_from_gaussian(dim, length):
     return Variable(torch.randn(length, dim))
 
+def normalize_mean_std(x, problem_mean, problem_std, epsilon=1E-15):
+    """Normalize x by mean and std: returns x-mean/(std+epsilon)"""
+    x -= problem_mean
+    x /= (problem_std + epsilon)
+    return x

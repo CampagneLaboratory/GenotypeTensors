@@ -7,13 +7,7 @@ from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
-from org.campagnelab.dl.utils.utils import progress_bar
-
-
-def normalize_mean_std(x, problem_mean, problem_std, epsilon=1E-15):
-    x -= problem_mean
-    x /= (problem_std + epsilon)
-    return x
+from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
 
 class AdversarialAutoencoderTrainer(CommonTrainer):

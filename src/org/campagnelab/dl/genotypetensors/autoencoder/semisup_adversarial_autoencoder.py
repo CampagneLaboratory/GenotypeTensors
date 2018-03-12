@@ -157,8 +157,23 @@ class _SemiSupAdvDiscriminatorPrior(nn.Module):
 
 class SemiSupAdvAutoencoder(nn.Module):
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, prior_dim=2,
-                 epsilon=1E-15, seed=None, mini_batch=7):
+                 epsilon=1E-15, seed=None, mini_batch=7, prenormalized_inputs=False):
+        """
+
+        :param input_size:
+        :param n_dim:
+        :param ngpus:
+        :param dropout_p:
+        :param num_hidden_layers:
+        :param num_classes:
+        :param prior_dim:
+        :param epsilon:
+        :param seed:
+        :param mini_batch:
+        :param prenormalized_inputs: True when the inputs must be normalized by mean and std before using this model.
+        """
         super().__init__()
+        self.prenormalized_inputs=prenormalized_inputs
         self.encoder = _SemiSupAdvEncoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                           num_hidden_layers=num_hidden_layers, num_classes=num_classes,
                                           latent_code_dim=prior_dim)
@@ -266,12 +281,13 @@ class SemiSupAdvAutoencoder(nn.Module):
 
 
 def create_semisup_adv_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1, nreplicas=1, dropout_p=0,
-                                         n_dim=500, num_hidden_layers=1):
+                                         n_dim=500, num_hidden_layers=1,prenormalized_inputs=False):
     input_size = problem.input_size("input")
     num_classes = problem.output_size("softmaxGenotype")
     assert len(input_size) == 1, "AutoEncoders require 1D input features."
     assert len(num_classes) == 1, "AutoEncoders require 1D output features."
     semisup_adv_autoencoder = SemiSupAdvAutoencoder(input_size=input_size[0], n_dim=n_dim, ngpus=ngpus,
                                                     dropout_p=dropout_p, num_hidden_layers=num_hidden_layers,
-                                                    num_classes=num_classes[0], prior_dim=encoded_size)
+                                                    num_classes=num_classes[0], prior_dim=encoded_size,
+                                                    prenormalized_inputs=prenormalized_inputs)
     return semisup_adv_autoencoder
