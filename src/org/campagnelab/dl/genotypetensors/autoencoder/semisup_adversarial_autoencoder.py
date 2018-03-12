@@ -196,7 +196,7 @@ class SemiSupAdvAutoencoder(nn.Module):
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
-            self.semisup_loss_criterion = MultiLabelSoftMarginLoss(weight=weights)
+            self.semisup_loss_criterion = MultiLabelSoftMarginLoss()
 
     def forward(self, model_input):
         """Return the predicted category (as one hot encoding)."""
