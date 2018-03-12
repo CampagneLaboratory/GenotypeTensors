@@ -21,6 +21,7 @@ Common to all platforms:
 ````bash
 pip install torchvision
 pip install git+https://github.com/pytorch/tnt.git@master
+pip install scipy
 ````
 
 
