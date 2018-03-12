@@ -25,6 +25,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         self.discriminator_cat_opt = None
         self.optimizers = []
         self.use_pdf = args.use_density_weights
+        self.normalize_inputs = None
+        self.schedulers = None
 
     def get_test_metric_name(self):
         return "test_accuracy"
@@ -65,8 +67,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             problem_std = self.problem.load_tensor("input", "std")
 
         self.normalize_inputs = lambda x: normalize_mean_std(x, problem_mean=problem_mean,
-                                                             problem_std=problem_std) if \
-            self.args.normalize else x
+                                                             problem_std=problem_std) if self.args.normalize else x
 
     def train_semisup_aae(self, epoch,
                           performance_estimators=None):
