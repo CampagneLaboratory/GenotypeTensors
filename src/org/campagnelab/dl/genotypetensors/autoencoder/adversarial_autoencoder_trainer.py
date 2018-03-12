@@ -1,3 +1,4 @@
+import numpy
 import torch
 from torch.autograd import Variable
 
@@ -10,7 +11,7 @@ from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar
 
 
-def normalize_mean_std(x, problem_mean, problem_std, epsilon=1E-15):
+def normalize_mean_std(x, problem_mean, problem_std, epsilon=1E-5):
     x -= problem_mean
     x /= (problem_std + epsilon)
     return x
@@ -188,9 +189,12 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             # now evaluate prediction of categories:
             categories_predicted, latent_code = self.net.encoder(input_s)
             categories_predicted_p = self.get_p(categories_predicted)
+            categories_predicted_p[categories_predicted_p!=categories_predicted_p]=0.0
             _, target_index = torch.max(target_s, dim=1)
             categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
 
+            #if numpy.isnan(categories_loss.data[0]):
+            #    print("nan")
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],categories_predicted,target_index)
             performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0], categories_predicted, target_s)
