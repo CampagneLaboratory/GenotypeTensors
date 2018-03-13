@@ -53,7 +53,11 @@ class DataProvider:
         return indices_dict, data_dict
 
     def close(self):
-        pass
+        try:
+            self.iterator.close()
+        except:
+           pass
+        del self.iterator
 
 
 class CpuGpuDataProvider(DataProvider):
@@ -171,6 +175,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
             raise StopIteration
 
     def close(self):
+        super().close()
         self.kill_threads = True
         time.sleep(1)
 
