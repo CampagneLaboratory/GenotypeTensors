@@ -116,8 +116,8 @@ if __name__ == '__main__':
     parser.add_argument('--normalize', action='store_true', help='Normalize input by mean and standard deviation.')
     parser.add_argument('--use_density_weights', action='store_true',
                         help='Weight loss by the abundance of each minibatch example in the unlabled set.')
-    parser.add_argument("--latent-code-output", type=str, help="Basename of file to save latent code torch tensors in")
-    parser.add_argument("--latent-code-n", type=int, default=10000,
+    parser.add_argument("--latent-code-output", type=str, help="Basename of file to save latent code histograms in")
+    parser.add_argument("--latent-code-n-per-minibatch", type=int, default=10,
                         help="Number of examples to save latent codes for")
 
     args = parser.parse_args()

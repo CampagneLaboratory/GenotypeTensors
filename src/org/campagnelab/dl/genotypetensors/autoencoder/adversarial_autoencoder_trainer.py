@@ -169,10 +169,10 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             if self.args.latent_code_output is not None:
                 _, latent_code = self.net.encoder(input_u)
-
-                for row_idx in range(latent_code.size()[0]):
-                    if len(latent_codes) < self.args.latent_code_n:
-                        latent_codes.append(latent_code[row_idx])
+                # Randomly select n rows from the minibatch to keep track of the latent codes for
+                idxs_to_sample = torch.randperm(latent_code.size()[0])[:self.args.latent_code_n_per_minibatch]
+                for row_idx in idxs_to_sample:
+                    latent_codes.append(latent_code[row_idx])
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
                          performance_estimators.progress_message(
@@ -183,7 +183,12 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         data_provider.close()
 
         if self.args.latent_code_output is not None:
-            torch.save(torch.stack(latent_codes), "{}_{}.pt".format(self.args.latent_code_output, epoch))
+            # Each dimension in latent code should be Gaussian distributed, so take histogram of each column
+            # Plot histograms later to see how they compare to Gaussian
+            latent_code_tensor = torch.stack(latent_codes)
+            latent_code_histograms = [torch.histc(latent_code_tensor[:, col_idx])
+                                      for col_idx in range(latent_code_tensor.size()[1])]
+            torch.save(latent_code_histograms, "{}_{}.pt".format(self.args.latent_code_output, epoch))
         return performance_estimators
 
     def estimate_example_density_weight(self, latent_code):
