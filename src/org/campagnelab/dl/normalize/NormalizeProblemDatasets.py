@@ -5,7 +5,6 @@ import sys
 import threading
 
 import torch
-from pickle import dump
 
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
@@ -106,9 +105,7 @@ if __name__ == '__main__':
     # Calculate standard deviation as sqrt((sum_sdm * (1 / n - 1))
     print("Calculating the standard deviation")
     std = torch.pow(sum_sdm_n * (1 / (n - 1)), 0.5)
-    with open(problem.basename + "_" + args.vector_name + ".mean", mode="wb") as mean_file:
-        dump(mean, file=mean_file)
-    with open(problem.basename + "_" + args.vector_name + ".std", mode="wb") as std_file:
-        dump(std, file=std_file)
+    torch.save(mean, problem.basename + "_" + args.vector_name + ".mean")
+    torch.save(std, problem.basename + "_" + args.vector_name + ".std")
     print("Mean and std estimated and written.")
     sys.exit(0)

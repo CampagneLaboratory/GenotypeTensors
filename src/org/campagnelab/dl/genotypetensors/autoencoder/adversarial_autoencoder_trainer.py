@@ -106,6 +106,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
 
+        latent_codes = []
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["training"]["input"]
             target_s = data_dict["training"]["softmaxGenotype"]
@@ -153,8 +154,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 weight = self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
                                                     snp_weight=snp_weight)
             self.net.encoder.train()
-            semisup_loss = self.net.get_semisup_loss(input_s, target_s) \
-                           * weight
+            semisup_loss = self.net.get_semisup_loss(input_s, target_s) * weight
             semisup_loss.backward()
 
             for opt in [self.encoder_semisup_opt]:
@@ -167,6 +167,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             performance_estimators.set_metric(batch_idx, "semisup_loss", semisup_loss.data[0])
             performance_estimators.set_metric(batch_idx, "weight", weight)
 
+            if self.args.latent_code_output is not None:
+                _, latent_code = self.net.encoder(input_u)
+
+                for row_idx in range(latent_code.size()[0]):
+                    if len(latent_codes) < self.args.latent_code_n:
+                        latent_codes.append(latent_code[row_idx])
+
             progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
                          performance_estimators.progress_message(
                              ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
@@ -174,16 +181,18 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 break
 
         data_provider.close()
+
+        if self.args.latent_code_output is not None:
+            torch.save(torch.stack(latent_codes), "{}_{}.pt".format(self.args.latent_code_output, epoch))
         return performance_estimators
 
     def estimate_example_density_weight(self, latent_code):
-
         cumulative_pdf = 0
         n_pdf = 0
         for z in latent_code:
             pdf = norm.pdf(z.data)
             # in the early stages of training, pdf larger than 1 if latent variable far from normally distributed
-            valid_pdf=pdf[pdf <= 1]
+            valid_pdf = pdf[pdf <= 1]
             cumulative_pdf += numpy.sum(valid_pdf)
             n_pdf = n_pdf + len(valid_pdf)
         cumulative_pdf /= n_pdf
@@ -247,7 +256,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         data_provider.close()
         # Apply learning rate schedules:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
-        assert test_metric is not None, self.get_test_metric_name() + "must be found among estimated performance metrics"
+        assert test_metric is not None, (self.get_test_metric_name()
+                                         + "must be found among estimated performance metrics")
         if not self.args.constant_learning_rates:
             for scheduler in self.schedulers:
                 scheduler.step(test_metric, epoch)

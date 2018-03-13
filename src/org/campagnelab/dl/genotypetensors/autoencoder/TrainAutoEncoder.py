@@ -114,7 +114,11 @@ if __name__ == '__main__':
     parser.add_argument('--n-dim', type=int, default=500,
                         help='Number of units in hidden layers for semisupervised adversarial autoencoders')
     parser.add_argument('--normalize', action='store_true', help='Normalize input by mean and standard deviation.')
-    parser.add_argument('--use_density_weights', action='store_true', help='Weight loss by the abundance of each minibatch example in the unlabled set.')
+    parser.add_argument('--use_density_weights', action='store_true',
+                        help='Weight loss by the abundance of each minibatch example in the unlabled set.')
+    parser.add_argument("--latent-code-output", type=str, help="Basename of file to save latent code torch tensors in")
+    parser.add_argument("--latent-code-n", type=int, default=10000,
+                        help="Number of examples to save latent codes for")
 
     args = parser.parse_args()
 
@@ -233,10 +237,6 @@ if __name__ == '__main__':
             training_loop_method = model_trainer.train_semisup_aae
             testing_loop_method = model_trainer.test_semisup_aae
 
-        elif train_args.mode == "semisupervised_autoencoder_genotypes":
-            model_trainer = None
-            print("N/A")
-            exit(1)
         else:
             model_trainer = None
             print("unknown mode specified: " + train_args.mode)

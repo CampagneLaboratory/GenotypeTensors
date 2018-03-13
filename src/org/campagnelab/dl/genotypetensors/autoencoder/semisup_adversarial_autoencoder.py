@@ -45,7 +45,7 @@ class _SemiSupAdvEncoder(nn.Module):
             base = self.encoder_base(model_input)
             latent_code = self.latent_encoder(base)
             category_encoded = self.category_encoder(base)
-        return  category_encoded, latent_code
+        return category_encoded, latent_code
 
 
 class _SemiSupAdvDecoder(nn.Module):
