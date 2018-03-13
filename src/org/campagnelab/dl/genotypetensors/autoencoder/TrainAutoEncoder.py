@@ -119,6 +119,8 @@ if __name__ == '__main__':
     parser.add_argument("--latent-code-output", type=str, help="Basename of file to save latent code histograms in")
     parser.add_argument("--latent-code-n-per-minibatch", type=int, default=10,
                         help="Number of examples to save latent codes for")
+    parser.add_argument("--latent-code-bins", type=int, default=100,
+                        help="Number of bins in histogram for latent code distributions")
 
     args = parser.parse_args()
 
