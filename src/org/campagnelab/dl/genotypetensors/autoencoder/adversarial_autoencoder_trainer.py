@@ -10,7 +10,7 @@ from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
-from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
+from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std, draw_from_gaussian
 from random import *
 
 
@@ -107,6 +107,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         snp_weight = 1.0
 
         latent_codes = []
+        gaussian_codes = []
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["training"]["input"]
             target_s = data_dict["training"]["softmaxGenotype"]
@@ -172,7 +173,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 # Randomly select n rows from the minibatch to keep track of the latent codes for
                 idxs_to_sample = torch.randperm(latent_code.size()[0])[:self.args.latent_code_n_per_minibatch]
                 for row_idx in idxs_to_sample:
-                    latent_codes.append(latent_code[row_idx])
+                    latent_code_row = latent_code[row_idx]
+                    gaussian_codes.append(torch.squeeze(draw_from_gaussian(latent_code_row.size()[0], 1)))
+                    latent_codes.append(latent_code_row)
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
                          performance_estimators.progress_message(
@@ -189,7 +192,14 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             latent_code_histograms = [torch.histc(latent_code_tensor[:, col_idx],
                                                   bins=self.args.latent_code_bins).data.numpy()
                                       for col_idx in range(latent_code_tensor.size()[1])]
-            torch.save(latent_code_histograms, "{}_{}.pt".format(self.args.latent_code_output, epoch))
+            gaussian_code_tensor = torch.stack(gaussian_codes)
+            gaussian_code_histograms = [torch.histc(gaussian_code_tensor[:, col_idx],
+                                                    bins=self.args.latent_code_bins).data.numpy()
+                                        for col_idx in range(gaussian_code_tensor.size()[1])]
+            torch.save({
+                "latent": latent_code_histograms,
+                "gaussian": gaussian_code_histograms,
+            }, "{}_{}.pt".format(self.args.latent_code_output, epoch))
         return performance_estimators
 
     def estimate_example_density_weight(self, latent_code):
