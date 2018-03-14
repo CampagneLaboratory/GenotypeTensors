@@ -38,6 +38,8 @@ from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_crossencoder_tra
     AdversarialCrossencoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
+from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_mixup_trainer import \
+    GenotypingSupervisedMixupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_trainer import GenotypingSupervisedTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_trainer import GenotypingAutoEncoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.sbi_classifier import create_classifier_model
@@ -126,6 +128,8 @@ if __name__ == '__main__':
                         help="Number of examples to save latent codes for")
     parser.add_argument("--latent-code-bins", type=int, default=100,
                         help="Number of bins in histogram for latent code distributions")
+    parser.add_argument("--mixup-alpha", type=float, default=0.2,
+                        help="Alpha for supervised genotype with mixup")
 
     args = parser.parse_args()
 
@@ -246,7 +250,7 @@ if __name__ == '__main__':
 
         elif train_args.mode == "supervised_crossencoder":
             model_trainer = AdversarialCrossencoderTrainer(args=train_args, problem=train_problem,
-                                                          use_cuda=train_use_cuda)
+                                                           use_cuda=train_use_cuda)
             model_trainer.init_model(create_model_function=(
                 lambda model_name, problem_type: create_semisup_adv_autoencoder_model(
                     model_name,
@@ -259,6 +263,25 @@ if __name__ == '__main__':
                 )))
             training_loop_method = model_trainer.train_semisup_aae
             testing_loop_method = model_trainer.test_semisup_aae
+
+        elif train_args.mode == "supervised_mixup_genotypes":
+            model_trainer = GenotypingSupervisedMixupTrainer(args=train_args, problem=train_problem,
+                                                             use_cuda=train_use_cuda)
+            model_trainer.init_model(create_model_function=(
+                lambda model_name, problem_type: create_classifier_model(
+                    model_name,
+                    problem_type,
+                    encoded_size=train_args.encoded_size,
+                    somatic=False,
+                    ngpus=train_args.num_gpus,
+                    dropout_p=train_args.dropout_probability,
+                    num_layers=train_args.num_layers,
+                    autoencoder_type=train_args.autoencoder_type,
+                    drop_decoder=True,
+                    prenormalized_inputs=args.normalize
+                )))
+            training_loop_method = model_trainer.train_supervised_mixup
+            testing_loop_method = model_trainer.test_supervised_mixup
 
         else:
             model_trainer = None

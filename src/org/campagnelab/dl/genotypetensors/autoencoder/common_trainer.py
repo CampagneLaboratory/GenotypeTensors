@@ -354,15 +354,21 @@ class CommonTrainer:
         output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
         return output_s_p
 
+    def sum_batch_weight(self, meta_data, indel_weight, snp_weight):
+        is_indel = meta_data.split(dim=1, split_size=1)[1]
+        weights = is_indel.data.clone()
+        weights[is_indel.data != 0] = indel_weight
+        weights[is_indel.data == 0] = snp_weight
+        return len(is_indel), torch.sum(weights)
+
     def estimate_batch_weight(self, meta_data, indel_weight, snp_weight):
         """Estimate a weight that gives more importance to batches with more indels in them.
         Helps optimization focus on indel predictions. Indel information is extracted
         from the meta_data field. """
-        is_indel = meta_data.split(dim=1, split_size=1)[1]
-        batch_size = len(is_indel)
+        batch_size, weight_sum = self.sum_batch_weight(meta_data, indel_weight, snp_weight)
+        return weight_sum / batch_size
 
-        weights = is_indel.data.clone()
-        weights[is_indel.data != 0] = indel_weight
-        weights[is_indel.data == 0] = snp_weight
-        batch_weight = torch.sum(weights) / batch_size
-        return batch_weight
+    def estimate_batch_weight_mixup(self, meta_data_1, meta_data_2, indel_weight, snp_weight):
+        batch_size_1, weight_sum_1 = self.sum_batch_weight(meta_data_1, indel_weight, snp_weight)
+        batch_size_2, weight_sum_2 = self.sum_batch_weight(meta_data_2, indel_weight, snp_weight)
+        return (weight_sum_1 + weight_sum_2) / (batch_size_1 + batch_size_2)

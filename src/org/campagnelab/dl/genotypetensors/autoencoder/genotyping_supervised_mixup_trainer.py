@@ -1,5 +1,8 @@
 import torch
+from torch.autograd import Variable
 from torch.nn import MultiLabelSoftMarginLoss
+
+import numpy as np
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
@@ -31,7 +34,7 @@ def recode_as_multi_label(one_hot_vector):
     return coded
 
 
-class GenotypingSupervisedTrainer(CommonTrainer):
+class GenotypingSupervisedMixupTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
@@ -55,7 +58,59 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     def is_better(self, metric, previous_metric):
         return metric > previous_metric
 
-    def train_supervised(self, epoch):
+    def _create_data_provider(self):
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        data_provider = MultiThreadedCpuGpuDataProvider(
+            iterator=zip(train_loader_subset),
+            is_cuda=self.use_cuda,
+            batch_names=["training"],
+            requires_grad={"training": ["input"]},
+            volatile={"training": ["metaData"]},
+            recode_functions={
+                "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
+                "input": self.normalize_inputs
+            }
+        )
+        return data_provider
+
+    def _recreate_mixup_batch(self, input_1, input_2, target_1, target_2):
+
+        def _recreate_mixup_example(input_example_1, input_example_2, target_example_1, target_example_2):
+            lam = np.random.beta(self.args.mixup_alpha, self.args.mixup_alpha)
+            input_example = lam * input_example_1 + (1.0 - lam) * input_example_2
+            target_example = lam * target_example_1 + (1.0 - lam) * target_example_2
+            return input_example, target_example
+
+        input_t_1 = input_1.data.cpu()
+        input_t_2 = input_2.data.cpu()
+        target_t_1 = target_1.data.cpu()
+        target_t_2 = target_2.data.cpu()
+        assert input_t_1.size() == input_t_2.size(), ("Input 1 size {} does not equal input 2 size {} for mixup"
+                                                      .format(input_1, input_2))
+        assert target_t_1.size() == target_t_2.size(), ("Target 1 size {} does not equal target 2 size {} for mixup"
+                                                        .format(target_1, target_2))
+        assert input_t_1.size()[0] == target_t_1.size()[0], (
+            "Input tensor has {} examples, target tensor has {} examples".format(input_t_1.size()[0],
+                                                                                 target_t_1.size()[0])
+        )
+        input_t_mixup = []
+        target_t_mixup = []
+        for example_idx in range(input_t_1.size()[0]):
+            mixup_batch = _recreate_mixup_example(input_t_1[example_idx],
+                                                  input_t_2[example_idx],
+                                                  target_t_1[example_idx],
+                                                  target_t_2[example_idx])
+            input_mixup_example, target_mixup_example = mixup_batch
+            input_t_mixup.append(input_mixup_example)
+            target_t_mixup.append(target_mixup_example)
+        input_v_mixup = Variable(torch.stack(input_t_mixup))
+        target_v_mixup = Variable(torch.stack(target_t_mixup))
+        if self.use_cuda:
+            input_v_mixup = input_v_mixup.cuda()
+            target_v_mixup = target_v_mixup.cuda()
+        return input_v_mixup, target_v_mixup
+
+    def train_supervised_mixup(self, epoch):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [AccuracyHelper("train_")]
@@ -69,39 +124,34 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
         unsupervised_loss_acc = 0
         num_batches = 0
-        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(
-            iterator=zip(train_loader_subset),
-            is_cuda=self.use_cuda,
-            batch_names=["training"],
-            requires_grad={"training": ["input"]},
-            volatile={"training": ["metaData"]},
-            recode_functions={
-                "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
-                "input": self.normalize_inputs
-            }
-        )
+
+        data_provider_1 = self._create_data_provider()
+        data_provider_2 = self._create_data_provider()
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["training"]["input"]
-            target_s = data_dict["training"]["softmaxGenotype"]
-            metadata = data_dict["training"]["metaData"]
-
+        for batch_idx, ((_, data_dict_1), (_, data_dict_2)) in enumerate(zip(data_provider_1, data_provider_2)):
+            input_s_1 = data_dict_1["training"]["input"]
+            target_s_1 = data_dict_1["training"]["softmaxGenotype"]
+            input_s_2 = data_dict_2["training"]["input"]
+            target_s_2 = data_dict_2["training"]["softmaxGenotype"]
+            metadata_1 = data_dict_1["training"]["metaData"]
+            metadata_2 = data_dict_2["training"]["metaData"]
             num_batches += 1
+
+            input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_s_2, target_s_1, target_s_2)
 
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
 
             self.optimizer_training.zero_grad()
             self.net.zero_grad()
-            output_s = self.net(input_s)
+            output_s = self.net(input_s_mixup)
             output_s_p = self.get_p(output_s)
-            _, target_index = torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+            _, target_index = torch.max(target_s_mixup, dim=1)
+            supervised_loss = self.criterion_classifier(output_s_p, target_s_mixup)
 
-            batch_weight = self.estimate_batch_weight(metadata, indel_weight=indel_weight,
-                                                      snp_weight=snp_weight)
+            batch_weight = self.estimate_batch_weight_mixup(metadata_1, metadata_2, indel_weight=indel_weight,
+                                                            snp_weight=snp_weight)
 
             weighted_supervised_loss = supervised_loss * batch_weight
             optimized_loss = weighted_supervised_loss
@@ -118,7 +168,8 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
-        data_provider.close()
+        data_provider_1.close()
+        data_provider_2.close()
 
         return performance_estimators
 
@@ -129,7 +180,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
         return output_s_p
 
-    def test_supervised(self, epoch):
+    def test_supervised_mixup(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
         errors = None
         performance_estimators = PerformanceList()
