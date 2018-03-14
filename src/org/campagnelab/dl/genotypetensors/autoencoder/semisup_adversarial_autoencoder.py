@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.distributions import Categorical
-from torch.nn import MSELoss, MultiLabelSoftMarginLoss
+from torch.nn import MSELoss, MultiLabelSoftMarginLoss, Linear
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import recode_for_label_smoothing
 from org.campagnelab.dl.utils.utils import draw_from_categorical, draw_from_gaussian
@@ -174,6 +174,13 @@ class SemiSupAdvAutoencoder(nn.Module):
         :param prenormalized_inputs: True when the inputs must be normalized by mean and std before using this model.
         """
         super().__init__()
+        self.epsilon = epsilon
+        self.prior_dim = prior_dim
+        self.num_classes = num_classes
+        self.seed = seed
+        self.reconstruction_criterion = MSELoss()
+        self.semisup_loss_criterion = MultiLabelSoftMarginLoss()
+        self.categorical_distribution = None
         self.prenormalized_inputs=prenormalized_inputs
         self.encoder = _SemiSupAdvEncoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                           num_hidden_layers=num_hidden_layers, num_classes=num_classes,
@@ -187,13 +194,9 @@ class SemiSupAdvAutoencoder(nn.Module):
         self.discriminator_prior = _SemiSupAdvDiscriminatorPrior(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                                                  num_hidden_layers=num_hidden_layers,
                                                                  prior_dim=prior_dim)
-        self.epsilon = epsilon
-        self.prior_dim = prior_dim
-        self.num_classes = num_classes
-        self.seed = seed
-        self.reconstruction_criterion=MSELoss()
-        self.semisup_loss_criterion=MultiLabelSoftMarginLoss()
-        self.categorical_distribution=None
+        # Convert latent code to categories.
+        self.latent_to_categories=Linear(prior_dim,self.num_classes)
+
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -205,8 +208,10 @@ class SemiSupAdvAutoencoder(nn.Module):
         return category_code
 
 
-    def _get_concat_code(self, model_input):
+    def _get_concat_code(self, model_input, target=None):
         category_code, latent_code = self.encoder(model_input)
+        if target is not None:
+            category_code=target
         return torch.cat([category_code, latent_code], 1)
 
     def get_reconstruction_loss(self, model_input):
@@ -214,6 +219,15 @@ class SemiSupAdvAutoencoder(nn.Module):
         latent_code = self._get_concat_code(model_input)
         reconstructed_model_input = self.decoder(latent_code)
         model_output=Variable(model_input.data + self.epsilon, requires_grad=False)
+        reconstruction_loss = self.reconstruction_criterion(reconstructed_model_input + self.epsilon, model_output)
+
+        return reconstruction_loss
+
+    def get_crossconstruction_loss(self, model_input1, model_input2, target2):
+
+        latent_code = self._get_concat_code(model_input1, target2)
+        reconstructed_model_input = self.decoder(latent_code)
+        model_output=Variable(model_input2.data + self.epsilon, requires_grad=False)
         reconstruction_loss = self.reconstruction_criterion(reconstructed_model_input + self.epsilon, model_output)
 
         return reconstruction_loss
@@ -282,6 +296,13 @@ class SemiSupAdvAutoencoder(nn.Module):
         categories_input, _ = self.encoder(model_input)
         semisup_loss = self.semisup_loss_criterion(categories_input, categories_target)
         return semisup_loss
+
+    def get_crossencoder_supervised_loss(self, model_input, categories_target):
+
+        categories_input, latent_code = self.encoder(model_input)
+        predicted_categories=self.latent_to_categories(latent_code)
+        supervised_loss = self.semisup_loss_criterion(predicted_categories, categories_target)
+        return supervised_loss
 
 
 def create_semisup_adv_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1, nreplicas=1, dropout_p=0,

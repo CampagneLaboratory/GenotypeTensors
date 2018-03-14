@@ -34,6 +34,8 @@ import torch
 
 
 from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_autoencoder_trainer import AdversarialAutoencoderTrainer
+from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_crossencoder_trainer import \
+    AdversarialCrossencoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_trainer import GenotypingSupervisedTrainer
@@ -225,6 +227,22 @@ if __name__ == '__main__':
 
         elif train_args.mode == "semisupervised_autoencoder":
             model_trainer = AdversarialAutoencoderTrainer(args=train_args, problem=train_problem,
+                                                          use_cuda=train_use_cuda)
+            model_trainer.init_model(create_model_function=(
+                lambda model_name, problem_type: create_semisup_adv_autoencoder_model(
+                    model_name,
+                    problem_type,
+                    encoded_size=train_args.encoded_size,
+                    dropout_p=train_args.dropout_probability,
+                    num_hidden_layers=train_args.num_layers,
+                    n_dim=train_args.n_dim,
+                    prenormalized_inputs=args.normalize
+                )))
+            training_loop_method = model_trainer.train_semisup_aae
+            testing_loop_method = model_trainer.test_semisup_aae
+
+        elif train_args.mode == "semisupervised_crossencoder":
+            model_trainer = AdversarialCrossencoderTrainer(args=train_args, problem=train_problem,
                                                           use_cuda=train_use_cuda)
             model_trainer.init_model(create_model_function=(
                 lambda model_name, problem_type: create_semisup_adv_autoencoder_model(

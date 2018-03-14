@@ -14,7 +14,7 @@ from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 from random import *
 
 
-class AdversarialAutoencoderTrainer(CommonTrainer):
+class AdversarialCrossencoderTrainer(CommonTrainer):
     def __init__(self, args, problem, use_cuda=False):
         super().__init__(args, problem, use_cuda)
         self.encoder_semisup_opt = None
@@ -50,6 +50,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                                                         weight_decay=self.args.L2)
         self.discriminator_cat_opt = torch.optim.Adam(self.net.discriminator_cat.parameters(), lr=self.args.lr * 0.6,
                                                       weight_decay=self.args.L2)
+
+        self.category_sup_opt = torch.optim.Adam(self.net.latent_to_categories.parameters(), lr=self.args.lr* 0.6,
+                                                      weight_decay=self.args.L2)
         self.optimizers = [
             self.encoder_semisup_opt,
             self.encoder_generator_opt,
@@ -57,6 +60,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.decoder_opt,
             self.discriminator_prior_opt,
             self.discriminator_cat_opt,
+            self.category_sup_opt
         ]
         self.schedulers = []
         for optimizer in self.optimizers:
@@ -76,7 +80,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             performance_estimators += [FloatHelper("reconstruction_loss")]
             performance_estimators += [FloatHelper("discriminator_loss")]
             performance_estimators += [FloatHelper("generator_loss")]
-            performance_estimators += [FloatHelper("semisup_loss")]
+            performance_estimators += [FloatHelper("supervised_loss")]
             performance_estimators += [FloatHelper("weight")]
             print('\nTraining, epoch: %d' % epoch)
         for performance_estimator in performance_estimators:
@@ -89,15 +93,15 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
         unsupervised_loss_acc = 0
         num_batches = 0
-        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        unlabeled_loader = self.problem.unlabeled_loader()
+        train_loader_subset1 = self.problem.train_loader_subset_range(0, self.args.num_training)
+        train_loader_subset2 = self.problem.train_loader_subset_range(0, self.args.num_training)
 
         data_provider = MultiThreadedCpuGpuDataProvider(
-            iterator=zip(train_loader_subset, unlabeled_loader),
+            iterator=zip(train_loader_subset1, train_loader_subset2),
             is_cuda=self.use_cuda,
-            batch_names=["training", "unlabeled"],
-            requires_grad={"training": ["input"], "unlabeled": ["input"]},
-            volatile={"training": ["metaData"], "unlabeled": []},
+            batch_names=["training1", "training2"],
+            requires_grad={"training1": ["input"], "training2": ["input"]},
+            volatile={"training1": ["metaData"], "training2": ["metaData"]},
             recode_functions={
                 "softmaxGenotype": recode_for_label_smoothing,
                 "input": self.normalize_inputs
@@ -108,10 +112,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
         latent_codes = []
         for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["training"]["input"]
-            target_s = data_dict["training"]["softmaxGenotype"]
-            input_u = data_dict["unlabeled"]["input"]
-            meta_data = data_dict["training"]["metaData"]
+            input_s1 = data_dict["training1"]["input"]
+            input_s2 = data_dict["training2"]["input"]
+            target_s1 = data_dict["training1"]["softmaxGenotype"]
+            target_s2 = data_dict["training2"]["softmaxGenotype"]
+
+            meta_data1 = data_dict["training1"]["metaData"]
+            meta_data2 = data_dict["training2"]["metaData"]
             num_batches += 1
             self.zero_grad_all_optimizers()
 
@@ -120,7 +127,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             # print(torch.mean(input_s,dim=0))
             # Train reconstruction phase:
             self.net.decoder.train()
-            reconstruction_loss = self.net.get_reconstruction_loss(input_u)
+            reconstruction_loss = self.net.get_crossconstruction_loss(input_s1,input_s2,target_s2)
             reconstruction_loss.backward()
             for opt in [self.decoder_opt, self.encoder_reconstruction_opt]:
                 opt.step()
@@ -132,7 +139,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.zero_grad_all_optimizers()
             genotype_frequencies = self.class_frequencies["softmaxGenotype"]
             category_prior = (genotype_frequencies / torch.sum(genotype_frequencies)).numpy()
-            discriminator_loss = self.net.get_discriminator_loss(input_u, category_prior=category_prior)
+            discriminator_loss = self.net.get_discriminator_loss(input_s1, category_prior=category_prior)
             discriminator_loss.backward()
             for opt in [self.discriminator_cat_opt, self.discriminator_prior_opt]:
                 opt.step()
@@ -140,7 +147,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             # Train generator:
             self.net.encoder.train()
-            generator_loss = self.net.get_generator_loss(input_u)
+            generator_loss = self.net.get_generator_loss(input_s1)
             generator_loss.backward()
             for opt in [self.encoder_generator_opt]:
                 opt.step()
@@ -148,31 +155,25 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
             if self.use_pdf:
                 self.net.encoder.eval()
-                _, latent_code = self.net.encoder(input_s)
+                _, latent_code = self.net.encoder(input_s1)
                 weight = self.estimate_example_density_weight(latent_code)
             else:
-                weight = self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
+                weight = self.estimate_batch_weight(meta_data1, indel_weight=indel_weight,
                                                     snp_weight=snp_weight)
             self.net.encoder.train()
-            semisup_loss = self.net.get_semisup_loss(input_s, target_s) * weight
-            semisup_loss.backward()
+            self.net.latent_to_categories.train()
+            supervised_loss = self.net.get_crossencoder_supervised_loss(input_s1, target_s1) * weight
+            supervised_loss.backward()
 
-            for opt in [self.encoder_semisup_opt]:
+            for opt in [self.encoder_semisup_opt, self.category_sup_opt]:
                 opt.step()
             self.zero_grad_all_optimizers()
 
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
             performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "semisup_loss", semisup_loss.data[0])
+            performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
             performance_estimators.set_metric(batch_idx, "weight", weight)
-
-            if self.args.latent_code_output is not None:
-                _, latent_code = self.net.encoder(input_u)
-                # Randomly select n rows from the minibatch to keep track of the latent codes for
-                idxs_to_sample = torch.randperm(latent_code.size()[0])[:self.args.latent_code_n_per_minibatch]
-                for row_idx in idxs_to_sample:
-                    latent_codes.append(latent_code[row_idx])
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
                          performance_estimators.progress_message(
@@ -182,15 +183,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
         data_provider.close()
 
-        if self.args.latent_code_output is not None:
-            # Each dimension in latent code should be Gaussian distributed, so take histogram of each column
-            # Plot histograms later to see how they compare to Gaussian
-            latent_code_tensor = torch.stack(latent_codes)
-            latent_code_histograms = [torch.histc(latent_code_tensor[:, col_idx],
-                                                  bins=self.args.latent_code_bins).data.numpy()
-                                      for col_idx in range(latent_code_tensor.size()[1])]
-            torch.\
-                save(latent_code_histograms, "{}_{}.pt".format(self.args.latent_code_output, epoch))
+
         return performance_estimators
 
     def estimate_example_density_weight(self, latent_code):
@@ -231,16 +224,17 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                                                         recode_functions={
                                                             "input": self.normalize_inputs
                                                         })
-
+        self.net.eval()
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["validation"]["input"]
             target_s = data_dict["validation"]["softmaxGenotype"]
 
             # Estimate the reconstruction loss on validation examples:
-            reconstruction_loss = self.net.get_reconstruction_loss(input_s)
+            reconstruction_loss = self.net.get_crossconstruction_loss(input_s,input_s,target_s)
 
             # now evaluate prediction of categories:
             categories_predicted, latent_code = self.net.encoder(input_s)
+            categories_predicted=self.net.latent_to_categories(latent_code)
             categories_predicted_p = self.get_p(categories_predicted)
             categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
             _, target_index = torch.max(target_s, dim=1)
