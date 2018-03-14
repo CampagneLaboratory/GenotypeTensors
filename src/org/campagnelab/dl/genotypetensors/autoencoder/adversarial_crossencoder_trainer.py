@@ -37,22 +37,20 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
     def init_model(self, create_model_function):
         super().init_model(create_model_function)
 
-        self.encoder_semisup_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr,
+        self.encoder_semisup_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr*0.5,
                                                     weight_decay=self.args.L2)
-        self.encoder_generator_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr * 0.8,
+        self.encoder_generator_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr ,
                                                       weight_decay=self.args.L2)
-        self.encoder_reconstruction_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr * 0.8,
+        self.encoder_reconstruction_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr,
                                                            weight_decay=self.args.L2)
-        self.decoder_opt = torch.optim.Adam(self.net.decoder.parameters(), lr=self.args.lr * 0.8,
+        self.decoder_opt = torch.optim.Adam(self.net.decoder.parameters(), lr=self.args.lr,
                                             weight_decay=self.args.L2)
         self.discriminator_prior_opt = torch.optim.Adam(self.net.discriminator_prior.parameters(),
-                                                        lr=self.args.lr * 0.6,
+                                                        lr=self.args.lr * 0.8,
                                                         weight_decay=self.args.L2)
-        self.discriminator_cat_opt = torch.optim.Adam(self.net.discriminator_cat.parameters(), lr=self.args.lr * 0.6,
+        self.discriminator_cat_opt = torch.optim.Adam(self.net.discriminator_cat.parameters(), lr=self.args.lr * 0.8,
                                                       weight_decay=self.args.L2)
 
-        self.category_sup_opt = torch.optim.Adam(self.net.latent_to_categories.parameters(), lr=self.args.lr* 0.6,
-                                                      weight_decay=self.args.L2)
         self.optimizers = [
             self.encoder_semisup_opt,
             self.encoder_generator_opt,
@@ -60,7 +58,6 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
             self.decoder_opt,
             self.discriminator_prior_opt,
             self.discriminator_cat_opt,
-            self.category_sup_opt
         ]
         self.schedulers = []
         for optimizer in self.optimizers:
@@ -161,11 +158,10 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
                 weight = self.estimate_batch_weight(meta_data1, indel_weight=indel_weight,
                                                     snp_weight=snp_weight)
             self.net.encoder.train()
-            self.net.latent_to_categories.train()
             supervised_loss = self.net.get_crossencoder_supervised_loss(input_s1, target_s1) * weight
             supervised_loss.backward()
 
-            for opt in [self.encoder_semisup_opt, self.category_sup_opt]:
+            for opt in [self.encoder_semisup_opt]:
                 opt.step()
             self.zero_grad_all_optimizers()
 
@@ -234,7 +230,8 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
 
             # now evaluate prediction of categories:
             categories_predicted, latent_code = self.net.encoder(input_s)
-            categories_predicted=self.net.latent_to_categories(latent_code)
+#            categories_predicted+=self.net.latent_to_categories(latent_code)
+
             categories_predicted_p = self.get_p(categories_predicted)
             categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
             _, target_index = torch.max(target_s, dim=1)

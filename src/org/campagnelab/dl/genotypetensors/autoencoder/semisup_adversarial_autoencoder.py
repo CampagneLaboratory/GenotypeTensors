@@ -194,8 +194,7 @@ class SemiSupAdvAutoencoder(nn.Module):
         self.discriminator_prior = _SemiSupAdvDiscriminatorPrior(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                                                  num_hidden_layers=num_hidden_layers,
                                                                  prior_dim=prior_dim)
-        # Convert latent code to categories.
-        self.latent_to_categories=Linear(prior_dim,self.num_classes)
+
 
 
     def rebuild_criterions(self, output_name, weights=None):
@@ -299,8 +298,7 @@ class SemiSupAdvAutoencoder(nn.Module):
 
     def get_crossencoder_supervised_loss(self, model_input, categories_target):
 
-        categories_input, latent_code = self.encoder(model_input)
-        predicted_categories=self.latent_to_categories(latent_code)
+        predicted_categories, latent_code = self.encoder(model_input)
         supervised_loss = self.semisup_loss_criterion(predicted_categories, categories_target)
         return supervised_loss
 
