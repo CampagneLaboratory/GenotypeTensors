@@ -7,12 +7,17 @@ import torch
 from scipy.stats import norm
 
 
-def plot_histogram(histogram, dimension, epoch, output_basename):
+def plot_histogram(dimension, epoch, output_basename, latent_histogram, gaussian_histogram):
+    if len(latent_histogram) != len(gaussian_histogram):
+        raise ValueError("Lengths of histograms are unequal")
     plot_path = "{}_dimension_{}_epoch_{}.png".format(output_basename, dimension, epoch)
-    x = np.linspace(-3, 3, len(histogram))
+    x = np.linspace(-3, 3, len(latent_histogram))
     norm_pdf = norm.pdf(x, 0, 1)
-    plt.plot(x, norm_pdf, x, histogram)
-    plt.title("Gaussian pdf vs histogram for dimension {} in epoch {}".format(dimension, epoch))
+    plt.plot(x, norm_pdf, label="Gaussian reference distribution")
+    plt.plot(x, latent_histogram, label="Latent code histogram")
+    plt.plot(x, gaussian_histogram, label="Gaussian drawn histogram")
+    plt.legend(loc="best")
+    plt.title("Histograms for dimension {} in epoch {}".format(dimension, epoch))
     plt.savefig(plot_path)
     plt.close()
 
@@ -35,7 +40,8 @@ if __name__ == "__main__":
         histogram_path = "{}_{}.pt".format(args.histogram_basename, curr_epoch)
         if not os.path.exists(histogram_path):
             break
-        histogram_list = torch.load(histogram_path)
-        for dim_idx, dim_histogram in enumerate(histogram_list):
-            plot_histogram(dim_histogram, dim_idx, curr_epoch, args.output_basename)
+        histogram_dict = torch.load(histogram_path)
+        for dim_idx in range(len(histogram_dict["latent"])):
+            plot_histogram(dim_idx, curr_epoch, args.output_basename, histogram_dict["latent"][dim_idx],
+                           histogram_dict["gaussian"][dim_idx])
         curr_epoch += 1
