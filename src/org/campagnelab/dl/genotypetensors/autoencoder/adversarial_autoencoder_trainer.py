@@ -188,11 +188,11 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         if self.args.latent_code_output is not None:
             # Each dimension in latent code should be Gaussian distributed, so take histogram of each column
             # Plot histograms later to see how they compare to Gaussian
-            latent_code_tensor = torch.stack(latent_codes)
+            latent_code_tensor = torch.stack(latent_codes).cpu()
             latent_code_histograms = [torch.histc(latent_code_tensor[:, col_idx],
                                                   bins=self.args.latent_code_bins).data.numpy()
                                       for col_idx in range(latent_code_tensor.size()[1])]
-            gaussian_code_tensor = torch.stack(gaussian_codes)
+            gaussian_code_tensor = torch.stack(gaussian_codes).cpu()
             gaussian_code_histograms = [torch.histc(gaussian_code_tensor[:, col_idx],
                                                     bins=self.args.latent_code_bins).data.numpy()
                                         for col_idx in range(gaussian_code_tensor.size()[1])]
