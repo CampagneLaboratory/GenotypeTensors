@@ -146,13 +146,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             for opt in [self.encoder_generator_opt]:
                 opt.step()
             self.zero_grad_all_optimizers()
-
+            weight =1
             if self.use_pdf:
                 self.net.encoder.eval()
                 _, latent_code = self.net.encoder(input_s)
-                weight = self.estimate_example_density_weight(latent_code)
-            else:
-                weight = self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
+                weight *= self.estimate_example_density_weight(latent_code)
+
+            weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
                                                     snp_weight=snp_weight)
             self.net.encoder.train()
             semisup_loss = self.net.get_semisup_loss(input_s, target_s) * weight
@@ -228,6 +228,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             performance_estimators += [FloatHelper("weight")]
 
         self.net.eval()
+        indel_weight = self.args.indel_weight_factor
+        snp_weight = 1.0
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
@@ -244,7 +246,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["validation"]["input"]
             target_s = data_dict["validation"]["softmaxGenotype"]
-
+            meta_data = data_dict["validation"]["metaData"]
             # Estimate the reconstruction loss on validation examples:
             reconstruction_loss = self.net.get_reconstruction_loss(input_s)
 
@@ -254,8 +256,14 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
             _, target_index = torch.max(target_s, dim=1)
             categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
+            weight=1
+            if self.use_pdf:
 
-            weight = self.estimate_example_density_weight(latent_code)
+                weight *= self.estimate_example_density_weight(latent_code)
+            else:
+                weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
+                                                    snp_weight=snp_weight)
+
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric(batch_idx, "weight", weight)
             performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
