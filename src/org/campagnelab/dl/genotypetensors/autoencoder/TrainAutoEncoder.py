@@ -244,7 +244,7 @@ if __name__ == '__main__':
             training_loop_method = model_trainer.train_semisup_aae
             testing_loop_method = model_trainer.test_semisup_aae
 
-        elif train_args.mode == "semisupervised_crossencoder":
+        elif train_args.mode == "supervised_crossencoder":
             model_trainer = AdversarialCrossencoderTrainer(args=train_args, problem=train_problem,
                                                           use_cuda=train_use_cuda)
             model_trainer.init_model(create_model_function=(
