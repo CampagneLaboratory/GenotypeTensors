@@ -58,57 +58,19 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
     def is_better(self, metric, previous_metric):
         return metric > previous_metric
 
-    def _create_data_provider(self):
-        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(
-            iterator=zip(train_loader_subset),
-            is_cuda=self.use_cuda,
-            batch_names=["training"],
-            requires_grad={"training": ["input"]},
-            volatile={"training": ["metaData"]},
-            recode_functions={
-                "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
-                "input": self.normalize_inputs
-            }
-        )
-        return data_provider
-
     def _recreate_mixup_batch(self, input_1, input_2, target_1, target_2):
-
-        def _recreate_mixup_example(input_example_1, input_example_2, target_example_1, target_example_2):
-            lam = np.random.beta(self.args.mixup_alpha, self.args.mixup_alpha)
-            input_example = lam * input_example_1 + (1.0 - lam) * input_example_2
-            target_example = lam * target_example_1 + (1.0 - lam) * target_example_2
-            return input_example, target_example
-
-        input_t_1 = input_1.data.cpu()
-        input_t_2 = input_2.data.cpu()
-        target_t_1 = target_1.data.cpu()
-        target_t_2 = target_2.data.cpu()
-        assert input_t_1.size() == input_t_2.size(), ("Input 1 size {} does not equal input 2 size {} for mixup"
-                                                      .format(input_1, input_2))
-        assert target_t_1.size() == target_t_2.size(), ("Target 1 size {} does not equal target 2 size {} for mixup"
-                                                        .format(target_1, target_2))
-        assert input_t_1.size()[0] == target_t_1.size()[0], (
-            "Input tensor has {} examples, target tensor has {} examples".format(input_t_1.size()[0],
-                                                                                 target_t_1.size()[0])
+        assert input_1.size() == input_2.size(), ("Input 1 size {} does not equal input 2 size {} for mixup"
+                                                  .format(input_1, input_2))
+        assert target_1.size() == target_2.size(), ("Target 1 size {} does not equal target 2 size {} for mixup"
+                                                    .format(target_1, target_2))
+        assert input_1.size()[0] == target_1.size()[0], (
+            "Input tensor has {} examples, target tensor has {} examples".format(input_1.size()[0],
+                                                                                 input_2.size()[0])
         )
-        input_t_mixup = []
-        target_t_mixup = []
-        for example_idx in range(input_t_1.size()[0]):
-            mixup_batch = _recreate_mixup_example(input_t_1[example_idx],
-                                                  input_t_2[example_idx],
-                                                  target_t_1[example_idx],
-                                                  target_t_2[example_idx])
-            input_mixup_example, target_mixup_example = mixup_batch
-            input_t_mixup.append(input_mixup_example)
-            target_t_mixup.append(target_mixup_example)
-        input_v_mixup = Variable(torch.stack(input_t_mixup))
-        target_v_mixup = Variable(torch.stack(target_t_mixup))
-        if self.use_cuda:
-            input_v_mixup = input_v_mixup.cuda()
-            target_v_mixup = target_v_mixup.cuda()
-        return input_v_mixup, target_v_mixup
+        lam = np.random.beta(self.args.mixup_alpha, self.args.mixup_alpha)
+        input_mixup = lam * input_1 + (1.0 - lam) * input_2
+        target_mixup = lam * target_1 + (1.0 - lam) * target_2
+        return input_mixup, target_mixup
 
     def train_supervised_mixup(self, epoch):
         performance_estimators = PerformanceList()
@@ -125,17 +87,29 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
 
-        data_provider_1 = self._create_data_provider()
-        data_provider_2 = self._create_data_provider()
+        train_loader_subset_1 = self.problem.train_loader_subset_range(0, self.args.num_training)
+        train_loader_subset_2 = self.problem.train_loader_subset_range(0, self.args.num_training)
+        data_provider = MultiThreadedCpuGpuDataProvider(
+            iterator=zip(train_loader_subset_1, train_loader_subset_2),
+            is_cuda=self.use_cuda,
+            batch_names=["training_1", "training_2"],
+            requires_grad={"training_1": ["input"], "training_2": ["input"]},
+            volatile={"training_1": ["metaData"], "training_2": ["metaData"]},
+            recode_functions={
+                "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
+                "input": self.normalize_inputs
+            }
+        )
+
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
-        for batch_idx, ((_, data_dict_1), (_, data_dict_2)) in enumerate(zip(data_provider_1, data_provider_2)):
-            input_s_1 = data_dict_1["training"]["input"]
-            target_s_1 = data_dict_1["training"]["softmaxGenotype"]
-            input_s_2 = data_dict_2["training"]["input"]
-            target_s_2 = data_dict_2["training"]["softmaxGenotype"]
-            metadata_1 = data_dict_1["training"]["metaData"]
-            metadata_2 = data_dict_2["training"]["metaData"]
+        for batch_idx, (_, data_dict) in enumerate(data_provider):
+            input_s_1 = data_dict["training_1"]["input"]
+            target_s_1 = data_dict["training_1"]["softmaxGenotype"]
+            input_s_2 = data_dict["training_2"]["input"]
+            target_s_2 = data_dict["training_2"]["softmaxGenotype"]
+            metadata_1 = data_dict["training_1"]["metaData"]
+            metadata_2 = data_dict["training_2"]["metaData"]
             num_batches += 1
 
             input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_s_2, target_s_1, target_s_2)
@@ -168,8 +142,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
-        data_provider_1.close()
-        data_provider_2.close()
+        data_provider.close()
 
         return performance_estimators
 
