@@ -99,7 +99,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             requires_grad={"training": ["input"], "unlabeled": ["input"]},
             volatile={"training": ["metaData"], "unlabeled": []},
             recode_functions={
-                "softmaxGenotype": recode_for_label_smoothing,
+                "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
                 "input": self.normalize_inputs
             })
 

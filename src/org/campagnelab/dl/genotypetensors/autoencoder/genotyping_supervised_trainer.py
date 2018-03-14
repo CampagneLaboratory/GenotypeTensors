@@ -75,7 +75,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                                                         requires_grad={"training": ["input"]},
                                                         volatile={"training": ["metaData"]},
                                                         recode_functions={
-                                                            "softmaxGenotype": recode_for_label_smoothing,
+                                                            "softmaxGenotype": lambda x: recode_for_label_smoothing(x,self.epsilon),
                                                              "input": self.normalize_inputs}
                                                         )
         indel_weight = self.args.indel_weight_factor

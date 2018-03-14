@@ -51,7 +51,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
                                      batch_names=["training", "unlabeled"],
                                      requires_grad={"training": ["input"], "unlabeled": ["input"]},
                                      volatile={"training": ["metaData"], "unlabeled": []},
-                                     recode_functions={"softmaxGenotype": recode_for_label_smoothing})
+                                     recode_functions={"softmaxGenotype": lambda x: recode_for_label_smoothing(x,self.epsilon)})
         self.net.autoencoder.train()
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["training"]["input"]

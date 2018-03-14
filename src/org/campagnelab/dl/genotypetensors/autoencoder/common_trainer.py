@@ -25,8 +25,8 @@ def _format_nice(n):
         return str(n)
 
 
-def recode_for_label_smoothing(one_hot_vector):
-        epsilon = 0.2
+def recode_for_label_smoothing(one_hot_vector, epsilon=0.2):
+
         num_classes = len(one_hot_vector[0])
         one_hot_vector[one_hot_vector == 1] = 1.0 - epsilon
         one_hot_vector[one_hot_vector == 0] = epsilon / num_classes
@@ -84,6 +84,7 @@ class CommonTrainer:
         self.best_model = None
         self.agreement_loss = MSELoss()
         self.class_frequencies=None
+        self.epsilon = args.epsilon_label_smoothing
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
