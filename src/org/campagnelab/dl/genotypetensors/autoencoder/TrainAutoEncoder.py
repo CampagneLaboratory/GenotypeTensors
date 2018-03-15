@@ -121,6 +121,7 @@ if __name__ == '__main__':
                         help='Epsilon value to use for label smoothing.')
 
     parser.add_argument('--normalize', action='store_true', help='Normalize input by mean and standard deviation.')
+    parser.add_argument('--use_selu', action='store_true', help='Use SELU non-linearity, otherwise, use RELU.')
     parser.add_argument('--use-density-weights', action='store_true',
                         help='Weight loss by the abundance of each minibatch example in the unlabled set.')
     parser.add_argument("--latent-code-output", type=str, help="Basename of file to save latent code histograms in")
@@ -243,7 +244,8 @@ if __name__ == '__main__':
                     dropout_p=train_args.dropout_probability,
                     num_hidden_layers=train_args.num_layers,
                     n_dim=train_args.n_dim,
-                    prenormalized_inputs=args.normalize
+                    prenormalized_inputs=args.normalize,
+                    use_selu=args.use_selu
                 )))
             training_loop_method = model_trainer.train_semisup_aae
             testing_loop_method = model_trainer.test_semisup_aae
@@ -259,7 +261,8 @@ if __name__ == '__main__':
                     dropout_p=train_args.dropout_probability,
                     num_hidden_layers=train_args.num_layers,
                     n_dim=train_args.n_dim,
-                    prenormalized_inputs=args.normalize
+                    prenormalized_inputs=args.normalize,
+                    use_selu=args.use_selu
                 )))
             training_loop_method = model_trainer.train_semisup_aae
             testing_loop_method = model_trainer.test_semisup_aae

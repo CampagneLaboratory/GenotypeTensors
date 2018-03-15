@@ -8,12 +8,21 @@ from torch.nn import MSELoss, MultiLabelSoftMarginLoss, Linear
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import recode_for_label_smoothing
 from org.campagnelab.dl.utils.utils import draw_from_categorical, draw_from_gaussian
 
+class ConfigurableModule:
+    def __init__(self, use_selu=False):
+        self.use_selu=use_selu
 
-class _SemiSupAdvEncoder(nn.Module):
+    def non_linearity(self):
+        if self.use_selu:
+            return nn.SELU()
+        else:
+            return nn.ReLU()
+
+class _SemiSupAdvEncoder(ConfigurableModule):
     """The encoder takes inputs and maps them to the latent space (of dimension latent_code_dim). """
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10,
-                 latent_code_dim=2):
-        super().__init__()
+                 latent_code_dim=2, use_selu=False):
+        super().__init__(use_selu=use_selu)
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
 
@@ -22,19 +31,21 @@ class _SemiSupAdvEncoder(nn.Module):
             nn.BatchNorm1d(input_size),
             nn.Linear(input_size, n_dim),
             nn.Dropout(dropout_p),
-            nn.SELU()
+            self.non_linearity()
         ]
         for _ in range(num_hidden_layers):
             encoder_list += [
                 nn.BatchNorm1d(n_dim),
                 nn.Linear(n_dim, n_dim),
                 nn.Dropout(dropout_p),
-                nn.SELU()
+                self.non_linearity()
             ]
         self.encoder_base = nn.Sequential(*encoder_list)
         self.latent_encoder = nn.Linear(n_dim, latent_code_dim)
         self.category_encoder = nn.Linear(n_dim, num_classes)
-    
+
+
+
     def forward(self, model_input):
         """Accepts inputs and produces a tuple of predicted categories and latent code."""
         if model_input.data.is_cuda and self.ngpus > 1:
@@ -48,10 +59,10 @@ class _SemiSupAdvEncoder(nn.Module):
         return category_encoded, latent_code
 
 
-class _SemiSupAdvDecoder(nn.Module):
+class _SemiSupAdvDecoder(ConfigurableModule):
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10,
-                 prior_dim=2):
-        super().__init__()
+                 prior_dim=2,use_selu=False):
+        super().__init__(use_selu=use_selu)
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
 
@@ -60,14 +71,14 @@ class _SemiSupAdvDecoder(nn.Module):
             nn.BatchNorm1d(prior_dim + num_classes),
             nn.Linear(prior_dim + num_classes, n_dim),
             nn.Dropout(dropout_p),
-            nn.SELU(),
+            self.non_linearity(),
         ]
         for _ in range(num_hidden_layers):
             decoder_list += [
                 nn.BatchNorm1d(n_dim),
                 nn.Linear(n_dim, n_dim),
                 nn.Dropout(dropout_p),
-                nn.SELU()
+                self.non_linearity()
             ]
         decoder_list += [
             nn.BatchNorm1d(n_dim),
@@ -83,9 +94,10 @@ class _SemiSupAdvDecoder(nn.Module):
         return decoded
 
 
-class _SemiSupAdvDiscriminatorCat(nn.Module):
-    def __init__(self, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10):
-        super().__init__()
+class _SemiSupAdvDiscriminatorCat(ConfigurableModule):
+    def __init__(self, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3,
+                 num_classes=10,use_selu=False):
+        super().__init__(use_selu=use_selu)
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
         self.num_classes=num_classes
@@ -94,7 +106,7 @@ class _SemiSupAdvDiscriminatorCat(nn.Module):
             nn.BatchNorm1d(num_classes),
             nn.Linear(num_classes, n_dim),
             nn.Dropout(dropout_p),
-            nn.SELU()
+            self.non_linearity()
         ]
 
         for _ in range(num_hidden_layers):
@@ -102,7 +114,7 @@ class _SemiSupAdvDiscriminatorCat(nn.Module):
                 nn.BatchNorm1d(n_dim),
                 nn.Linear(n_dim, n_dim),
                 nn.Dropout(dropout_p),
-                nn.SELU()
+                self.non_linearity()
             ]
         
         layer_list += [
@@ -120,9 +132,10 @@ class _SemiSupAdvDiscriminatorCat(nn.Module):
         return category
 
 
-class _SemiSupAdvDiscriminatorPrior(nn.Module):
-    def __init__(self, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, prior_dim=2):
-        super().__init__()
+class _SemiSupAdvDiscriminatorPrior(ConfigurableModule):
+    def __init__(self, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3,
+                 prior_dim=2,use_selu=False):
+        super().__init__(use_selu=use_selu)
         self.ngpus = ngpus
         self.device_list = list(range(self.ngpus))
 
@@ -130,7 +143,7 @@ class _SemiSupAdvDiscriminatorPrior(nn.Module):
             nn.BatchNorm1d(prior_dim),
             nn.Linear(prior_dim, n_dim),
             nn.Dropout(dropout_p),
-            nn.SELU()
+            self.non_linearity()
         ]
 
         for _ in range(num_hidden_layers):
@@ -138,7 +151,7 @@ class _SemiSupAdvDiscriminatorPrior(nn.Module):
                 nn.BatchNorm1d(n_dim),
                 nn.Linear(n_dim, n_dim),
                 nn.Dropout(dropout_p),
-                nn.SELU()
+                self.non_linearity()
             ]
         
         layer_list += [
@@ -156,9 +169,10 @@ class _SemiSupAdvDiscriminatorPrior(nn.Module):
         return prior_val
 
 
-class SemiSupAdvAutoencoder(nn.Module):
+class SemiSupAdvAutoencoder(ConfigurableModule):
     def __init__(self, input_size=512, n_dim=500, ngpus=1, dropout_p=0, num_hidden_layers=3, num_classes=10, prior_dim=2,
-                 epsilon=1E-15, seed=None, mini_batch=7, prenormalized_inputs=False):
+                 epsilon=1E-15, seed=None, mini_batch=7, prenormalized_inputs=False,
+                 use_selu=False):
         """
 
         :param input_size:
@@ -173,7 +187,7 @@ class SemiSupAdvAutoencoder(nn.Module):
         :param mini_batch:
         :param prenormalized_inputs: True when the inputs must be normalized by mean and std before using this model.
         """
-        super().__init__()
+        super().__init__(use_selu=use_selu)
         self.epsilon = epsilon
         self.prior_dim = prior_dim
         self.num_classes = num_classes
@@ -184,16 +198,16 @@ class SemiSupAdvAutoencoder(nn.Module):
         self.prenormalized_inputs=prenormalized_inputs
         self.encoder = _SemiSupAdvEncoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                           num_hidden_layers=num_hidden_layers, num_classes=num_classes,
-                                          latent_code_dim=prior_dim)
+                                          latent_code_dim=prior_dim,use_selu=use_selu)
         self.decoder = _SemiSupAdvDecoder(input_size=input_size, n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                           num_hidden_layers=num_hidden_layers, num_classes=num_classes,
-                                          prior_dim=prior_dim)
+                                          prior_dim=prior_dim,use_selu=use_selu)
         self.discriminator_cat = _SemiSupAdvDiscriminatorCat(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                                              num_hidden_layers=num_hidden_layers,
-                                                             num_classes=num_classes)
+                                                             num_classes=num_classes,use_selu=use_selu)
         self.discriminator_prior = _SemiSupAdvDiscriminatorPrior(n_dim=n_dim, ngpus=ngpus, dropout_p=dropout_p,
                                                                  num_hidden_layers=num_hidden_layers,
-                                                                 prior_dim=prior_dim)
+                                                                 prior_dim=prior_dim,use_selu=use_selu)
 
 
 
@@ -304,7 +318,8 @@ class SemiSupAdvAutoencoder(nn.Module):
 
 
 def create_semisup_adv_autoencoder_model(model_name, problem, encoded_size=32, ngpus=1, nreplicas=1, dropout_p=0,
-                                         n_dim=500, num_hidden_layers=1,prenormalized_inputs=False):
+                                         n_dim=500, num_hidden_layers=1,prenormalized_inputs=False,
+                                         use_selu=False):
     input_size = problem.input_size("input")
     num_classes = problem.output_size("softmaxGenotype")
     assert len(input_size) == 1, "AutoEncoders require 1D input features."

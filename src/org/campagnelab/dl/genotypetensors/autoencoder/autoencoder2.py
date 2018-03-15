@@ -1,9 +1,12 @@
 from torch import nn
 from torch.nn import BatchNorm1d
 
+from org.campagnelab.dl.genotypetensors.autoencoder.semisup_adversarial_autoencoder import ConfigurableModule
 
-class AutoEncoder2(nn.Module):
-    def __init__(self, input_size=512, encoded_size=32, ngpus=1, dropout_p=0, nreplicas=0):
+
+class AutoEncoder2(ConfigurableModule):
+    def __init__(self, input_size=512, encoded_size=32, ngpus=1, dropout_p=0,
+                 nreplicas=0,use_selu=False):
         """
 
         :param input_size:
@@ -11,7 +14,7 @@ class AutoEncoder2(nn.Module):
         :param ngpus: Number of gpus to run on.
         :param nreplicas: Number of model replica per GPUs, if ngpu>1
         """
-        super().__init__()
+        super().__init__(use_selu=use_selu)
         self.ngpu = ngpus
         self.device_list = list(range(0, ngpus))
         encoder_list = []
