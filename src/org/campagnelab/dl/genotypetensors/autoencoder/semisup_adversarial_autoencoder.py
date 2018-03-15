@@ -8,8 +8,10 @@ from torch.nn import MSELoss, MultiLabelSoftMarginLoss, Linear
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import recode_for_label_smoothing
 from org.campagnelab.dl.utils.utils import draw_from_categorical, draw_from_gaussian
 
-class ConfigurableModule:
+class ConfigurableModule(nn.Module):
     def __init__(self, use_selu=False):
+
+        super().__init__()
         self.use_selu=use_selu
 
     def non_linearity(self):
