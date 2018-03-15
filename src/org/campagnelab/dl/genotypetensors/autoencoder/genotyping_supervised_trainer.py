@@ -164,12 +164,10 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
 
+            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+            self.estimate_errors(errors,output_s_p, target_s)
             _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
             _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            errors[target_index.cpu().data] += torch.ne(target_index.cpu().data,
-                                                        output_index.cpu().data).type(torch.FloatTensor)
-
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
             performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
                                                            output_s_p, targets=target_index)
@@ -191,4 +189,5 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_metric, epoch)
         return performance_estimators
+
 

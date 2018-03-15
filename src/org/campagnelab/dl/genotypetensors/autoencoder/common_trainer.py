@@ -381,3 +381,14 @@ class CommonTrainer:
         if self.use_cuda:
             weights = weights.cuda()
         self.rebuild_criterions(output_name="softmaxGenotype", weights=weights)
+
+    def estimate_errors(self,errors, output_s_p, target_s):
+        _, target_index = torch.max(target_s, dim=1)
+        _, output_index = torch.max(output_s_p, dim=1)
+        target_index = target_index.cpu()
+        output_index = output_index.cpu()
+        for class_index in range(target_s[0].size()[0]):
+            for example_index in range(self.mini_batch_size):
+                if target_index[example_index].data[0] == class_index and \
+                        (target_index[example_index].data != output_index[example_index].data)[0] > 0:
+                    errors[class_index] += 1
