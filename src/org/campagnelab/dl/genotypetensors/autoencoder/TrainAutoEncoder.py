@@ -177,7 +177,8 @@ if __name__ == '__main__':
                     encoded_size=train_args.encoded_size,
                     ngpus=train_args.num_gpus,
                     dropout_p=train_args.dropout_probability,
-                    autoencoder_type=train_args.autoencoder_type
+                    autoencoder_type=train_args.autoencoder_type,
+                    use_selu=args.use_selu
                 )))
             training_loop_method = model_trainer.train_autoencoder
             testing_loop_method = model_trainer.test_autoencoder
@@ -192,7 +193,8 @@ if __name__ == '__main__':
                     encoded_size=train_args.encoded_size,
                     ngpus=train_args.num_gpus,
                     num_layers=train_args.num_layers,
-                    autoencoder_type=train_args.autoencoder_type
+                    autoencoder_type=train_args.autoencoder_type,
+                    use_selu=args.use_selu
                 )))
             training_loop_method = model_trainer.supervised_somatic
             testing_loop_method = model_trainer.test_somatic_classifer
@@ -209,7 +211,8 @@ if __name__ == '__main__':
                     ngpus=train_args.num_gpus,
                     dropout_p=train_args.dropout_probability,
                     num_layers=train_args.num_layers,
-                    autoencoder_type=train_args.autoencoder_type
+                    autoencoder_type=train_args.autoencoder_type,
+                    use_selu=args.use_selu
                 )))
             training_loop_method = model_trainer.train_semisup
             testing_loop_method = model_trainer.test_semi_sup
@@ -228,7 +231,8 @@ if __name__ == '__main__':
                     num_layers=train_args.num_layers,
                     autoencoder_type=train_args.autoencoder_type,
                     drop_decoder=True,
-                    prenormalized_inputs=args.normalize
+                    prenormalized_inputs=args.normalize,
+                    use_selu=args.use_selu
                 )))
             training_loop_method = model_trainer.train_supervised
             testing_loop_method = model_trainer.test_supervised
@@ -281,7 +285,8 @@ if __name__ == '__main__':
                     num_layers=train_args.num_layers,
                     autoencoder_type=train_args.autoencoder_type,
                     drop_decoder=True,
-                    prenormalized_inputs=args.normalize
+                    prenormalized_inputs=args.normalize,
+                    use_selu=args.use_selu
                 )))
             training_loop_method = model_trainer.train_supervised_mixup
             testing_loop_method = model_trainer.test_supervised_mixup

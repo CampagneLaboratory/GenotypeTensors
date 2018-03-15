@@ -327,6 +327,7 @@ def create_semisup_adv_autoencoder_model(model_name, problem, encoded_size=32, n
     semisup_adv_autoencoder = SemiSupAdvAutoencoder(input_size=input_size[0], n_dim=n_dim, ngpus=ngpus,
                                                     dropout_p=dropout_p, num_hidden_layers=num_hidden_layers,
                                                     num_classes=num_classes[0], prior_dim=encoded_size,
-                                                    prenormalized_inputs=prenormalized_inputs)
+                                                    prenormalized_inputs=prenormalized_inputs,
+                                                    use_selu=use_selu)
     print(semisup_adv_autoencoder)
     return semisup_adv_autoencoder
