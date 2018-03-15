@@ -85,6 +85,7 @@ class CommonTrainer:
         self.agreement_loss = MSELoss()
         self.class_frequencies=None
         self.epsilon = args.epsilon_label_smoothing
+        self.reweight_by_validation_error = args.reweight_by_validation_error
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -372,3 +373,11 @@ class CommonTrainer:
         batch_size_1, weight_sum_1 = self.sum_batch_weight(meta_data_1, indel_weight, snp_weight)
         batch_size_2, weight_sum_2 = self.sum_batch_weight(meta_data_2, indel_weight, snp_weight)
         return (weight_sum_1 + weight_sum_2) / (batch_size_1 + batch_size_2)
+
+    def reweight_by_val_errors(self, errors):
+        weights = torch.ones(errors.size())
+        errors += 1
+        weights -= errors / torch.norm(errors, p=1, dim=0)
+        if self.use_cuda:
+            weights = weights.cuda()
+        self.rebuild_criterions(output_name="softmaxGenotype", weights=weights)

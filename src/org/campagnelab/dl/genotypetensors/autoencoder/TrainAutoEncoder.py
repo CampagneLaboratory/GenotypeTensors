@@ -122,6 +122,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--normalize', action='store_true', help='Normalize input by mean and standard deviation.')
     parser.add_argument('--use-selu', action='store_true', help='Use SELU non-linearity, otherwise, use RELU.')
+    parser.add_argument('--reweight-by-validation-error', action='store_true', help='Use validation errors to focus reweight loss in the next training epoch.')
     parser.add_argument('--use-density-weights', action='store_true',
                         help='Weight loss by the abundance of each minibatch example in the unlabled set.')
     parser.add_argument("--latent-code-output", type=str, help="Basename of file to save latent code histograms in")
