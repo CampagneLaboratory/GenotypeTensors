@@ -38,6 +38,8 @@ from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_crossencoder_tra
     AdversarialCrossencoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
+from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisupervised_mixup_trainer import \
+    GenotypingSemisupervisedMixupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_mixup_trainer import \
     GenotypingSupervisedMixupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_trainer import GenotypingSupervisedTrainer
@@ -291,6 +293,26 @@ if __name__ == '__main__':
                 )))
             training_loop_method = model_trainer.train_supervised_mixup
             testing_loop_method = model_trainer.test_supervised_mixup
+
+        elif train_args.mode == "semisupervised_mixup_genotypes":
+            model_trainer = GenotypingSemisupervisedMixupTrainer(args=train_args, problem=train_problem,
+                                                             use_cuda=train_use_cuda)
+            model_trainer.init_model(create_model_function=(
+                lambda model_name, problem_type: create_classifier_model(
+                    model_name,
+                    problem_type,
+                    encoded_size=train_args.encoded_size,
+                    somatic=False,
+                    ngpus=train_args.num_gpus,
+                    dropout_p=train_args.dropout_probability,
+                    num_layers=train_args.num_layers,
+                    autoencoder_type=train_args.autoencoder_type,
+                    drop_decoder=True,
+                    prenormalized_inputs=args.normalize,
+                    use_selu=args.use_selu
+                )))
+            training_loop_method = model_trainer.train_semisupervised_mixup
+            testing_loop_method = model_trainer.test_semisupervised_mixup
 
         else:
             model_trainer = None
