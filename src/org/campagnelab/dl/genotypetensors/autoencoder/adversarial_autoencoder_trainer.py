@@ -116,10 +116,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             num_batches += 1
             self.zero_grad_all_optimizers()
 
-            # input_s=normalize_mean_std(input_s)
-            # input_u=normalize_mean_std(input_u)
-            # print(torch.mean(input_s,dim=0))
             # Train reconstruction phase:
+            self.net.encoder.train()
             self.net.decoder.train()
             reconstruction_loss = self.net.get_reconstruction_loss(input_u)
             reconstruction_loss.backward()
@@ -133,7 +131,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.zero_grad_all_optimizers()
             genotype_frequencies = self.class_frequencies["softmaxGenotype"]
             category_prior = (genotype_frequencies / torch.sum(genotype_frequencies)).numpy()
-            discriminator_loss = self.net.get_discriminator_loss(input_u, category_prior=category_prior)
+            discriminator_loss = self.net.get_discriminator_loss(input_u, category_prior=category_prior,
+                                                                 recode_labels=lambda x: recode_for_label_smoothing(x,
+                                                                                                                    epsilon=self.epsilon))
             discriminator_loss.backward()
             for opt in [self.discriminator_cat_opt, self.discriminator_prior_opt]:
                 opt.step()
@@ -146,14 +146,14 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             for opt in [self.encoder_generator_opt]:
                 opt.step()
             self.zero_grad_all_optimizers()
-            weight =1
+            weight = 1
             if self.use_pdf:
                 self.net.encoder.eval()
                 _, latent_code = self.net.encoder(input_s)
                 weight *= self.estimate_example_density_weight(latent_code)
 
             weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
-                                                    snp_weight=snp_weight)
+                                                 snp_weight=snp_weight)
             self.net.encoder.train()
             semisup_loss = self.net.get_semisup_loss(input_s, target_s) * weight
             semisup_loss.backward()
@@ -212,7 +212,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             cumulative_pdf += numpy.sum(valid_pdf)
             n_pdf = n_pdf + len(valid_pdf)
         cumulative_pdf /= n_pdf
-        return max(cumulative_pdf, 1-cumulative_pdf)
+        return max(cumulative_pdf, 1 - cumulative_pdf)
 
     def zero_grad_all_optimizers(self):
         for optimizer in self.optimizers:
@@ -256,13 +256,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
             _, target_index = torch.max(target_s, dim=1)
             categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
-            weight=1
+            weight = 1
             if self.use_pdf:
 
                 weight *= self.estimate_example_density_weight(latent_code)
             else:
                 weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
-                                                    snp_weight=snp_weight)
+                                                     snp_weight=snp_weight)
 
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric(batch_idx, "weight", weight)
