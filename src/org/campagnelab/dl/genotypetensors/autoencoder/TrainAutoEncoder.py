@@ -124,7 +124,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--normalize', action='store_true', help='Normalize input by mean and standard deviation.')
     parser.add_argument('--use-selu', action='store_true', help='Use SELU non-linearity, otherwise, use RELU.')
-    parser.add_argument('--reweight-by-validation-error', action='store_true', help='Use validation errors to focus reweight loss in the next training epoch.')
+    parser.add_argument('--reweight-by-validation-error', action='store_true',
+                        help='Use validation errors to focus reweight loss in the next training epoch.')
     parser.add_argument('--use-density-weights', action='store_true',
                         help='Weight loss by the abundance of each minibatch example in the unlabled set.')
     parser.add_argument("--latent-code-output", type=str, help="Basename of file to save latent code histograms in")
@@ -134,7 +135,9 @@ if __name__ == '__main__':
                         help="Number of bins in histogram for latent code distributions")
     parser.add_argument("--mixup-alpha", type=float, default=0.2,
                         help="Alpha for supervised genotype with mixup")
-
+    parser.add_argument('--label-strategy', help='Strategy to dream up labels for the unsupervised set (mixup mode). '
+                                                 'One of SAMPLING, VAL_CONFUSION, VAL_CONFUSION_SAMPLING.',
+                        default="SAMPLING")
     args = parser.parse_args()
 
     if args.max_examples_per_epoch is None:
@@ -143,7 +146,7 @@ if __name__ == '__main__':
     print("Executing " + args.checkpoint_key)
 
     with open("args-{}".format(args.checkpoint_key), "w") as args_file:
-        args_file.write(" ".join(sys.argv+["--seed ", str(args.seed)]))
+        args_file.write(" ".join(sys.argv + ["--seed ", str(args.seed)]))
 
     use_cuda = torch.cuda.is_available()
     is_parallel = False
@@ -296,7 +299,7 @@ if __name__ == '__main__':
 
         elif train_args.mode == "semisupervised_mixup_genotypes":
             model_trainer = GenotypingSemisupervisedMixupTrainer(args=train_args, problem=train_problem,
-                                                             use_cuda=train_use_cuda)
+                                                                 use_cuda=train_use_cuda)
             model_trainer.init_model(create_model_function=(
                 lambda model_name, problem_type: create_classifier_model(
                     model_name,
@@ -325,6 +328,7 @@ if __name__ == '__main__':
 
         return model_trainer.training_loops(training_loop_method=training_loop_method,
                                             testing_loop_method=testing_loop_method)
+
 
     train_once(args, problem, use_cuda)
     # don't wait for threads to die, just exit:

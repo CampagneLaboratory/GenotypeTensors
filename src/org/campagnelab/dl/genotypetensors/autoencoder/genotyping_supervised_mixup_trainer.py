@@ -42,7 +42,6 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         if self.args.normalize:
             problem_mean = self.problem.load_tensor("input", "mean")
             problem_std = self.problem.load_tensor("input", "std")
-
         self.normalize_inputs = lambda x: (normalize_mean_std(x, problem_mean=problem_mean,
                                                               problem_std=problem_std)
                                            if self.args.normalize
@@ -51,6 +50,18 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
             self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
+
+    def log_performance_metrics(self, epoch, performance_estimators, kind="perfs"):
+        super().log_performance_metrics(epoch, performance_estimators, kind)
+
+        # we load the best model we saved previously as a second model:
+        self.best_model = self.load_checkpoint()
+        if self.use_cuda:
+            self.best_model = self.best_model.cuda()
+
+        self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
+        if self.use_cuda:
+            self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
 
     def get_test_metric_name(self):
         return "test_accuracy"

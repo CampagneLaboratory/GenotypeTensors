@@ -128,6 +128,7 @@ class CommonTrainer:
                 self.net = checkpoint['model']
                 self.best_test_loss = checkpoint['best_test_loss']
                 self.start_epoch = checkpoint['epoch']
+                self.best_model_confusion_matrix=checkpoint['confusion-matrix']
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
@@ -235,6 +236,7 @@ class CommonTrainer:
         model.eval()
         state = {
             'model': model.module if self.is_parallel else model,
+            'confusion-matrix': self.best_model_confusion_matrix,
             'best_test_loss': acc,
             'epoch': epoch,
         }

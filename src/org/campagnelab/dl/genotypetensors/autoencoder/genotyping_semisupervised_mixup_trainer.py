@@ -5,7 +5,8 @@ from torch.distributions import Categorical
 from torch.nn import MultiLabelSoftMarginLoss
 
 import numpy as np
-
+from torchnet.meter import ConfusionMeter
+from random import random
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
@@ -50,6 +51,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                                                               problem_std=problem_std)
                                            if self.args.normalize
                                            else x)
+        self.num_classes=0
 
     def get_category_sample(self, mini_batch_size, num_classes, category_prior, recode_labels=None):
         if self.categorical_distribution is None:
@@ -134,9 +136,8 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             input_s_1 = data_dict["training"]["input"]
             target_s_1 = data_dict["training"]["softmaxGenotype"]
             input_s_2 = data_dict["unlabeled"]["input"]
-            target_s_2 = self.get_category_sample(self.mini_batch_size, num_classes=len(target_s_1[0]),
-                                                       category_prior=category_prior,
-                                                       recode_labels=lambda x:recode_for_label_smoothing(x,epsilon=self.epsilon))
+            self.num_classes=len(target_s_1[0])
+            target_s_2=self.dreamup_target_for(input=input_s_2,num_classes=self.num_classes,category_prior=category_prior)
             metadata_1 = data_dict["training"]["metaData"]
             # assume metadata_2 is like metadata_1, since we don't know the indel status for the unlabeled set
             metadata_2=metadata_1
@@ -207,7 +208,10 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                 "input": self.normalize_inputs
             }
         )
+        if self.best_model is None:
+            self.best_model=self.net
 
+        cm = ConfusionMeter(self.num_classes, normalized=False)
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["validation"]["input"]
             target_s = data_dict["validation"]["softmaxGenotype"]
@@ -220,6 +224,8 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
             _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
             _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
+            cm.add(predicted=output_index.data, target=target_index.data)
+
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
             errors[target_index.cpu().data] += torch.ne(target_index.cpu().data,
                                                         output_index.cpu().data).type(torch.FloatTensor)
@@ -242,4 +248,52 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                                          "must be found among estimated performance metrics")
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_metric, epoch)
+        self.confusion_matrix = cm.value().transpose()
+        if self.best_model_confusion_matrix is None:
+            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
+            if self.use_cuda:
+                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
         return performance_estimators
+
+    def dreamup_target_for(self, num_classes, category_prior,input):
+        if self.best_model is None or self.args.label_strategy == "SAMPLING":
+            return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
+                                 category_prior=category_prior,
+                                 recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
+        elif self.args.label_strategy == "VAL_CONFUSION":
+            self.best_model.eval()
+            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+            # training set as training progresses:
+            best_model_output = self.best_model(Variable(input.data, volatile=True))
+            _, predicted = torch.max(best_model_output.data, 1)
+            predicted = predicted.type(torch.LongTensor)
+            if self.use_cuda:
+                predicted = predicted.cuda()
+            # we use the confusion matrix to set the target on the unsupervised example. We simply normalize the
+            # row of the confusion matrix corresponding to the  label predicted by the best model:
+            select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
+                torch.FloatTensor)
+            targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
+            return Variable(targets2,requires_grad=False)
+            # print("normalized: "+str(targets2))
+        elif self.args.label_strategy == "VAL_CONFUSION_SAMPLING":
+            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+            # training set as training progresses:
+            self.best_model.eval()
+            best_model_output = self.best_model(Variable(input.data, volatile=True))
+            _, predicted = torch.max(best_model_output.data, 1)
+            predicted = predicted.type(torch.LongTensor)
+
+            if self.use_cuda:
+                predicted = predicted.cuda(self.args.second_gpu_index)
+            # we lookup the confusion matrix, but instead of using it directly as output, we sample from it to
+            # create a one-hot encoded unsupervised output label:
+            select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
+                torch.FloatTensor)
+
+            normalized_confusion_matrix = torch.renorm(select, p=1, dim=0, maxnorm=1)
+            confusion_cumulative = torch.cumsum(normalized_confusion_matrix, dim=1)
+
+            return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
+                                 category_prior=confusion_cumulative,
+                                 recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
