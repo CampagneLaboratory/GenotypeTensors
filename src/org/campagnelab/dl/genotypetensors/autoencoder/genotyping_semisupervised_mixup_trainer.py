@@ -137,6 +137,9 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             target_s_2 = self.get_category_sample(self.mini_batch_size, num_classes=len(target_s_1[0]),
                                                        category_prior=category_prior,
                                                        recode_labels=lambda x:recode_for_label_smoothing(x,epsilon=self.epsilon))
+            if self.use_cuda:
+                target_s_2=target_s_2.cuda()
+
             metadata_1 = data_dict["training"]["metaData"]
             # assume metadata_2 is like metadata_1, since we don't know the indel status for the unlabeled set
             metadata_2=metadata_1
