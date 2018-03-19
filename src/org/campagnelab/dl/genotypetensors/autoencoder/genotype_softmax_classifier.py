@@ -12,7 +12,7 @@ class GenotypeSoftmaxClassifer(ConfigurableModule):
         layer_list = []
         num_in = num_inputs
         num_hidden_nodes = int(num_inputs * model_capacity)
-        for layer_idx in range(num_layers):
+        for layer_idx in range(1, num_layers + 1):
             num_out = int(num_hidden_nodes * math.pow(reduction_rate, layer_idx) * model_capacity)
             if use_batch_norm:
                 layer_list += [nn.Dropout(dropout_p), nn.BatchNorm1d(num_in), nn.Linear(num_in, num_out),
