@@ -287,7 +287,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             predicted = predicted.type(torch.LongTensor)
 
             if self.use_cuda:
-                predicted = predicted.cuda(self.args.second_gpu_index)
+                predicted = predicted.cuda()
             # we lookup the confusion matrix, but instead of using it directly as output, we sample from it to
             # create a one-hot encoded unsupervised output label:
             select = torch.index_select(self.best_model_confusion_matrix, dim=0, index=predicted).type(
