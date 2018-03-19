@@ -8,6 +8,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Log results from evaluation script")
     parser.add_argument('--checkpoint-key', help='Random key to load a checkpoint model', required=True, type=str)
     parser.add_argument('--model-path', help='Path of where the models directory is located.', required=True, type=str)
+    parser.add_argument('--dataset', help='Dataset the model was evaluated on: validation, test or training.', required=True, type=str)
     parser.add_argument('--model-label', help='Model label: best or latest.', default="best", type=str)
     parser.add_argument("--vcf-path", help="Path to base output directory for rtg vcfeval", type=str, required=True)
     parser.add_argument("--output-path", help="Location of log file; if file not present, creates a new CSV file",
@@ -40,7 +41,7 @@ if __name__ == "__main__":
         indel_f1 = indel_stats[-1]
 
     file_exists = os.path.exists(args.output_path)
-    fieldnames = ["path", "checkpoint", "label", "epoch", "Precision_SNPs", "Recall_SNPs", "F1_SNPs",
+    fieldnames = ["path", "checkpoint", "label","dataset", "epoch", "Precision_SNPs", "Recall_SNPs", "F1_SNPs",
                   "Precision_Indels", "Recall_Indels", "F1_Indels"]
     with open(args.output_path, "a") as output_f:
         output_writer = csv.DictWriter(output_f, fieldnames=fieldnames, delimiter="\t")
@@ -50,6 +51,7 @@ if __name__ == "__main__":
             "path": args.model_path,
             "checkpoint": args.checkpoint_key,
             "label": args.model_label,
+            "dataset":args.dataset,
             "epoch": epoch,
             "Precision_SNPs": snp_precision,
             "Recall_SNPs": snp_recall,

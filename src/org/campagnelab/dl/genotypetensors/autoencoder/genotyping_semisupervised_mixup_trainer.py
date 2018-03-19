@@ -138,6 +138,8 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             input_s_2 = data_dict["unlabeled"]["input"]
             self.num_classes=len(target_s_1[0])
             target_s_2=self.dreamup_target_for(input=input_s_2,num_classes=self.num_classes,category_prior=category_prior)
+            if self.use_cuda:
+                target_s_2=target_s_2.cuda()
             metadata_1 = data_dict["training"]["metaData"]
             # assume metadata_2 is like metadata_1, since we don't know the indel status for the unlabeled set
             metadata_2=metadata_1

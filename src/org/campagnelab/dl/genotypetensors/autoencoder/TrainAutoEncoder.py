@@ -37,6 +37,8 @@ from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_autoencoder_trai
 from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_crossencoder_trainer import \
     AdversarialCrossencoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
+from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import \
+    create_genotype_softmax_classifier_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisupervised_mixup_trainer import \
     GenotypingSemisupervisedMixupTrainer
@@ -135,6 +137,13 @@ if __name__ == '__main__':
                         help="Number of bins in histogram for latent code distributions")
     parser.add_argument("--mixup-alpha", type=float, default=0.2,
                         help="Alpha for supervised genotype with mixup")
+    parser.add_argument("--reduction-rate", type=float, default=0.36,
+                        help="The amount of reduction in hidden nodes to apply per layer")
+    parser.add_argument("--model-capacity", type=float, default=1.0,
+                        help="A floating number that controls model capacity (i.e., number of hidden nodes in the "
+                             "neural network). Use a c >=1 to control how many hidden nodes are created "
+                             "(#hiddenNodes=c*#inputs).")
+
     parser.add_argument('--label-strategy', help='Strategy to dream up labels for the unsupervised set (mixup mode). '
                                                  'One of SAMPLING, VAL_CONFUSION, VAL_CONFUSION_SAMPLING.',
                         default="SAMPLING")
@@ -317,6 +326,22 @@ if __name__ == '__main__':
             training_loop_method = model_trainer.train_semisupervised_mixup
             testing_loop_method = model_trainer.test_semisupervised_mixup
 
+        elif train_args.mode == "supervised_genotypes_softmax":
+            model_trainer = GenotypingSupervisedTrainer(args=train_args, problem=train_problem, use_cuda=train_use_cuda)
+            model_trainer.init_model(create_model_function=(
+                lambda model_name, problem_type: create_genotype_softmax_classifier_model(
+                    model_name,
+                    problem_type,
+                    ngpus=train_args.num_gpus,
+                    num_layers=train_args.num_layers,
+                    reduction_rate=train_args.reduction_rate,
+                    model_capacity=train_args.model_capacity,
+                    dropout_p=train_args.dropout_probability,
+                    use_selu=args.use_selu
+                )
+            ))
+            training_loop_method = model_trainer.train_supervised
+            testing_loop_method = model_trainer.test_supervised
         else:
             model_trainer = None
             print("unknown mode specified: " + train_args.mode)
