@@ -147,10 +147,13 @@ class CommonTrainer:
         self.class_frequencies = self.class_frequency()
         print("class_frequency " + str(self.class_frequencies))
 
-        self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=args.lr, momentum=args.momentum,
-                                                  weight_decay=args.L2)
+        self.optimizer_training = self.set_default_optimizer_training(args.optimizer, args)
 
         self.scheduler_train = self.create_scheduler_for_optimizer(self.optimizer_training)
+
+    def set_default_optimizer_training(self, optimizer_name, opt_args):
+        return torch.optim.SGD(self.net.parameters(), lr=opt_args.lr, momentum=opt_args.momentum,
+                               weight_decay=opt_args.L2)
 
     def create_scheduler_for_optimizer(self,optimizer):
         return construct_scheduler(
@@ -277,9 +280,7 @@ class CommonTrainer:
         perfs = PerformanceList()
 
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
-            self.optimizer_training = torch.optim.SGD(self.net.parameters(), lr=self.args.lr,
-                                                      momentum=self.args.momentum,
-                                                      weight_decay=self.args.L2)
+            self.optimizer_training = self.set_default_optimizer_training(self.args.optimizer, self.args)
             perfs = PerformanceList()
             perfs += training_loop_method(epoch)
 

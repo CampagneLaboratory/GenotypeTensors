@@ -55,9 +55,15 @@ class GenotypingSupervisedSoftmaxTrainer(CommonTrainer):
     def is_better(self, metric, previous_metric):
         return metric > previous_metric
 
+    def set_default_optimizer_training(self, optimizer_name, opt_args):
+        if optimizer_name == "SGD":
+            return super().set_default_optimizer_training(optimizer_name, opt_args)
+        elif optimizer_name == "adagrad":
+            return torch.optim.Adagrad(self.net.parameters(), lr=opt_args.lr, weight_decay=opt_args.L2)
+        else:
+            raise Exception("Unknown optimizer name: {}".format(optimizer_name))
+
     def train_supervised_softmax(self, epoch):
-        self.optimizer_training = torch.optim.Adagrad(self.net.parameters(), lr=self.args.lr,
-                                                      weight_decay=self.args.L2)
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [AccuracyHelper("train_")]

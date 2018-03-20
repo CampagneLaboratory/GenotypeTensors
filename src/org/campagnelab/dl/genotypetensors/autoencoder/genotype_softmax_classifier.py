@@ -7,7 +7,7 @@ from org.campagnelab.dl.genotypetensors.autoencoder.semisup_adversarial_autoenco
 
 class GenotypeSoftmaxClassifer(ConfigurableModule):
     def __init__(self, num_inputs, target_size, num_layers, reduction_rate, model_capacity,
-                 dropout_p, ngpus, use_selu=False, skip_batch_norm=False, add_softmax=False):
+                 dropout_p, ngpus, use_selu=False, skip_batch_norm=False):
         super().__init__(use_selu=use_selu)
         layer_list = []
         num_in = num_inputs
@@ -22,18 +22,10 @@ class GenotypeSoftmaxClassifer(ConfigurableModule):
             num_in = num_out
         self.features = nn.Sequential(*layer_list)
         if not skip_batch_norm:
-            if add_softmax:
-                self.softmax_genotype_linear = nn.Sequential(nn.Dropout(dropout_p), nn.BatchNorm1d(num_in),
-                                                             nn.Linear(num_in, target_size), nn.Softmax(0))
-            else:
-                self.softmax_genotype_linear = nn.Sequential(nn.Dropout(dropout_p), nn.BatchNorm1d(num_in),
-                                                             nn.Linear(num_in, target_size))
+            self.softmax_genotype_linear = nn.Sequential(nn.Dropout(dropout_p), nn.BatchNorm1d(num_in),
+                                                         nn.Linear(num_in, target_size))
         else:
-            if add_softmax:
-                self.softmax_genotype_linear = nn.Sequential(nn.Dropout(dropout_p), nn.Linear(num_in, target_size),
-                                                             nn.Softmax(0))
-            else:
-                self.softmax_genotype_linear = nn.Sequential(nn.Dropout(dropout_p), nn.Linear(num_in, target_size))
+            self.softmax_genotype_linear = nn.Sequential(nn.Dropout(dropout_p), nn.Linear(num_in, target_size))
         self.ngpus = ngpus
         self.device_list = list(range(0, self.ngpus))
 
@@ -52,12 +44,12 @@ class GenotypeSoftmaxClassifer(ConfigurableModule):
 
 
 def create_genotype_softmax_classifier_model(model_name, problem, ngpus, num_layers, reduction_rate, model_capacity,
-                                             dropout_p, use_selu, skip_batch_norm, add_softmax):
+                                             dropout_p, use_selu, skip_batch_norm):
     input_size = problem.input_size("input")
     output_size = problem.output_size("softmaxGenotype")
     classifier = GenotypeSoftmaxClassifer(num_inputs=input_size[0], target_size=output_size[0], num_layers=num_layers,
                                           reduction_rate=reduction_rate, model_capacity=model_capacity,
                                           dropout_p=dropout_p, ngpus=ngpus, use_selu=use_selu,
-                                          skip_batch_norm=skip_batch_norm, add_softmax=add_softmax)
+                                          skip_batch_norm=skip_batch_norm)
     print("classifier:" + str(classifier))
     return classifier

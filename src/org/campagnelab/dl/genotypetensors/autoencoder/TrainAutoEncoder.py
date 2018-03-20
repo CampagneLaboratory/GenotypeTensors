@@ -151,8 +151,8 @@ if __name__ == '__main__':
                         default="SAMPLING")
     parser.add_argument("--skip-batch-norm", action="store_true",
                         help="If set, don't add batch normalization for softmax supervised genotype classifier")
-    parser.add_argument("--add-softmax", action="store_true",
-                        help="If set, add softmax to output for softmax supervised genotype classifier")
+    parser.add_argument("--optimizer", type=str, choices=["SGD", "adagrad"], default="SGD",
+                        help="Optimizer to use. Only supervised_genotypes_softmax supports adagrad currently.")
 
     args = parser.parse_args()
 
@@ -347,7 +347,6 @@ if __name__ == '__main__':
                     dropout_p=train_args.dropout_probability,
                     use_selu=args.use_selu,
                     skip_batch_norm=args.skip_batch_norm,
-                    add_softmax=args.add_softmax
                 )
             ))
             model_trainer.optimizer_training = torch.optim.Adagrad(model_trainer.net.parameters(), lr=train_args.lr,
