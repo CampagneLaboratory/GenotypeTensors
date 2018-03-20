@@ -277,6 +277,9 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
             normalized_confusion_matrix=torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
                                                      dim=0, maxnorm=1)
+            if self.use_cuda:
+                normalized_confusion_matrix = normalized_confusion_matrix.cuda()
+                model_output_p=model_output_p.cuda()
             # result will be: [17,11,1,
             #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
             select =  (normalized_confusion_matrix.t()@model_output_p.t()).t()
@@ -290,7 +293,6 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             # training set as training progresses:
             self.best_model.eval()
             best_model_output = self.best_model(Variable(input.data, volatile=True))
-            best_model_output = self.best_model(Variable(input.data, volatile=True))
             model_output_p = self.get_p(best_model_output).data
             # assume three classes and predicted= [0.9, 0.1, 0]
             # assume confusion matrix is [10, 10, 0,
@@ -298,9 +300,12 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             #                              0, 30, 40]
 
             # reweight confusion matrix by probability of predictions:
-
             normalized_confusion_matrix = torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
                                                        dim=0, maxnorm=1)
+            if self.use_cuda:
+                normalized_confusion_matrix = normalized_confusion_matrix.cuda()
+                model_output_p=model_output_p.cuda()
+
             # result will be: [17,11,1,
             #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
             select = (normalized_confusion_matrix.t() @ model_output_p.t()).t()
