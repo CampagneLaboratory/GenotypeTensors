@@ -52,7 +52,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
 
     def log_performance_metrics(self, epoch, performance_estimators, kind="perfs"):
-        super().log_performance_metrics(epoch, performance_estimators, kind)
+        early_stop,best_performance_metrics=super().log_performance_metrics(epoch, performance_estimators, kind)
 
         # we load the best model we saved previously as a second model:
         self.best_model = self.load_checkpoint()
@@ -62,6 +62,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
             if self.use_cuda:
                 self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
+        return (early_stop, best_performance_metrics)
 
     def get_test_metric_name(self):
         return "test_accuracy"
