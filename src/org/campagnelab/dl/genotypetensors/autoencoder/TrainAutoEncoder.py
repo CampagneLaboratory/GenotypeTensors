@@ -139,7 +139,7 @@ if __name__ == '__main__':
                         help="Number of bins in histogram for latent code distributions")
     parser.add_argument("--mixup-alpha", type=float, default=0.2,
                         help="Alpha for supervised genotype with mixup")
-    parser.add_argument("--reduction-rate", type=float, default=0.36,
+    parser.add_argument("--reduction-rate", type=float, default=0.8,
                         help="The amount of reduction in hidden nodes to apply per layer")
     parser.add_argument("--model-capacity", type=float, default=1.0,
                         help="A floating number that controls model capacity (i.e., number of hidden nodes in the "
