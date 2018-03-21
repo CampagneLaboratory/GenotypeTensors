@@ -44,6 +44,8 @@ from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisupervised_mi
     GenotypingSemisupervisedMixupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_mixup_trainer import \
     GenotypingSupervisedMixupTrainer
+from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_softmax_mixup_trainer import \
+    GenotypingSupervisedSoftmaxMixupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_softmax_trainer import \
     GenotypingSupervisedSoftmaxTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_trainer import GenotypingSupervisedTrainer
@@ -102,7 +104,11 @@ if __name__ == '__main__':
                         help='The genotyping problem dataset name. basename is used to locate file named '
                              'basename-train.vec, basename-validation.vec, basename-unlabeled.vec')
     parser.add_argument('--mode', help='Training mode: autoencoder, supervised_somatic',
-                        default="supervised")
+                        default="supervised",
+                        choices=["autoencoder", "supervised_somatic", "semisupervised_genotypes",
+                                 "supervised_genotypes", "semisupervised_autoencoder", "supervised_crossencoder",
+                                 "supervised_mixup_genotypes", "semisupervised_mixup_genotypes",
+                                 "supervised_genotypes_softmax", "supervised_genotypes_softmax_mixup"])
     parser.add_argument("--reset-lr-every-n-epochs", type=int,
                         help='Reset learning rate to initial value every n epochs.')
 
@@ -349,10 +355,26 @@ if __name__ == '__main__':
                     skip_batch_norm=args.skip_batch_norm,
                 )
             ))
-            model_trainer.optimizer_training = torch.optim.Adagrad(model_trainer.net.parameters(), lr=train_args.lr,
-                                                                   weight_decay=train_args.L2)
             training_loop_method = model_trainer.train_supervised_softmax
             testing_loop_method = model_trainer.test_supervised_softmax
+        elif train_args.mode == "supervised_genotypes_softmax_mixup":
+            model_trainer = GenotypingSupervisedSoftmaxMixupTrainer(args=train_args, problem=train_problem,
+                                                                    use_cuda=train_use_cuda)
+            model_trainer.init_model(create_model_function=(
+                lambda model_name, problem_type: create_genotype_softmax_classifier_model(
+                    model_name,
+                    problem_type,
+                    ngpus=train_args.num_gpus,
+                    num_layers=train_args.num_layers,
+                    reduction_rate=train_args.reduction_rate,
+                    model_capacity=train_args.model_capacity,
+                    dropout_p=train_args.dropout_probability,
+                    use_selu=args.use_selu,
+                    skip_batch_norm=args.skip_batch_norm,
+                )
+            ))
+            training_loop_method = model_trainer.train_supervised_softmax_mixup
+            testing_loop_method = model_trainer.test_supervised_softmax_mixup
         else:
             model_trainer = None
             print("unknown mode specified: " + train_args.mode)

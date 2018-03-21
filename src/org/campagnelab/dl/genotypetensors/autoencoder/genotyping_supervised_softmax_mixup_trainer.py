@@ -1,8 +1,5 @@
 import torch
-from torch.autograd import Variable
 from torch.nn import MultiLabelSoftMarginLoss
-
-import numpy as np
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
@@ -34,7 +31,7 @@ def recode_as_multi_label(one_hot_vector):
     return coded
 
 
-class GenotypingSupervisedMixupTrainer(CommonTrainer):
+class GenotypingSupervisedSoftmaxMixupTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
@@ -42,6 +39,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         if self.args.normalize:
             problem_mean = self.problem.load_tensor("input", "mean")
             problem_std = self.problem.load_tensor("input", "std")
+
         self.normalize_inputs = lambda x: (normalize_mean_std(x, problem_mean=problem_mean,
                                                               problem_std=problem_std)
                                            if self.args.normalize
@@ -51,26 +49,21 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         if output_name == "softmaxGenotype":
             self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
 
-    def log_performance_metrics(self, epoch, performance_estimators, kind="perfs"):
-        early_stop,best_performance_metrics=super().log_performance_metrics(epoch, performance_estimators, kind)
-
-        # we load the best model we saved previously as a second model:
-        self.best_model = self.load_checkpoint()
-        if self.use_cuda:
-            self.best_model = self.best_model.cuda()
-        if self.confusion_matrix is not None:
-            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
-            if self.use_cuda:
-                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
-        return (early_stop, best_performance_metrics)
-
     def get_test_metric_name(self):
         return "test_accuracy"
 
     def is_better(self, metric, previous_metric):
         return metric > previous_metric
 
-    def train_supervised_mixup(self, epoch):
+    def set_default_optimizer_training(self, optimizer_name, opt_args):
+        if optimizer_name == "SGD":
+            return super().set_default_optimizer_training(optimizer_name, opt_args)
+        elif optimizer_name == "adagrad":
+            return torch.optim.Adagrad(self.net.parameters(), lr=opt_args.lr, weight_decay=opt_args.L2)
+        else:
+            raise Exception("Unknown optimizer name: {}".format(optimizer_name))
+
+    def train_supervised_softmax_mixup(self, epoch):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [AccuracyHelper("train_")]
@@ -84,7 +77,6 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
 
         unsupervised_loss_acc = 0
         num_batches = 0
-
         train_loader_subset_1 = self.problem.train_loader_subset_range(0, self.args.num_training)
         train_loader_subset_2 = self.problem.train_loader_subset_range(0, self.args.num_training)
         data_provider = MultiThreadedCpuGpuDataProvider(
@@ -98,7 +90,6 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
                 "input": self.normalize_inputs
             }
         )
-
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
         for batch_idx, (_, data_dict) in enumerate(data_provider):
@@ -108,6 +99,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             target_s_2 = data_dict["training_2"]["softmaxGenotype"]
             metadata_1 = data_dict["training_1"]["metaData"]
             metadata_2 = data_dict["training_2"]["metaData"]
+
             num_batches += 1
 
             input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_s_2, target_s_1, target_s_2)
@@ -151,7 +143,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
         return output_s_p
 
-    def test_supervised_mixup(self, epoch):
+    def test_supervised_softmax_mixup(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
         errors = None
         performance_estimators = PerformanceList()
@@ -186,11 +178,10 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
 
+            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+            self.estimate_errors(errors,output_s_p, target_s)
             _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
             _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            self.estimate_errors(errors, output_s_p, target_s)
-
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
             performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
                                                            output_s_p, targets=target_index)
@@ -203,6 +194,8 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         # print()
         data_provider.close()
         print("test errors by class: ", str(errors))
+        if self.reweight_by_validation_error:
+            self.reweight_by_val_errors(errors)
         # Apply learning rate schedule:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
         assert test_metric is not None, (self.get_test_metric_name() +

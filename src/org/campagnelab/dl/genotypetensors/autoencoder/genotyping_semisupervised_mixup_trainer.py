@@ -85,20 +85,6 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
     def is_better(self, metric, previous_metric):
         return metric > previous_metric
 
-    def _recreate_mixup_batch(self, input_1, input_2, target_1, target_2):
-        assert input_1.size() == input_2.size(), ("Input 1 size {} does not equal input 2 size {} for mixup"
-                                                  .format(input_1, input_2))
-        assert target_1.size() == target_2.size(), ("Target 1 size {} does not equal target 2 size {} for mixup"
-                                                    .format(target_1, target_2))
-        assert input_1.size()[0] == target_1.size()[0], (
-            "Input tensor has {} examples, target tensor has {} examples".format(input_1.size()[0],
-                                                                                 input_2.size()[0])
-        )
-        lam = np.random.beta(self.args.mixup_alpha, self.args.mixup_alpha)
-        input_mixup = lam * input_1 + (1.0 - lam) * input_2
-        target_mixup = lam * target_1 + (1.0 - lam) * target_2
-        return input_mixup, target_mixup
-
     def train_semisupervised_mixup(self, epoch):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
