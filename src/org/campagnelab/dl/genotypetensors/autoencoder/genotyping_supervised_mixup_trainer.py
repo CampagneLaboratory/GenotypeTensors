@@ -203,8 +203,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
             _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
             supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            errors[target_index.cpu().data] += torch.ne(target_index.cpu().data,
-                                                        output_index.cpu().data).type(torch.FloatTensor)
+            self.estimate_errors(errors, output_s_p, target_s)
 
             performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
             performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
