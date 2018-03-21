@@ -58,10 +58,10 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         self.best_model = self.load_checkpoint()
         if self.use_cuda:
             self.best_model = self.best_model.cuda()
-
-        self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
-        if self.use_cuda:
-            self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
+        if self.confusion_matrix is not None:
+            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
+            if self.use_cuda:
+                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
 
     def get_test_metric_name(self):
         return "test_accuracy"
