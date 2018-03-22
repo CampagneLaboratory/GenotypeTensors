@@ -1,6 +1,11 @@
 --mode
 categorical
-supervised_funnel_genotypes
+semisupervised_mixup_funnel_genotypes
+
+--mixup-alpha
+log-uniform
+0.1
+0.4
 
 --L2
 log-uniform

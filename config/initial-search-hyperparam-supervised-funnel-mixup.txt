@@ -50,6 +50,10 @@ categorical
 categorical
 30
 
+--epoch-min-accuracy
+categorical
+10.0
+
 -n
 categorical
 100000
