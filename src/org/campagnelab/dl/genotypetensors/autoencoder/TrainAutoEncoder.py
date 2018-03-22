@@ -38,16 +38,12 @@ from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_crossencoder_tra
     AdversarialCrossencoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import \
-    create_genotype_softmax_classifier_model
+    create_genotype_funnel_classifier_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisupervised_mixup_trainer import \
     GenotypingSemisupervisedMixupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_mixup_trainer import \
     GenotypingSupervisedMixupTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_softmax_mixup_trainer import \
-    GenotypingSupervisedSoftmaxMixupTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_softmax_trainer import \
-    GenotypingSupervisedSoftmaxTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_trainer import GenotypingSupervisedTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_trainer import GenotypingAutoEncoderTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.sbi_classifier import create_classifier_model
@@ -108,7 +104,7 @@ if __name__ == '__main__':
                         choices=["autoencoder", "supervised_somatic", "semisupervised_genotypes",
                                  "supervised_genotypes", "semisupervised_autoencoder", "supervised_crossencoder",
                                  "supervised_mixup_genotypes", "semisupervised_mixup_genotypes",
-                                 "supervised_genotypes_softmax", "supervised_genotypes_softmax_mixup"])
+                                 "supervised_funnel_genotypes", "supervised_mixup_funnel_genotypes"])
     parser.add_argument("--reset-lr-every-n-epochs", type=int,
                         help='Reset learning rate to initial value every n epochs.')
 
@@ -339,11 +335,11 @@ if __name__ == '__main__':
             training_loop_method = model_trainer.train_semisupervised_mixup
             testing_loop_method = model_trainer.test_semisupervised_mixup
 
-        elif train_args.mode == "supervised_genotypes_softmax":
-            model_trainer = GenotypingSupervisedSoftmaxTrainer(args=train_args, problem=train_problem,
+        elif train_args.mode == "supervised_funnel_genotypes":
+            model_trainer = GenotypingSupervisedTrainer(args=train_args, problem=train_problem,
                                                                use_cuda=train_use_cuda)
             model_trainer.init_model(create_model_function=(
-                lambda model_name, problem_type: create_genotype_softmax_classifier_model(
+                lambda model_name, problem_type: create_genotype_funnel_classifier_model(
                     model_name,
                     problem_type,
                     ngpus=train_args.num_gpus,
@@ -355,13 +351,13 @@ if __name__ == '__main__':
                     skip_batch_norm=args.skip_batch_norm,
                 )
             ))
-            training_loop_method = model_trainer.train_supervised_softmax
-            testing_loop_method = model_trainer.test_supervised_softmax
-        elif train_args.mode == "supervised_genotypes_softmax_mixup":
-            model_trainer = GenotypingSupervisedSoftmaxMixupTrainer(args=train_args, problem=train_problem,
+            training_loop_method = model_trainer.train_supervised
+            testing_loop_method = model_trainer.test_supervised
+        elif train_args.mode == "supervised_mixup_funnel_genotypes":
+            model_trainer = GenotypingSupervisedMixupTrainer(args=train_args, problem=train_problem,
                                                                     use_cuda=train_use_cuda)
             model_trainer.init_model(create_model_function=(
-                lambda model_name, problem_type: create_genotype_softmax_classifier_model(
+                lambda model_name, problem_type: create_genotype_funnel_classifier_model(
                     model_name,
                     problem_type,
                     ngpus=train_args.num_gpus,
@@ -373,8 +369,8 @@ if __name__ == '__main__':
                     skip_batch_norm=args.skip_batch_norm,
                 )
             ))
-            training_loop_method = model_trainer.train_supervised_softmax_mixup
-            testing_loop_method = model_trainer.test_supervised_softmax_mixup
+            training_loop_method = model_trainer.train_supervised_mixup
+            testing_loop_method = model_trainer.test_supervised_mixup
         else:
             model_trainer = None
             print("unknown mode specified: " + train_args.mode)

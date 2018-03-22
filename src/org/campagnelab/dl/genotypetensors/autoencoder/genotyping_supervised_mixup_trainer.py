@@ -35,7 +35,7 @@ def recode_as_multi_label(one_hot_vector):
 
 
 class GenotypingSupervisedMixupTrainer(CommonTrainer):
-    """Train a genotyping model using supervised training only."""
+    """Train a genotyping model using supervised mixup training."""
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
         self.criterion_classifier = None
@@ -203,6 +203,8 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         # print()
         data_provider.close()
         print("test errors by class: ", str(errors))
+        if self.reweight_by_validation_error:
+            self.reweight_by_val_errors(errors)
         # Apply learning rate schedule:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
         assert test_metric is not None, (self.get_test_metric_name() +

@@ -43,8 +43,11 @@ class GenotypeSoftmaxClassifer(ConfigurableModule):
         return softmax_genotype_linear
 
 
-def create_genotype_softmax_classifier_model(model_name, problem, ngpus, num_layers, reduction_rate, model_capacity,
-                                             dropout_p, use_selu, skip_batch_norm):
+def create_genotype_funnel_classifier_model(model_name, problem, ngpus, num_layers, reduction_rate, model_capacity,
+                                            dropout_p, use_selu, skip_batch_norm):
+    """ Create a model with the funnel architecture: reduction in the number of neuron is applied after each layer,
+    progressively reducing the number of features. Model capacity controls the number of neurons in the first layer.
+    """
     input_size = problem.input_size("input")
     output_size = problem.output_size("softmaxGenotype")
     classifier = GenotypeSoftmaxClassifer(num_inputs=input_size[0], target_size=output_size[0], num_layers=num_layers,
