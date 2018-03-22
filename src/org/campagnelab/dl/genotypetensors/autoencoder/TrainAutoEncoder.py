@@ -104,7 +104,13 @@ if __name__ == '__main__':
                         choices=["autoencoder", "supervised_somatic", "semisupervised_genotypes",
                                  "supervised_genotypes", "semisupervised_autoencoder", "supervised_crossencoder",
                                  "supervised_mixup_genotypes", "semisupervised_mixup_genotypes",
-                                 "supervised_funnel_genotypes", "supervised_mixup_funnel_genotypes"])
+                                 "supervised_funnel_genotypes", "supervised_mixup_funnel_genotypes",
+                                 "semisupervised_mixup_funnel_genotypes"])
+    parser.add_argument('--epoch-min-accuracy', default=0, type=float,
+                        help='Stop training early if test accuracy is below this value after an epoch of training.'
+                             ' This option helps prune poor hyperparameter values. You could set the value to 10 to '
+                             'stop if the model did not reach 10% accuracy in the first epoch. ')
+
     parser.add_argument("--reset-lr-every-n-epochs", type=int,
                         help='Reset learning rate to initial value every n epochs.')
 
@@ -371,6 +377,24 @@ if __name__ == '__main__':
             ))
             training_loop_method = model_trainer.train_supervised_mixup
             testing_loop_method = model_trainer.test_supervised_mixup
+        elif train_args.mode == "semisupervised_mixup_funnel_genotypes":
+            model_trainer = GenotypingSemisupervisedMixupTrainer(args=train_args, problem=train_problem,
+                                                             use_cuda=train_use_cuda)
+            model_trainer.init_model(create_model_function=(
+                lambda model_name, problem_type: create_genotype_funnel_classifier_model(
+                    model_name,
+                    problem_type,
+                    ngpus=train_args.num_gpus,
+                    num_layers=train_args.num_layers,
+                    reduction_rate=train_args.reduction_rate,
+                    model_capacity=train_args.model_capacity,
+                    dropout_p=train_args.dropout_probability,
+                    use_selu=args.use_selu,
+                    skip_batch_norm=args.skip_batch_norm,
+                )
+            ))
+            training_loop_method = model_trainer.train_semisupervised_mixup
+            testing_loop_method = model_trainer.test_semisupervised_mixup
         else:
             model_trainer = None
             print("unknown mode specified: " + train_args.mode)

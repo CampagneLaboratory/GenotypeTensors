@@ -224,7 +224,10 @@ class CommonTrainer:
             if self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
                 early_stop = True  # request early stopping
-
+        if self.get_test_metric_name()=="test_accuracy" and metric is not None and \
+            not self.is_better(metric, self.args.epoch_min_accuracy):
+            early_stop=True
+            print("Early stopping because accuracy is less than --epoch-min-accuracy {}".format(self.args.epoch_min_accuracy))
         return early_stop, self.best_performance_metrics
 
     def save_checkpoint(self, epoch, test_loss):
