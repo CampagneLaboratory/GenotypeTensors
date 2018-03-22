@@ -148,8 +148,8 @@ if __name__ == '__main__':
                              "neural network). Use a c >=1 to control how many hidden nodes are created "
                              "(#hiddenNodes=c*#inputs).")
 
-    parser.add_argument('--label-strategy', help='Strategy to dream up labels for the unsupervised set (mixup mode). '
-                                                 'One of SAMPLING, VAL_CONFUSION, VAL_CONFUSION_SAMPLING.',
+    parser.add_argument('--label-strategy', help='Strategy to dream up labels for the unsupervised set (mixup mode). ',
+                        choices=["SAMPLING", "VAL_CONFUSION", "VAL_CONFUSION_SAMPLING"],
                         default="SAMPLING")
     parser.add_argument("--skip-batch-norm", action="store_true",
                         help="If set, don't add batch normalization for softmax supervised genotype classifier")
@@ -337,7 +337,7 @@ if __name__ == '__main__':
 
         elif train_args.mode == "supervised_funnel_genotypes":
             model_trainer = GenotypingSupervisedTrainer(args=train_args, problem=train_problem,
-                                                               use_cuda=train_use_cuda)
+                                                        use_cuda=train_use_cuda)
             model_trainer.init_model(create_model_function=(
                 lambda model_name, problem_type: create_genotype_funnel_classifier_model(
                     model_name,
@@ -355,7 +355,7 @@ if __name__ == '__main__':
             testing_loop_method = model_trainer.test_supervised
         elif train_args.mode == "supervised_mixup_funnel_genotypes":
             model_trainer = GenotypingSupervisedMixupTrainer(args=train_args, problem=train_problem,
-                                                                    use_cuda=train_use_cuda)
+                                                             use_cuda=train_use_cuda)
             model_trainer.init_model(create_model_function=(
                 lambda model_name, problem_type: create_genotype_funnel_classifier_model(
                     model_name,
