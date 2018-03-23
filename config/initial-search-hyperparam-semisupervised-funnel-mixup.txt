@@ -59,11 +59,11 @@ categorical
 
 -n
 categorical
-100000
+10000
 
 -x
 categorical
-100000
+10000
 
 --mini-batch-size
 categorical
