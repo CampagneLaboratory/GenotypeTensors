@@ -41,9 +41,12 @@ categorical
 5
 10
 
+--use-selu
+flag
+
 --max-epochs
 categorical
-30
+10
 
 --epoch-min-accuracy
 categorical
