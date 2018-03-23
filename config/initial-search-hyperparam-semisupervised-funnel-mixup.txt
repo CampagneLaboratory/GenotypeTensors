@@ -68,3 +68,9 @@ categorical
 --mini-batch-size
 categorical
 1024
+
+--label-strategy
+category
+SAMPLING
+VAL_CONFUSION
+VAL_CONFUSION_SAMPLING
