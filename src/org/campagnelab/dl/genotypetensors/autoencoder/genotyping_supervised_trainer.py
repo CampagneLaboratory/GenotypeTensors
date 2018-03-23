@@ -97,8 +97,8 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             self.net.zero_grad()
             output_s = self.net(input_s)
             output_s_p = self.get_p(output_s)
-            _, target_index = torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
+            _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
+            supervised_loss = self.criterion_classifier(output_s_p, recode_as_multi_label(target_s))
 
             batch_weight = self.estimate_batch_weight(metadata, indel_weight=indel_weight,
                                                       snp_weight=snp_weight)

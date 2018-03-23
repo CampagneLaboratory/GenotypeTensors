@@ -52,7 +52,7 @@ categorical
 
 --epoch-min-accuracy
 categorical
-10.0
+80.0
 
 -n
 categorical
@@ -61,3 +61,7 @@ categorical
 -x
 categorical
 100000
+
+--mini-batch-size
+categorical
+1024
