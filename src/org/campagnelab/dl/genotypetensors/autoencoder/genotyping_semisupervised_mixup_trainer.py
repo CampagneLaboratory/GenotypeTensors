@@ -51,7 +51,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                                                               problem_std=problem_std)
                                            if self.args.normalize
                                            else x)
-        self.num_classes=0
+
 
 
     def rebuild_criterions(self, output_name, weights=None):
@@ -97,6 +97,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
+
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s_1 = data_dict["training"]["input"]
             target_s_1 = data_dict["training"]["softmaxGenotype"]
@@ -214,6 +215,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                                          "must be found among estimated performance metrics")
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_metric, epoch)
+
         self.confusion_matrix = cm.value().transpose()
 
         if self.best_model_confusion_matrix is None:

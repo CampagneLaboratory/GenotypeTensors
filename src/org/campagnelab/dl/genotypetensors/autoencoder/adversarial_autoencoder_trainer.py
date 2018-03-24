@@ -3,6 +3,7 @@ import scipy
 import torch
 from torch.autograd import Variable
 from scipy.stats import norm
+from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
@@ -116,6 +117,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             num_batches += 1
             self.zero_grad_all_optimizers()
 
+            self.num_classes = len(target_s[0])
             # Train reconstruction phase:
             self.net.encoder.train()
             self.net.decoder.train()
@@ -243,7 +245,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                                                         recode_functions={
                                                             "input": self.normalize_inputs
                                                         })
-
+        cm = ConfusionMeter(self.num_classes, normalized=False)
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             input_s = data_dict["validation"]["input"]
             target_s = data_dict["validation"]["softmaxGenotype"]
@@ -256,6 +258,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             categories_predicted_p = self.get_p(categories_predicted)
             categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
             _, target_index = torch.max(target_s, dim=1)
+            _, output_index = torch.max(categories_predicted_p, dim=1)
             categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
             weight = 1
             if self.use_pdf:
@@ -264,6 +267,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             else:
                 weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
                                                      snp_weight=snp_weight)
+
+            cm.add(predicted=output_index.data, target=target_index.data)
 
             performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
             performance_estimators.set_metric(batch_idx, "weight", weight)
@@ -286,7 +291,10 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         if not self.args.constant_learning_rates:
             for scheduler in self.schedulers:
                 scheduler.step(test_metric, epoch)
-        # Run the garbage collector to try to release memory we no longer need:
-        import gc
-        gc.collect()
+        self.confusion_matrix = cm.value().transpose()
+
+        if self.best_model_confusion_matrix is None:
+            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
+            if self.use_cuda:
+                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
         return performance_estimators

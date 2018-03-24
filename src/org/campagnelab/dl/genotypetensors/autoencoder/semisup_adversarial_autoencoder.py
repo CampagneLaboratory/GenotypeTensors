@@ -247,28 +247,6 @@ class SemiSupAdvAutoencoder(ConfigurableModule):
 
         return reconstruction_loss
 
-    def get_category_sample(self,mini_batch_size, num_classes,category_prior, recode_labels=None):
-        if self.categorical_distribution is None:
-            # initialize a distribution to sample from num_classes with equal probability:
-            if category_prior is None:
-                category_prior=[1.0 / num_classes] * num_classes
-            else:
-                # Convert from numpy to a list of floats:
-                category_prior=list(numpy.asarray(category_prior,dtype=float))
-            self.categorical_distribution = Categorical(
-            probs=numpy.reshape(torch.FloatTensor(category_prior * mini_batch_size),
-                                    (mini_batch_size, num_classes)))
-            self.categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
-
-        categories_as_int = self.categorical_distribution.sample().view(mini_batch_size, -1)
-        self.categories_one_hot.zero_()
-        self.categories_one_hot.scatter_(1,categories_as_int,1)
-        if recode_labels is not None:
-            # apply label recode function:
-            self.categories_one_hot=recode_labels(self.categories_one_hot)
-        categories_real = Variable(self.categories_one_hot.clone(), requires_grad=True)
-        return categories_real
-
     def get_discriminator_loss(self, common_trainer, model_input, category_prior=None, recode_labels=True):
 
         mini_batch_size = model_input.data.size()[0]

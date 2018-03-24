@@ -92,6 +92,7 @@ class CommonTrainer:
         self.class_frequencies=None
         self.epsilon = args.epsilon_label_smoothing
         self.reweight_by_validation_error = args.reweight_by_validation_error
+        self.num_classes = 0
 
     def init_model(self, create_model_function):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -135,6 +136,10 @@ class CommonTrainer:
                 self.best_test_loss = checkpoint['best_test_loss']
                 self.start_epoch = checkpoint['epoch']
                 self.best_model_confusion_matrix=checkpoint['confusion-matrix']
+                # we just resumed from a best saved model, load it indei:
+                self.best_model = self.load_checkpoint("best")
+                if self.use_cuda:
+                    self.best_model.cuda()
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
@@ -424,20 +429,28 @@ class CommonTrainer:
         target_mixup = lam * target_1 + (1.0 - lam) * target_2
         return input_mixup, target_mixup
 
-    def get_category_sample(self, mini_batch_size, num_classes, category_prior, recode_labels=None):
-        if self.categorical_distribution is None:
-            # initialize a distribution to sample from num_classes with equal probability:
-            if category_prior is None:
-                category_prior = [1.0 / num_classes] * num_classes
-            else:
-                # Convert from numpy to a list of floats:
-                category_prior = list(numpy.asarray(category_prior, dtype=float))
-            self.categorical_distribution = Categorical(
-                probs=numpy.reshape(torch.FloatTensor(category_prior * mini_batch_size),
-                                    (mini_batch_size, num_classes)))
-            self.categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
+    def prepare_distribution(self, mini_batch_size, num_classes, category_prior, recode_labels=None):
+        # initialize a distribution to sample from num_classes with equal probability:
+        if category_prior is None:
+            category_prior = [1.0 / num_classes] * num_classes
+        else:
+            # Convert from numpy to a list of floats:
+            category_prior = list(numpy.asarray(category_prior, dtype=float))
 
-        categories_as_int = self.categorical_distribution.sample().view(mini_batch_size, -1)
+        categorical_distribution = Categorical(
+            probs=numpy.reshape(torch.FloatTensor(category_prior * mini_batch_size),
+                                (mini_batch_size, num_classes)))
+        return categorical_distribution
+
+    def get_category_sample(self, mini_batch_size, num_classes, category_prior, recode_labels=None,
+                            categorical_distribution=None):
+        if categorical_distribution is None:
+            categorical_distribution = self.prepare_distribution(mini_batch_size, num_classes, category_prior,
+                                                                 recode_labels)
+
+        self.categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
+
+        categories_as_int = categorical_distribution.sample().view(mini_batch_size, -1)
         self.categories_one_hot.zero_()
         self.categories_one_hot.scatter_(1, categories_as_int, 1)
         if recode_labels is not None:
@@ -450,8 +463,8 @@ class CommonTrainer:
         if self.best_model is None or self.args.label_strategy == "SAMPLING":
 
             return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
-                                 category_prior=category_prior,
-                                 recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
+                                            category_prior=category_prior,
+                                            recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
         elif self.args.label_strategy == "VAL_CONFUSION":
             self.best_model.eval()
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
@@ -502,7 +515,15 @@ class CommonTrainer:
 
             # Renormalize each row to get probability of each class according to the best model and validation confusion:
             targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
-            # sample from this distribution:
-            return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
-                                 category_prior=targets2,
-                                 recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
+            result = torch.zeros(targets2.size())
+            # sample from these distributions:
+            for example in range(len(targets2)):
+                categorical_distribution = self.prepare_distribution(1, num_classes=num_classes,
+                                                                     category_prior=targets2[example])
+                result[example] = self.get_category_sample(1, num_classes=num_classes,
+                                                           categorical_distribution=categorical_distribution,
+                                                           category_prior=None,
+                                                           recode_labels=lambda x: recode_for_label_smoothing(x,
+                                                                                                              epsilon=self.epsilon)).data[
+                    0]
+            return Variable(result, requires_grad=False)
