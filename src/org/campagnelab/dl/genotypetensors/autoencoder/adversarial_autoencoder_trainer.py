@@ -131,7 +131,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             self.zero_grad_all_optimizers()
             genotype_frequencies = self.class_frequencies["softmaxGenotype"]
             category_prior = (genotype_frequencies / torch.sum(genotype_frequencies)).numpy()
-            discriminator_loss = self.net.get_discriminator_loss(input_u, category_prior=category_prior,
+            discriminator_loss = self.net.get_discriminator_loss(common_trainer=self, model_input=input_u,
+                                                                 category_prior=category_prior,
                                                                  recode_labels=lambda x: recode_for_label_smoothing(x,
                                                                                                                     epsilon=self.epsilon))
             discriminator_loss.backward()

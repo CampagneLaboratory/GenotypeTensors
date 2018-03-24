@@ -269,11 +269,12 @@ class SemiSupAdvAutoencoder(ConfigurableModule):
         categories_real = Variable(self.categories_one_hot.clone(), requires_grad=True)
         return categories_real
 
-    def get_discriminator_loss(self, model_input, category_prior=None, recode_labels=True):
+    def get_discriminator_loss(self, common_trainer, model_input, category_prior=None, recode_labels=True):
 
         mini_batch_size = model_input.data.size()[0]
-        categories_real=self.get_category_sample(mini_batch_size,num_classes=self.num_classes,
-                                                 category_prior=category_prior, recode_labels=recode_for_label_smoothing)
+        categories_real = common_trainer.dreamup_target_for(input=model_input, num_classes=self.num_classes,
+                                             category_prior=category_prior)
+
 
         prior_real = draw_from_gaussian(self.prior_dim, mini_batch_size)
 

@@ -53,27 +53,6 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                                            else x)
         self.num_classes=0
 
-    def get_category_sample(self, mini_batch_size, num_classes, category_prior, recode_labels=None):
-        if self.categorical_distribution is None:
-            # initialize a distribution to sample from num_classes with equal probability:
-            if category_prior is None:
-                category_prior = [1.0 / num_classes] * num_classes
-            else:
-                # Convert from numpy to a list of floats:
-                category_prior = list(numpy.asarray(category_prior, dtype=float))
-            self.categorical_distribution = Categorical(
-                probs=numpy.reshape(torch.FloatTensor(category_prior * mini_batch_size),
-                                    (mini_batch_size, num_classes)))
-            self.categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
-
-        categories_as_int = self.categorical_distribution.sample().view(mini_batch_size, -1)
-        self.categories_one_hot.zero_()
-        self.categories_one_hot.scatter_(1, categories_as_int, 1)
-        if recode_labels is not None:
-            # apply label recode function:
-            self.categories_one_hot = recode_labels(self.categories_one_hot)
-        categories_real = Variable(self.categories_one_hot.clone(), requires_grad=False)
-        return categories_real
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -242,63 +221,3 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             if self.use_cuda:
                 self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
         return performance_estimators
-
-    def dreamup_target_for(self, num_classes, category_prior,input):
-        if self.best_model is None or self.args.label_strategy == "SAMPLING":
-            return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
-                                 category_prior=category_prior,
-                                 recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
-        elif self.args.label_strategy == "VAL_CONFUSION":
-            self.best_model.eval()
-            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-            # training set as training progresses:
-            best_model_output = self.best_model(Variable(input.data, volatile=True))
-            model_output_p=self.get_p(best_model_output).data
-            # assume three classes and predicted= [0.9, 0.1, 0]
-            # assume confusion matrix is [10, 10, 0,
-            #                             80, 20, 10,
-            #                              0, 30, 40]
-
-            # reweight confusion matrix by probability of predictions:
-
-            normalized_confusion_matrix=torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
-                                                     dim=0, maxnorm=1)
-            if self.use_cuda:
-                normalized_confusion_matrix = normalized_confusion_matrix.cuda()
-                model_output_p=model_output_p.cuda()
-            # result will be: [17,11,1,
-            #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
-            select =  (normalized_confusion_matrix.t()@model_output_p.t()).t()
-
-            # Renormalize each row to get probability of each class according to the best model and validation confusion:
-            targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
-            return Variable(targets2,requires_grad=False)
-            # print("normalized: "+str(targets2))
-        elif self.args.label_strategy == "VAL_CONFUSION_SAMPLING":
-            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-            # training set as training progresses:
-            self.best_model.eval()
-            best_model_output = self.best_model(Variable(input.data, volatile=True))
-            model_output_p = self.get_p(best_model_output).data
-            # assume three classes and predicted= [0.9, 0.1, 0]
-            # assume confusion matrix is [10, 10, 0,
-            #                             80, 20, 10,
-            #                              0, 30, 40]
-
-            # reweight confusion matrix by probability of predictions:
-            normalized_confusion_matrix = torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
-                                                       dim=0, maxnorm=1)
-            if self.use_cuda:
-                normalized_confusion_matrix = normalized_confusion_matrix.cuda()
-                model_output_p=model_output_p.cuda()
-
-            # result will be: [17,11,1,
-            #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
-            select = (normalized_confusion_matrix.t() @ model_output_p.t()).t()
-
-            # Renormalize each row to get probability of each class according to the best model and validation confusion:
-            targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
-            # sample from this distribution:
-            return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
-                                 category_prior=targets2,
-                                 recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
