@@ -27,7 +27,7 @@ int
 
 --n-dim
 int
-256
+32
 1024
 
 --encoded-size
