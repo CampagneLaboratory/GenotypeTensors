@@ -460,6 +460,12 @@ class CommonTrainer:
         return categories_real
 
     def dreamup_target_for(self, num_classes, category_prior,input):
+        if self.best_model is None or self.args.label_strategy == "UNIFORM":
+            category_prior=numpy.ones(self.num_classes)/self.num_classes
+            return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
+                                            category_prior=category_prior,
+                                            recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
+
         if self.best_model is None or self.args.label_strategy == "SAMPLING":
 
             return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,

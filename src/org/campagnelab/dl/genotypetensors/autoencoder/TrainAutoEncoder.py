@@ -155,7 +155,7 @@ if __name__ == '__main__':
                              "(#hiddenNodes=c*#inputs).")
 
     parser.add_argument('--label-strategy', help='Strategy to dream up labels for the unsupervised set (mixup mode). ',
-                        choices=["SAMPLING", "VAL_CONFUSION", "VAL_CONFUSION_SAMPLING"],
+                        choices=["UNIFORM","SAMPLING", "VAL_CONFUSION", "VAL_CONFUSION_SAMPLING"],
                         default="SAMPLING")
     parser.add_argument("--skip-batch-norm", action="store_true",
                         help="If set, don't add batch normalization for softmax supervised genotype classifier")
