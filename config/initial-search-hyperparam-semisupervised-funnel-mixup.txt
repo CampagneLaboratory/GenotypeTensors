@@ -70,7 +70,7 @@ categorical
 1024
 
 --label-strategy
-category
+categorical
 SAMPLING
 VAL_CONFUSION
 VAL_CONFUSION_SAMPLING
