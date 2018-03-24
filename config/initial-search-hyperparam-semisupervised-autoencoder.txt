@@ -66,7 +66,7 @@ categorical
 1024
 
 --label-strategy
-category
+categorical
 UNIFORM
 SAMPLING
 VAL_CONFUSION
