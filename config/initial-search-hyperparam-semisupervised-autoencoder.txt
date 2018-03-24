@@ -67,6 +67,7 @@ categorical
 
 --label-strategy
 category
+UNIFORM
 SAMPLING
 VAL_CONFUSION
 VAL_CONFUSION_SAMPLING
