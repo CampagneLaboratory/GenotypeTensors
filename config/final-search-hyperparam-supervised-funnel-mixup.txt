@@ -61,3 +61,9 @@ categorical
 --mini-batch-size
 categorical
 1024
+
+--seed
+categorical
+3500635728761651324
+4757600333491744102
+4946665479437370579
