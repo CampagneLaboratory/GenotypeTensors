@@ -109,84 +109,85 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
         latent_codes = []
         gaussian_codes = []
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["training"]["input"]
-            target_s = data_dict["training"]["softmaxGenotype"]
-            input_u = data_dict["unlabeled"]["input"]
-            meta_data = data_dict["training"]["metaData"]
-            num_batches += 1
-            self.zero_grad_all_optimizers()
+        try:
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                input_s = data_dict["training"]["input"]
+                target_s = data_dict["training"]["softmaxGenotype"]
+                input_u = data_dict["unlabeled"]["input"]
+                meta_data = data_dict["training"]["metaData"]
+                num_batches += 1
+                self.zero_grad_all_optimizers()
 
-            self.num_classes = len(target_s[0])
-            # Train reconstruction phase:
-            self.net.encoder.train()
-            self.net.decoder.train()
-            reconstruction_loss = self.net.get_reconstruction_loss(input_u)
-            reconstruction_loss.backward()
-            for opt in [self.decoder_opt, self.encoder_reconstruction_opt]:
-                opt.step()
+                self.num_classes = len(target_s[0])
+                # Train reconstruction phase:
+                self.net.encoder.train()
+                self.net.decoder.train()
+                reconstruction_loss = self.net.get_reconstruction_loss(input_u)
+                reconstruction_loss.backward()
+                for opt in [self.decoder_opt, self.encoder_reconstruction_opt]:
+                    opt.step()
 
-            # Train discriminators:
-            self.net.encoder.eval()
-            self.net.discriminator_cat.train()
-            self.net.discriminator_prior.train()
-            self.zero_grad_all_optimizers()
-            genotype_frequencies = self.class_frequencies["softmaxGenotype"]
-            category_prior = (genotype_frequencies / torch.sum(genotype_frequencies)).numpy()
-            discriminator_loss = self.net.get_discriminator_loss(common_trainer=self, model_input=input_u,
-                                                                 category_prior=category_prior,
-                                                                 recode_labels=lambda x: recode_for_label_smoothing(x,
-                                                                                                                    epsilon=self.epsilon))
-            discriminator_loss.backward()
-            for opt in [self.discriminator_cat_opt, self.discriminator_prior_opt]:
-                opt.step()
-            self.zero_grad_all_optimizers()
-
-            # Train generator:
-            self.net.encoder.train()
-            generator_loss = self.net.get_generator_loss(input_u)
-            generator_loss.backward()
-            for opt in [self.encoder_generator_opt]:
-                opt.step()
-            self.zero_grad_all_optimizers()
-            weight = 1
-            if self.use_pdf:
+                # Train discriminators:
                 self.net.encoder.eval()
-                _, latent_code = self.net.encoder(input_s)
-                weight *= self.estimate_example_density_weight(latent_code)
+                self.net.discriminator_cat.train()
+                self.net.discriminator_prior.train()
+                self.zero_grad_all_optimizers()
+                genotype_frequencies = self.class_frequencies["softmaxGenotype"]
+                category_prior = (genotype_frequencies / torch.sum(genotype_frequencies)).numpy()
+                discriminator_loss = self.net.get_discriminator_loss(common_trainer=self, model_input=input_u,
+                                                                     category_prior=category_prior,
+                                                                     recode_labels=lambda x: recode_for_label_smoothing(x,
+                                                                                                                        epsilon=self.epsilon))
+                discriminator_loss.backward()
+                for opt in [self.discriminator_cat_opt, self.discriminator_prior_opt]:
+                    opt.step()
+                self.zero_grad_all_optimizers()
 
-            weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
-                                                 snp_weight=snp_weight)
-            self.net.encoder.train()
-            semisup_loss = self.net.get_semisup_loss(input_s, target_s) * weight
-            semisup_loss.backward()
+                # Train generator:
+                self.net.encoder.train()
+                generator_loss = self.net.get_generator_loss(input_u)
+                generator_loss.backward()
+                for opt in [self.encoder_generator_opt]:
+                    opt.step()
+                self.zero_grad_all_optimizers()
+                weight = 1
+                if self.use_pdf:
+                    self.net.encoder.eval()
+                    _, latent_code = self.net.encoder(input_s)
+                    weight *= self.estimate_example_density_weight(latent_code)
 
-            for opt in [self.encoder_semisup_opt]:
-                opt.step()
-            self.zero_grad_all_optimizers()
+                weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
+                                                     snp_weight=snp_weight)
+                self.net.encoder.train()
+                semisup_loss = self.net.get_semisup_loss(input_s, target_s) * weight
+                semisup_loss.backward()
 
-            performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "semisup_loss", semisup_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "weight", weight)
+                for opt in [self.encoder_semisup_opt]:
+                    opt.step()
+                self.zero_grad_all_optimizers()
 
-            if self.args.latent_code_output is not None:
-                _, latent_code = self.net.encoder(input_u)
-                # Randomly select n rows from the minibatch to keep track of the latent codes for
-                idxs_to_sample = torch.randperm(latent_code.size()[0])[:self.args.latent_code_n_per_minibatch]
-                for row_idx in idxs_to_sample:
-                    latent_code_row = latent_code[row_idx]
-                    gaussian_codes.append(torch.squeeze(draw_from_gaussian(latent_code_row.size()[0], 1)))
-                    latent_codes.append(latent_code_row)
+                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "semisup_loss", semisup_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "weight", weight)
 
-            progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
-                         performance_estimators.progress_message(
-                             ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
-            if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
-                break
+                if self.args.latent_code_output is not None:
+                    _, latent_code = self.net.encoder(input_u)
+                    # Randomly select n rows from the minibatch to keep track of the latent codes for
+                    idxs_to_sample = torch.randperm(latent_code.size()[0])[:self.args.latent_code_n_per_minibatch]
+                    for row_idx in idxs_to_sample:
+                        latent_code_row = latent_code[row_idx]
+                        gaussian_codes.append(torch.squeeze(draw_from_gaussian(latent_code_row.size()[0], 1)))
+                        latent_codes.append(latent_code_row)
 
-        data_provider.close()
+                progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
+                             performance_estimators.progress_message(
+                                 ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
+                if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
+                    break
+        finally:
+            data_provider.close()
 
         if self.args.latent_code_output is not None:
             # Each dimension in latent code should be Gaussian distributed, so take histogram of each column
@@ -246,44 +247,46 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                                                             "input": self.normalize_inputs
                                                         })
         cm = ConfusionMeter(self.num_classes, normalized=False)
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["validation"]["input"]
-            target_s = data_dict["validation"]["softmaxGenotype"]
-            meta_data = data_dict["validation"]["metaData"]
-            # Estimate the reconstruction loss on validation examples:
-            reconstruction_loss = self.net.get_reconstruction_loss(input_s)
+        try:
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                input_s = data_dict["validation"]["input"]
+                target_s = data_dict["validation"]["softmaxGenotype"]
+                meta_data = data_dict["validation"]["metaData"]
+                # Estimate the reconstruction loss on validation examples:
+                reconstruction_loss = self.net.get_reconstruction_loss(input_s)
 
-            # now evaluate prediction of categories:
-            categories_predicted, latent_code = self.net.encoder(input_s)
-            categories_predicted_p = self.get_p(categories_predicted)
-            categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
-            _, target_index = torch.max(target_s, dim=1)
-            _, output_index = torch.max(categories_predicted_p, dim=1)
-            categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
-            weight = 1
-            if self.use_pdf:
+                # now evaluate prediction of categories:
+                categories_predicted, latent_code = self.net.encoder(input_s)
+                categories_predicted_p = self.get_p(categories_predicted)
+                categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
+                _, target_index = torch.max(target_s, dim=1)
+                _, output_index = torch.max(categories_predicted_p, dim=1)
+                categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
+                weight = 1
+                if self.use_pdf:
 
-                weight *= self.estimate_example_density_weight(latent_code)
-            else:
-                weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
-                                                     snp_weight=snp_weight)
+                    weight *= self.estimate_example_density_weight(latent_code)
+                else:
+                    weight *= self.estimate_batch_weight(meta_data, indel_weight=indel_weight,
+                                                         snp_weight=snp_weight)
 
-            cm.add(predicted=output_index.data, target=target_index.data)
+                cm.add(predicted=output_index.data, target=target_index.data)
 
-            performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "weight", weight)
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
-                                                           categories_predicted, target_index)
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
-                                                           categories_predicted, target_s)
+                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "weight", weight)
+                performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
+                                                               categories_predicted, target_index)
+                performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
+                                                               categories_predicted, target_s)
 
-            progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_loss", "test_accuracy", "reconstruction_loss"]))
+                progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
+                             performance_estimators.progress_message(["test_loss", "test_accuracy", "reconstruction_loss"]))
 
-            if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
-                break
-        # print()
-        data_provider.close()
+                if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
+                    break
+            # print()
+        finally:
+            data_provider.close()
         # Apply learning rate schedules:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
         assert test_metric is not None, (self.get_test_metric_name()

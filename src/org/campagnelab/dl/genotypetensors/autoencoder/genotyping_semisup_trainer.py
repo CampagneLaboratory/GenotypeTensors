@@ -53,51 +53,53 @@ class GenotypingSemiSupTrainer(CommonTrainer):
                                      volatile={"training": ["metaData"], "unlabeled": []},
                                      recode_functions={"softmaxGenotype": lambda x: recode_for_label_smoothing(x,self.epsilon)})
         self.net.autoencoder.train()
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["training"]["input"]
-            metadata = data_dict["training"]["metaData"]
-            target_s = data_dict["training"]["softmaxGenotype"]
-            input_u = data_dict["unlabeled"]["input"]
-            num_batches += 1
+        try:
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                input_s = data_dict["training"]["input"]
+                metadata = data_dict["training"]["metaData"]
+                target_s = data_dict["training"]["softmaxGenotype"]
+                input_u = data_dict["unlabeled"]["input"]
+                num_batches += 1
 
-            # need a copy of input_u and input_s as output:
-            target_u = Variable(input_u.data, requires_grad=False)
-            target_output_s = Variable(input_s.data, requires_grad=False)
-            # outputs used to calculate the loss of the supervised model
-            # must be done with the model prior to regularization:
+                # need a copy of input_u and input_s as output:
+                target_u = Variable(input_u.data, requires_grad=False)
+                target_output_s = Variable(input_s.data, requires_grad=False)
+                # outputs used to calculate the loss of the supervised model
+                # must be done with the model prior to regularization:
 
-            # Zero gradients:
-            self.net.zero_grad()
-            self.net.autoencoder.zero_grad()
-            self.optimizer_training.zero_grad()
+                # Zero gradients:
+                self.net.zero_grad()
+                self.net.autoencoder.zero_grad()
+                self.optimizer_training.zero_grad()
 
-            output_s = self.net(input_s)
-            output_u = self.net.autoencoder(input_u)
-            input_output_s = self.net.autoencoder(input_s)
-            output_s_p = self.get_p(output_s)
+                output_s = self.net(input_s)
+                output_u = self.net.autoencoder(input_u)
+                input_output_s = self.net.autoencoder(input_s)
+                output_s_p = self.get_p(output_s)
 
-            _, target_index = torch.max(target_s, dim=1)
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            reconstruction_loss_unsup = self.criterion_autoencoder(output_u, target_u)
-            reconstruction_loss_sup = self.criterion_autoencoder(input_output_s, target_output_s)
-            reconstruction_loss = self.args.gamma * reconstruction_loss_unsup+reconstruction_loss_sup
-            optimized_loss = supervised_loss + reconstruction_loss
-            optimized_loss.backward()
-            self.optimizer_training.step()
-            performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
-            performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
-                                                           output_s_p, targets=target_index)
+                _, target_index = torch.max(target_s, dim=1)
+                supervised_loss = self.criterion_classifier(output_s_p, target_s)
+                reconstruction_loss_unsup = self.criterion_autoencoder(output_u, target_u)
+                reconstruction_loss_sup = self.criterion_autoencoder(input_output_s, target_output_s)
+                reconstruction_loss = self.args.gamma * reconstruction_loss_unsup+reconstruction_loss_sup
+                optimized_loss = supervised_loss + reconstruction_loss
+                optimized_loss.backward()
+                self.optimizer_training.step()
+                performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                               output_s_p, targets=target_index)
 
-            progress_bar(batch_idx * self.mini_batch_size,
-                         self.max_training_examples,
-                         performance_estimators.progress_message(["supervised_loss", "reconstruction_loss",
-                                                                  "train_accuracy"]))
+                progress_bar(batch_idx * self.mini_batch_size,
+                             self.max_training_examples,
+                             performance_estimators.progress_message(["supervised_loss", "reconstruction_loss",
+                                                                      "train_accuracy"]))
 
-            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
-                break
-        data_provider.close()
+                if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
+                    break
+        finally:
+            data_provider.close()
 
         return performance_estimators
 
@@ -117,34 +119,36 @@ class GenotypingSemiSupTrainer(CommonTrainer):
                                                         batch_names=["validation"],
                                                         requires_grad={"validation": []},
                                                         volatile={"validation": ["input", "softmaxGenotype"]})
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["validation"]["input"]
-            target_s = data_dict["validation"]["softmaxGenotype"]
-            # we need copies of the same tensors:
-            input_u, target_u = Variable(input_s.data, volatile=True), Variable(input_s.data, volatile=True)
+        try:
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                input_s = data_dict["validation"]["input"]
+                target_s = data_dict["validation"]["softmaxGenotype"]
+                # we need copies of the same tensors:
+                input_u, target_u = Variable(input_s.data, volatile=True), Variable(input_s.data, volatile=True)
 
-            output_s = self.net(input_s)
-            output_u = self.net.autoencoder(input_u)
-            output_s_p = self.get_p(output_s)
+                output_s = self.net(input_s)
+                output_u = self.net.autoencoder(input_u)
+                output_s_p = self.get_p(output_s)
 
-            _, target_index = torch.max(target_s, dim=1)
+                _, target_index = torch.max(target_s, dim=1)
 
-            supervised_loss = self.criterion_classifier(output_s_p, target_s)
-            reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
+                supervised_loss = self.criterion_classifier(output_s_p, target_s)
+                reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
 
-            performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "test_reconstruction_loss", reconstruction_loss.data[0])
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
-                                                           output_s_p, targets=target_index)
+                performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "test_reconstruction_loss", reconstruction_loss.data[0])
+                performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+                                                               output_s_p, targets=target_index)
 
-            progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
-                                                                  "test_accuracy"]))
+                progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
+                             performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
+                                                                      "test_accuracy"]))
 
-            if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
-                break
-        # print()
-        data_provider.close()
+                if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
+                    break
+            # print()
+        finally:
+            data_provider.close()
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
         assert test_metric is not None, self.get_test_metric_name() + "must be found among estimated performance metrics"
         if not self.args.constant_learning_rates:

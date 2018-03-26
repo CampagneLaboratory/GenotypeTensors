@@ -108,76 +108,77 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
         snp_weight = 1.0
 
         latent_codes = []
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s1 = data_dict["training1"]["input"]
-            input_s2 = data_dict["training2"]["input"]
-            target_s1 = data_dict["training1"]["softmaxGenotype"]
-            target_s2 = data_dict["training2"]["softmaxGenotype"]
+        try:
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                input_s1 = data_dict["training1"]["input"]
+                input_s2 = data_dict["training2"]["input"]
+                target_s1 = data_dict["training1"]["softmaxGenotype"]
+                target_s2 = data_dict["training2"]["softmaxGenotype"]
 
-            meta_data1 = data_dict["training1"]["metaData"]
-            meta_data2 = data_dict["training2"]["metaData"]
-            num_batches += 1
-            self.zero_grad_all_optimizers()
+                meta_data1 = data_dict["training1"]["metaData"]
+                meta_data2 = data_dict["training2"]["metaData"]
+                num_batches += 1
+                self.zero_grad_all_optimizers()
 
-            # input_s=normalize_mean_std(input_s)
-            # input_u=normalize_mean_std(input_u)
-            # print(torch.mean(input_s,dim=0))
-            # Train reconstruction phase:
-            self.net.decoder.train()
-            reconstruction_loss = self.net.get_crossconstruction_loss(input_s1,input_s2,target_s2)
-            reconstruction_loss.backward()
-            for opt in [self.decoder_opt, self.encoder_reconstruction_opt]:
-                opt.step()
+                # input_s=normalize_mean_std(input_s)
+                # input_u=normalize_mean_std(input_u)
+                # print(torch.mean(input_s,dim=0))
+                # Train reconstruction phase:
+                self.net.decoder.train()
+                reconstruction_loss = self.net.get_crossconstruction_loss(input_s1,input_s2,target_s2)
+                reconstruction_loss.backward()
+                for opt in [self.decoder_opt, self.encoder_reconstruction_opt]:
+                    opt.step()
 
-            # Train discriminators:
-            self.net.encoder.eval()
-            self.net.discriminator_cat.train()
-            self.net.discriminator_prior.train()
-            self.zero_grad_all_optimizers()
-            genotype_frequencies = self.class_frequencies["softmaxGenotype"]
-            category_prior = (genotype_frequencies / torch.sum(genotype_frequencies)).numpy()
-            discriminator_loss = self.net.get_discriminator_loss(input_s1, category_prior=category_prior)
-            discriminator_loss.backward()
-            for opt in [self.discriminator_cat_opt, self.discriminator_prior_opt]:
-                opt.step()
-            self.zero_grad_all_optimizers()
-
-            # Train generator:
-            self.net.encoder.train()
-            generator_loss = self.net.get_generator_loss(input_s1)
-            generator_loss.backward()
-            for opt in [self.encoder_generator_opt]:
-                opt.step()
-            self.zero_grad_all_optimizers()
-
-            if self.use_pdf:
+                # Train discriminators:
                 self.net.encoder.eval()
-                _, latent_code = self.net.encoder(input_s1)
-                weight = self.estimate_example_density_weight(latent_code)
-            else:
-                weight = self.estimate_batch_weight(meta_data1, indel_weight=indel_weight,
-                                                    snp_weight=snp_weight)
-            self.net.encoder.train()
-            supervised_loss = self.net.get_crossencoder_supervised_loss(input_s1, target_s1) * weight
-            supervised_loss.backward()
+                self.net.discriminator_cat.train()
+                self.net.discriminator_prior.train()
+                self.zero_grad_all_optimizers()
+                genotype_frequencies = self.class_frequencies["softmaxGenotype"]
+                category_prior = (genotype_frequencies / torch.sum(genotype_frequencies)).numpy()
+                discriminator_loss = self.net.get_discriminator_loss(input_s1, category_prior=category_prior)
+                discriminator_loss.backward()
+                for opt in [self.discriminator_cat_opt, self.discriminator_prior_opt]:
+                    opt.step()
+                self.zero_grad_all_optimizers()
 
-            for opt in [self.encoder_semisup_opt]:
-                opt.step()
-            self.zero_grad_all_optimizers()
+                # Train generator:
+                self.net.encoder.train()
+                generator_loss = self.net.get_generator_loss(input_s1)
+                generator_loss.backward()
+                for opt in [self.encoder_generator_opt]:
+                    opt.step()
+                self.zero_grad_all_optimizers()
 
-            performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "weight", weight)
+                if self.use_pdf:
+                    self.net.encoder.eval()
+                    _, latent_code = self.net.encoder(input_s1)
+                    weight = self.estimate_example_density_weight(latent_code)
+                else:
+                    weight = self.estimate_batch_weight(meta_data1, indel_weight=indel_weight,
+                                                        snp_weight=snp_weight)
+                self.net.encoder.train()
+                supervised_loss = self.net.get_crossencoder_supervised_loss(input_s1, target_s1) * weight
+                supervised_loss.backward()
 
-            progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
-                         performance_estimators.progress_message(
-                             ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
-            if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
-                break
+                for opt in [self.encoder_semisup_opt]:
+                    opt.step()
+                self.zero_grad_all_optimizers()
 
-        data_provider.close()
+                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "weight", weight)
+
+                progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
+                             performance_estimators.progress_message(
+                                 ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
+                if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
+                    break
+        finally:
+            data_provider.close()
 
 
         return performance_estimators
@@ -221,37 +222,39 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
                                                             "input": self.normalize_inputs
                                                         })
         self.net.eval()
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            input_s = data_dict["validation"]["input"]
-            target_s = data_dict["validation"]["softmaxGenotype"]
+        try:
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                input_s = data_dict["validation"]["input"]
+                target_s = data_dict["validation"]["softmaxGenotype"]
 
-            # Estimate the reconstruction loss on validation examples:
-            reconstruction_loss = self.net.get_crossconstruction_loss(input_s,input_s,target_s)
+                # Estimate the reconstruction loss on validation examples:
+                reconstruction_loss = self.net.get_crossconstruction_loss(input_s,input_s,target_s)
 
-            # now evaluate prediction of categories:
-            categories_predicted, latent_code = self.net.encoder(input_s)
-#            categories_predicted+=self.net.latent_to_categories(latent_code)
+                # now evaluate prediction of categories:
+                categories_predicted, latent_code = self.net.encoder(input_s)
+    #            categories_predicted+=self.net.latent_to_categories(latent_code)
 
-            categories_predicted_p = self.get_p(categories_predicted)
-            categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
-            _, target_index = torch.max(target_s, dim=1)
-            categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
+                categories_predicted_p = self.get_p(categories_predicted)
+                categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
+                _, target_index = torch.max(target_s, dim=1)
+                categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
 
-            weight = self.estimate_example_density_weight(latent_code)
-            performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "weight", weight)
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
-                                                           categories_predicted, target_index)
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
-                                                           categories_predicted, target_s)
+                weight = self.estimate_example_density_weight(latent_code)
+                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "weight", weight)
+                performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
+                                                               categories_predicted, target_index)
+                performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
+                                                               categories_predicted, target_s)
 
-            progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_loss", "test_accuracy", "reconstruction_loss"]))
+                progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
+                             performance_estimators.progress_message(["test_loss", "test_accuracy", "reconstruction_loss"]))
 
-            if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
-                break
-        # print()
-        data_provider.close()
+                if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
+                    break
+            # print()
+        finally:
+            data_provider.close()
         # Apply learning rate schedules:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
         assert test_metric is not None, (self.get_test_metric_name()
