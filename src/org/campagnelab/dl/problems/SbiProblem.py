@@ -101,6 +101,11 @@ class SbiProblem(Problem):
         use_shuffle = not isinstance(dataset, EmptyDataset)
         return self.loader_for_dataset(dataset=dataset, shuffle=use_shuffle)
 
+    def unlabeled_loader_subset(self, indices):
+        """Returns the torch dataloader over the unlabeled set, limiting to the examples
+        identified by the indices. """
+        assert False, "Not support for text .vec files"
+
     def test_loader(self):
         return self.loader_for_dataset(dataset=self.test_set(), shuffle=False)
 
@@ -112,7 +117,7 @@ class SbiProblem(Problem):
 
     def loader_for_dataset(self, dataset, shuffle=False):
         return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(),
-                               num_workers=self.num_workers, pin_memory=False, drop_last=self.drop_last_batch))
+                               num_workers=self.num_workers, pin_memory=True, drop_last=self.drop_last_batch))
 
     def loss_function(self, output_name):
         return torch.nn.CrossEntropyLoss()
