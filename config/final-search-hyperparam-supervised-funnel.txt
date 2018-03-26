@@ -31,7 +31,7 @@ categorical
 1.0
 
 --num-layers
-int
+categorical
 1
 
 --indel-weight-factor
@@ -59,3 +59,7 @@ categorical
 8893470989564687252
 4410153803882395583
 266165578905304246
+
+--abort-when-failed-to-improve
+categorical
+5

@@ -58,3 +58,13 @@ categorical
 categorical
 SAMPLING
 VAL_CONFUSION
+
+--seed
+categorical
+75963616695
+8227652220686137245
+7757655092060421780
+
+--abort-when-failed-to-improve
+categorical
+5
