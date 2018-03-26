@@ -171,8 +171,8 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
                 performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
                 performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
                 performance_estimators.set_metric(batch_idx, "weight", weight)
-
-                progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
+                if not self.args.no_progress:
+                    progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
                              performance_estimators.progress_message(
                                  ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
@@ -247,7 +247,8 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
                 performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
                                                                categories_predicted, target_s)
 
-                progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
+                if not self.args.no_progress:
+                    progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                              performance_estimators.progress_message(["test_loss", "test_accuracy", "reconstruction_loss"]))
 
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:

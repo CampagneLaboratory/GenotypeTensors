@@ -180,8 +180,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                         latent_code_row = latent_code[row_idx]
                         gaussian_codes.append(torch.squeeze(draw_from_gaussian(latent_code_row.size()[0], 1)))
                         latent_codes.append(latent_code_row)
-
-                progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
+                if not self.args.no_progress:
+                    progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
                              performance_estimators.progress_message(
                                  ["reconstruction_loss", "discriminator_loss", "generator_loss", "semisup_loss"]))
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_training_examples:
@@ -279,7 +279,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
                                                                categories_predicted, target_s)
 
-                progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
+                if not self.args.no_progress:
+                    progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                              performance_estimators.progress_message(["test_loss", "test_accuracy", "reconstruction_loss"]))
 
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
