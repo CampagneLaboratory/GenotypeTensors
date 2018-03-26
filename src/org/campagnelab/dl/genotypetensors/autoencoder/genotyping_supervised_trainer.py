@@ -111,8 +111,8 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                 performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
                                                                output_s_p, targets=target_index)
-
-                progress_bar(batch_idx * self.mini_batch_size,
+                if not self.args.no_progress:
+                    progress_bar(batch_idx * self.mini_batch_size,
                              self.max_training_examples,
                              performance_estimators.progress_message(
                                  ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
