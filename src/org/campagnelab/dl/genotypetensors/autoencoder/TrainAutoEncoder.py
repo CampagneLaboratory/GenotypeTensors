@@ -135,6 +135,7 @@ if __name__ == '__main__':
                         help='Epsilon value to use for label smoothing.')
 
     parser.add_argument('--normalize', action='store_true', help='Normalize input by mean and standard deviation.')
+    parser.add_argument('--no-progress', action='store_true', help='Disable the progress bar.')
     parser.add_argument('--use-selu', action='store_true', help='Use SELU non-linearity, otherwise, use RELU.')
     parser.add_argument('--reweight-by-validation-error', action='store_true',
                         help='Use validation errors to focus reweight loss in the next training epoch.')
