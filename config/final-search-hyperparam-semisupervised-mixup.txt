@@ -42,7 +42,7 @@ int
 --indel-weight-factor
 uniform
 1
-10
+3
 
 --use-selu
 flag
