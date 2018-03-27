@@ -335,9 +335,10 @@ class CommonTrainer:
         """
 
         train_loader_subset = self.problem.train_loader_subset_range(0, min(100000, self.args.num_training))
-        data_provider = CpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
+        data_provider = CpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=self.use_cuda,
                                                         batch_names=["training"],
-                                                        volatile={"training": self.problem.get_vector_names()}
+                                                        volatile={"training": self.problem.get_vector_names()},
+                                                        fake_gpu_on_cpu=True
                                                         )
 
         class_frequencies = {}  # one frequency vector per output_name
