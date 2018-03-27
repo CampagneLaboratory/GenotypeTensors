@@ -6,7 +6,7 @@ from scipy.stats import norm
 from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import CpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -93,7 +93,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader = self.problem.unlabeled_loader()
 
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = CpuGpuDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader),
             is_cuda=self.use_cuda,
             batch_names=["training", "unlabeled"],
@@ -237,7 +237,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(validation_loader_subset),
+        data_provider = CpuGpuDataProvider(iterator=zip(validation_loader_subset),
                                                         is_cuda=self.use_cuda,
                                                         batch_names=["validation"],
                                                         requires_grad={"validation": []},

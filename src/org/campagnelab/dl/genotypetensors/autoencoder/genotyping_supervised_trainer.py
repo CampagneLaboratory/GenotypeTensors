@@ -2,7 +2,7 @@ import torch
 from torch.nn import MultiLabelSoftMarginLoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import CpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -70,7 +70,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = CpuGpuDataProvider(
             iterator=zip(train_loader_subset),
             is_cuda=self.use_cuda,
             batch_names=["training"],
@@ -143,7 +143,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = CpuGpuDataProvider(
             iterator=zip(validation_loader_subset),
             is_cuda=self.use_cuda,
             batch_names=["validation"],
