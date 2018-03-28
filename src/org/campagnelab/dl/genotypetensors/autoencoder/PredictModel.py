@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from org.campagnelab.dl.genotypetensors.VectorWriterBinary import VectorWriterBinary
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import DispatchDataset
-from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
 from multiprocessing import Lock
@@ -36,13 +36,14 @@ class PredictModel:
         self.model.eval()
         if self.processing_type == "multithreaded":
             # Enable fake_GPU_on_CPU to debug on CPU
-            data_provider = DataProvider(iterator=zip(iterator),
+            data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
                                                             is_cuda=self.use_cuda,
                                                             batch_names=["unlabeled"],
                                                             volatile={"unlabeled": ["input"]},
                                                             recode_functions={
                                                                 "input": self.normalize_function
-                                                            }
+                                                            },
+                                                            fake_gpu_on_cpu=False
                                                             )
 
         elif self.processing_type == "sequential":
