@@ -97,9 +97,9 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                 self.optimizer_training.zero_grad()
                 self.net.zero_grad()
                 output_s = self.net(input_s)
-                output_s_p = self.get_p(output_s)
+                # output_s_p = self.get_p(output_s)
                 _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
-                supervised_loss = self.criterion_classifier(output_s_p, recode_as_multi_label(target_s))
+                supervised_loss = self.criterion_classifier(output_s, recode_as_multi_label(target_s))
 
                 batch_weight = self.estimate_batch_weight(metadata, indel_weight=indel_weight,
                                                           snp_weight=snp_weight)
@@ -110,7 +110,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                 self.optimizer_training.step()
                 performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
                 performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
-                                                               output_s_p, targets=target_index)
+                                                               output_s, targets=target_index)
                 if not self.args.no_progress:
                     progress_bar(batch_idx * self.mini_batch_size,
                              self.max_training_examples,
@@ -164,15 +164,15 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                     errors = torch.zeros(target_s[0].size())
 
                 output_s = self.net(input_s)
-                output_s_p = self.get_p(output_s)
+                # output_s_p = self.get_p(output_s)
 
-                supervised_loss = self.criterion_classifier(output_s_p, target_s)
-                self.estimate_errors(errors,output_s_p, target_s)
+                supervised_loss = self.criterion_classifier(output_s, target_s)
+                self.estimate_errors(errors, output_s, target_s)
                 _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
-                _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
+                _, output_index = torch.max(recode_as_multi_label(output_s), dim=1)
                 performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
                 performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
-                                                               output_s_p, targets=target_index)
+                                                               output_s, targets=target_index)
                 if not self.args.no_progress:
                     progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                              performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",

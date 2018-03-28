@@ -18,6 +18,7 @@ import torch
 from torch.autograd import Variable
 from torch.distributions import Categorical
 
+
 def _format_nice(n):
     try:
         if n == int(n):
@@ -32,11 +33,10 @@ def _format_nice(n):
 
 
 def recode_for_label_smoothing(one_hot_vector, epsilon=0.2):
-
-        # num_classes = len(one_hot_vector[0])
-        # one_hot_vector[one_hot_vector == 1] = 1.0 - epsilon
-        # one_hot_vector[one_hot_vector == 0] = epsilon / num_classes
-        return one_hot_vector
+    num_classes = len(one_hot_vector[0])
+    one_hot_vector[one_hot_vector == 1] = 1.0 - epsilon
+    one_hot_vector[one_hot_vector == 0] = epsilon / num_classes
+    return one_hot_vector
 
 
 def print_params(epoch, net):
