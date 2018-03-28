@@ -78,7 +78,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
                 output_s_p = self.get_p(output_s)
 
                 _, target_index = torch.max(target_s, dim=1)
-                supervised_loss = self.criterion_classifier(output_s_p, target_s)
+                supervised_loss = self.criterion_classifier(output_s, target_s)
                 reconstruction_loss_unsup = self.criterion_autoencoder(output_u, target_u)
                 reconstruction_loss_sup = self.criterion_autoencoder(input_output_s, target_output_s)
                 reconstruction_loss = self.args.gamma * reconstruction_loss_unsup+reconstruction_loss_sup
@@ -132,7 +132,7 @@ class GenotypingSemiSupTrainer(CommonTrainer):
 
                 _, target_index = torch.max(target_s, dim=1)
 
-                supervised_loss = self.criterion_classifier(output_s_p, target_s)
+                supervised_loss = self.criterion_classifier(output_s, target_s)
                 reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
 
                 performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])

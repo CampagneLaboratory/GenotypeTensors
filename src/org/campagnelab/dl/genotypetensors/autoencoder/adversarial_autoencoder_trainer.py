@@ -261,7 +261,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 categories_predicted_p[categories_predicted_p != categories_predicted_p] = 0.0
                 _, target_index = torch.max(target_s, dim=1)
                 _, output_index = torch.max(categories_predicted_p, dim=1)
-                categories_loss = self.net.semisup_loss_criterion(categories_predicted_p, target_s)
+                categories_loss = self.net.semisup_loss_criterion(categories_predicted, target_s)
                 weight = 1
                 if self.use_pdf:
 
@@ -275,9 +275,9 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
                 performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
                 performance_estimators.set_metric(batch_idx, "weight", weight)
                 performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
-                                                               categories_predicted, target_index)
+                                                               categories_predicted_p, target_index)
                 performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
-                                                               categories_predicted, target_s)
+                                                               categories_predicted_p, target_s)
 
                 if not self.args.no_progress:
                     progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,

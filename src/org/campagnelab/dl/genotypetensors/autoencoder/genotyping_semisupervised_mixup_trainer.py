@@ -121,7 +121,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                 output_s = self.net(input_s_mixup)
                 output_s_p = self.get_p(output_s)
                 _, target_index = torch.max(target_s_mixup, dim=1)
-                supervised_loss = self.criterion_classifier(output_s_p, target_s_mixup)
+                supervised_loss = self.criterion_classifier(output_s, target_s_mixup)
 
                 batch_weight = self.estimate_batch_weight_mixup(metadata_1, metadata_2, indel_weight=indel_weight,
                                                                 snp_weight=snp_weight)
@@ -196,7 +196,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                 _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
                 cm.add(predicted=output_index.data, target=target_index.data)
 
-                supervised_loss = self.criterion_classifier(output_s_p, target_s)
+                supervised_loss = self.criterion_classifier(output_s, target_s)
                 self.estimate_errors(errors, output_s_p, target_s)
 
                 performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])

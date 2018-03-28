@@ -404,7 +404,7 @@ class CommonTrainer:
             weights = weights.cuda()
         self.rebuild_criterions(output_name="softmaxGenotype", weights=weights)
 
-    def estimate_errors(self,errors, output_s_p, target_s):
+    def estimate_errors(self, errors, output_s_p, target_s):
         _, target_index = torch.max(target_s, dim=1)
         _, output_index = torch.max(output_s_p, dim=1)
         target_index = target_index.cpu()
