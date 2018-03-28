@@ -6,7 +6,7 @@ from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, CrossEntropyLoss, MultiLabelSoftMarginLoss
 
-from org.campagnelab.dl.multithreading.sequential_implementation import CpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider
 from org.campagnelab.dl.performance.LRHelper import LearningRateHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.LRSchedules import construct_scheduler
@@ -335,10 +335,9 @@ class CommonTrainer:
         """
 
         train_loader_subset = self.problem.train_loader_subset_range(0, min(100000, self.args.num_training))
-        data_provider = CpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=self.use_cuda,
+        data_provider = DataProvider(iterator=zip(train_loader_subset), is_cuda=self.use_cuda,
                                                         batch_names=["training"],
                                                         volatile={"training": self.problem.get_vector_names()},
-                                                        fake_gpu_on_cpu=True
                                                         )
 
         class_frequencies = {}  # one frequency vector per output_name

@@ -5,7 +5,7 @@ from torch.autograd import Variable
 from scipy.stats import norm
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import CpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -93,7 +93,7 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
         train_loader_subset1 = self.problem.train_loader_subset_range(0, self.args.num_training)
         train_loader_subset2 = self.problem.train_loader_subset_range(0, self.args.num_training)
 
-        data_provider = CpuGpuDataProvider(
+        data_provider = DataProvider(
             iterator=zip(train_loader_subset1, train_loader_subset2),
             is_cuda=self.use_cuda,
             batch_names=["training1", "training2"],
@@ -212,7 +212,7 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = CpuGpuDataProvider(iterator=zip(validation_loader_subset),
+        data_provider = DataProvider(iterator=zip(validation_loader_subset),
                                                         is_cuda=self.use_cuda,
                                                         batch_names=["validation"],
                                                         requires_grad={"validation": []},
