@@ -75,3 +75,8 @@ UNIFORM
 SAMPLING
 VAL_CONFUSION
 VAL_CONFUSION_SAMPLING
+
+--epsilon-label-smoothing
+uniform
+0
+0.2

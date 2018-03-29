@@ -68,3 +68,8 @@ categorical
 --mini-batch-size
 categorical
 1024
+
+--epsilon-label-smoothing
+uniform
+0
+0.2
