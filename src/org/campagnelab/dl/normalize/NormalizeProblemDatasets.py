@@ -67,7 +67,7 @@ if __name__ == '__main__':
     for index, dataset in enumerate(datasets):
         train_loader_subset = problem.loader_for_dataset(dataset, shuffle=True)
         print("Summing dataset {}/{}".format(index + 1, len(datasets)))
-        data_provider = DataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset),
             is_cuda=False,
             batch_names=["dataset"],
