@@ -3,9 +3,9 @@ categorical
 semisupervised_autoencoder
 
 --L2
-log-uniform
-8.438E-6
-0.001
+uniform
+1.41E-4
+3.81E-4
 
 --dropout-probability
 categorical
@@ -17,30 +17,29 @@ categorical
 adagrad
 
 --lr
-log-uniform
+categorical
 0.01
-0.005
 
 --num-layers
 categorical
 1
 3
-5
+6
 
 --n-dim
 int
-107
-510
+75
+519
 
 --encoded-size
 int
-5
+4
 21
 
 --indel-weight-factor
-uniform
-1
-3
+categorical
+2
+10
 
 --max-epochs
 categorical
@@ -54,16 +53,22 @@ categorical
 categorical
 1024
 
+--epsilon-label-smoothing
+uniform
+0.04
+0.11
+
 --label-strategy
 categorical
 SAMPLING
 VAL_CONFUSION
+UNIFORM
 
 --seed
 categorical
-75963616695
-8227652220686137245
-7757655092060421780
+2962683142197592213
+4973404422999692092
+7663507728618262646
 
 --abort-when-failed-to-improve
 categorical

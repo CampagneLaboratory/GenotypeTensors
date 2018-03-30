@@ -4,32 +4,30 @@ supervised_mixup_funnel_genotypes
 
 --mixup-alpha
 uniform
-0.107
-0.33
+0.131
+0.191
 
 --L2
 log-uniform
-2.031e-17
-2.0677E-20
+1.16E-7
+2.91E-5
 
 --dropout-probability
 categorical
 0
-0.2
 
 --optimizer
 categorical
 adagrad
 
 --lr
-log-uniform
+categorical
 0.01
-0.005
 
 --reduction-rate
 uniform
-0.369
-0.786
+0.38
+0.505
 
 --model-capacity
 categorical
@@ -37,19 +35,14 @@ categorical
 
 --num-layers
 categorical
-1
-6
+3
+4
+5
 
 --indel-weight-factor
-uniform
+categorical
 1
-3
-
---use-selu
-flag
-
---use-selu
-flag
+2
 
 --use-selu
 flag
@@ -62,11 +55,16 @@ categorical
 categorical
 1024
 
+--epsilon-label-smoothing
+uniform
+0.053
+0.167
+
 --seed
 categorical
-3500635728761651324
-4757600333491744102
-4946665479437370579
+1380555472934619889
+4998247378381417234
+3054026417247595138
 
 --abort-when-failed-to-improve
 categorical

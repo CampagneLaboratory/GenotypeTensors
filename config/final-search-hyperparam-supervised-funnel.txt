@@ -4,8 +4,8 @@ supervised_funnel_genotypes
 
 --L2
 log-uniform
-1.242E-16
-5.06E-9
+5.18E-6
+1.96E-4
 
 --dropout-probability
 categorical
@@ -17,14 +17,13 @@ categorical
 adagrad
 
 --lr
-log-uniform
+categorical
 0.01
-0.005
 
 --reduction-rate
 uniform
-0.361
-0.705
+0.38
+0.42
 
 --model-capacity
 categorical
@@ -32,12 +31,15 @@ categorical
 
 --num-layers
 categorical
-1
+2
+3
+4
 
 --indel-weight-factor
-uniform
+categorical
 1
-3
+2
+10
 
 --use-selu
 flag
@@ -54,11 +56,16 @@ categorical
 categorical
 1024
 
+--epsilon-label-smoothing
+uniform
+0.0085
+0.105
+
 --seed
 categorical
-8893470989564687252
-4410153803882395583
-266165578905304246
+3453641268241957507
+4298639017625050770
+950779171533190880
 
 --abort-when-failed-to-improve
 categorical
