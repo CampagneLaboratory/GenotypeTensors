@@ -18,8 +18,8 @@ adagrad
 
 --lr
 uniform
-0.01
 0.005
+0.01
 
 --reduction-rate
 uniform
