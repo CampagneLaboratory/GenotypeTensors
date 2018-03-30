@@ -17,8 +17,9 @@ categorical
 adagrad
 
 --lr
-categorical
+uniform
 0.01
+0.005
 
 --reduction-rate
 uniform
@@ -36,9 +37,8 @@ categorical
 4
 
 --indel-weight-factor
-categorical
+uniform
 1
-2
 10
 
 --use-selu

@@ -17,8 +17,9 @@ categorical
 adagrad
 
 --lr
-categorical
+uniform
 0.01
+0.005
 
 --num-layers
 categorical
@@ -37,7 +38,7 @@ int
 21
 
 --indel-weight-factor
-categorical
+uniform
 2
 10
 
