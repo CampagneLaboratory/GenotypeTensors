@@ -224,16 +224,18 @@ class CommonTrainer:
 
         self.save_model(metric, epoch, self.net, "latest")
 
-        if metric is not None and (self.is_better(metric, self.best_test_loss) or metric == self.best_test_loss):
-            self.save_checkpoint(epoch, metric)
-            self.best_performance_metrics = performance_estimators
-            self.best_model = self.net
-
         if metric is not None and self.is_better(metric, self.best_test_loss):
             self.failed_to_improve += 1
             if self.failed_to_improve > self.args.abort_when_failed_to_improve:
                 print("We failed to improve for {} epochs. Stopping here as requested.")
                 early_stop = True  # request early stopping
+
+        if metric is not None and (self.is_better(metric, self.best_test_loss) or metric == self.best_test_loss):
+            self.save_checkpoint(epoch, metric)
+            self.best_performance_metrics = performance_estimators
+            self.best_model = self.net
+
+
         if self.get_test_metric_name()=="test_accuracy" and metric is not None and \
             not self.is_better(metric, self.args.epoch_min_accuracy):
             early_stop=True
