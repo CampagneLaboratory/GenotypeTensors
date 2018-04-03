@@ -224,10 +224,10 @@ class CommonTrainer:
 
         self.save_model(metric, epoch, self.net, "latest")
 
-        if metric is not None and self.is_better(metric, self.best_test_loss):
+        if metric is not None and not self.is_better(metric, self.best_test_loss):
             self.failed_to_improve += 1
-            if self.failed_to_improve > self.args.abort_when_failed_to_improve:
-                print("We failed to improve for {} epochs. Stopping here as requested.")
+            if self.failed_to_improve >= self.args.abort_when_failed_to_improve:
+                print("We failed to improve for {} epochs. Stopping here as requested.".format(self.failed_to_improve))
                 early_stop = True  # request early stopping
 
         if metric is not None and (self.is_better(metric, self.best_test_loss) or metric == self.best_test_loss):
