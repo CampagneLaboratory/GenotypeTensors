@@ -17,8 +17,7 @@ categorical
 adagrad
 
 --lr
-log-uniform
-1E-6
+categorical
 0.01
 
 --num-layers
