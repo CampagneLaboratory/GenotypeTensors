@@ -222,7 +222,7 @@ class CommonTrainer:
                 perf_file.write("\n")
 
 
-        self.save_model(metric, epoch, self.net, "latest")
+        self.save_model(best_test_loss=metric, epoch=epoch, model=self.net, model_label="latest")
 
         if metric is not None and not self.is_better(metric, self.best_test_loss):
             self.failed_to_improve += 1
@@ -242,26 +242,26 @@ class CommonTrainer:
             print("Early stopping because accuracy is less than --epoch-min-accuracy {}".format(self.args.epoch_min_accuracy))
         return early_stop, self.best_performance_metrics
 
-    def save_checkpoint(self, epoch, test_loss,model_label="best"):
+    def save_checkpoint(self, epoch, test_loss ):
         # Save checkpoint.
         if self.is_better(test_loss , self.best_test_loss):
             print('Saving..')
 
             if self.best_model is not None:
-                self.save_model(test_loss, epoch, self.best_model, model_label)
+                self.save_model(test_loss, epoch, self.best_model, "best")
                 self.best_test_loss = test_loss
                 self.best_epoch =epoch
             else:
                 # not best model, latest is best:
-                self.save_model(test_loss, epoch, self.net, model_label)
+                self.save_model(test_loss, epoch, self.net, "latest")
 
 
-    def save_model(self, acc, epoch, model, model_label):
+    def save_model(self, best_test_loss, epoch, model, model_label):
         model.eval()
         state = {
             'model': model.module if self.is_parallel else model,
             'confusion-matrix': self.best_model_confusion_matrix,
-            'best_test_loss': acc,
+            'best_test_loss': best_test_loss,
             'epoch': epoch,
         }
         additional_attrs = self.problem.model_attrs()

@@ -54,9 +54,10 @@ if __name__ == '__main__':
         trainer=CommonTrainer(args,problem,use_cuda)
         # Convert best model:
         model=trainer.load_checkpoint(model_label=model_label)
+        epoch=trainer.best_epoch
         model.cpu()
         trainer.net=model
         test_loss=trainer.best_test_loss
-        trainer.save_checkpoint(model,test_loss=trainer.best_test_loss,model_label=model_label)
+        trainer.save_model(best_test_loss=trainer.best_test_loss,epoch=epoch, model=model,model_label=model_label)
 
     print("Model converted to CPU.")
