@@ -67,7 +67,15 @@ class SbiProblem(Problem):
         self.basename = code[len(self.basename_prefix()):]
         self.num_workers = num_workers
         self.drop_last_batch = drop_last_batch
-        reader = VectorReader(self.basename + "-train", sample_id=0, return_example_id=False, vector_names=[])
+        reader=None
+        for dataset in ["train","validation","test","unlabeled"]:
+            try:
+                reader = VectorReader(self.basename + "-"+dataset, sample_id=0, return_example_id=False, vector_names=[])
+                break
+            except:
+                pass
+        assert reader is not None, "Unable to load properties from any dataset (tried train, validation,test,unlabeled)"
+
         self.meta_data = reader.vector_reader_properties
         reader.close()
 
