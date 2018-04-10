@@ -283,6 +283,12 @@ class CommonTrainer:
         model.eval()
         return model
 
+    def load_checkpoint_state(self, model_label="best"):
+        if not os.path.isdir('models'):
+            os.mkdir('models')
+        state = torch.load('./models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
+        return state
+
     def epoch_is_test_epoch(self, epoch):
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten

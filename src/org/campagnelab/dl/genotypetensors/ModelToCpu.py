@@ -53,11 +53,14 @@ if __name__ == '__main__':
     for model_label in args.model_labels.split(","):
         trainer=CommonTrainer(args,problem,use_cuda)
         # Convert best model:
-        model=trainer.load_checkpoint(model_label=model_label)
-        epoch=trainer.best_epoch
+        state=trainer.load_checkpoint_state(model_label=model_label)
+
+        epoch=state["epoch"]
+        model=state["model"]
+        test_loss = state["best_test_loss"]
         model.cpu()
         trainer.net=model
-        test_loss=trainer.best_test_loss
-        trainer.save_model(best_test_loss=trainer.best_test_loss,epoch=epoch, model=model,model_label=model_label)
+
+        trainer.save_model(best_test_loss=test_loss,epoch=epoch, model=model,model_label=model_label)
 
     print("Model converted to CPU.")
