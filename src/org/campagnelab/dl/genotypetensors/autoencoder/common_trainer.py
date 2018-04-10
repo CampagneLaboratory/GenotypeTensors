@@ -90,8 +90,8 @@ class CommonTrainer:
         self.best_model = None
         self.agreement_loss = MSELoss()
         self.class_frequencies=None
-        self.epsilon = args.epsilon_label_smoothing
-        self.reweight_by_validation_error = args.reweight_by_validation_error
+        self.epsilon = args.epsilon_label_smoothing if hasattr( args,"epsilon_label_smoothing") else 0.0
+        self.reweight_by_validation_error = args.reweight_by_validation_error if hasattr( args,"reweight_by_validation_error") else False
         self.num_classes = 0
 
     def init_model(self, create_model_function):
@@ -242,18 +242,18 @@ class CommonTrainer:
             print("Early stopping because accuracy is less than --epoch-min-accuracy {}".format(self.args.epoch_min_accuracy))
         return early_stop, self.best_performance_metrics
 
-    def save_checkpoint(self, epoch, test_loss):
+    def save_checkpoint(self, epoch, test_loss,model_label="best"):
         # Save checkpoint.
         if self.is_better(test_loss , self.best_test_loss):
             print('Saving..')
 
             if self.best_model is not None:
-                self.save_model(test_loss, epoch, self.best_model, "best")
+                self.save_model(test_loss, epoch, self.best_model, model_label)
                 self.best_test_loss = test_loss
                 self.best_epoch =epoch
             else:
                 # not best model, latest is best:
-                self.save_model(test_loss, epoch, self.net, "best")
+                self.save_model(test_loss, epoch, self.net, model_label)
 
 
     def save_model(self, acc, epoch, model, model_label):
@@ -535,3 +535,9 @@ class CommonTrainer:
                                                                                                               epsilon=self.epsilon)).data[
                     0]
             return Variable(result, requires_grad=False)
+
+    def num_models(self):
+        return 1
+
+    def select_model(self, model_index):
+        pass
