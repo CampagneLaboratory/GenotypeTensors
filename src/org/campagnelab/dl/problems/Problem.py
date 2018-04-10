@@ -113,6 +113,14 @@ class Problem:
             return self.test_loader_subset(range(start,end))
 
 
+    def unlabeled_loader_range(self, start, end):
+        """Returns the torch dataloader over the unlabeled set, limiting to the examples
+        identified by the indices. """
+        if start==0:
+            return self.loader_for_dataset(SmallerDataset(delegate=self.unlabeled_set(), new_size=end))
+        else:
+            return self.unlabeled_loader_subset(range(start,end))
+
     def unlabeled_loader(self):
         """Returns the torch dataloader over the regularization set (unsupervised examples only). """
         pass
