@@ -35,8 +35,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Load a CUDA model and save it back for the CPU.')
 
     parser.add_argument('--checkpoint-key', help='key to load and save the checkpoint model.', type=str)
-    parser.add_argument('--problem', default="genotyping:", type=str, required=True,
-                        help='The problem, either genotpying: or somatic:')
+    parser.add_argument('--model-labels', help='Labels of the models to convert. Coma separated list of labels', type=str, default="best,latest")
     args = parser.parse_args()
     if args.checkpoint_key is None:
         print("You must specify a checkpoint key.")
@@ -51,17 +50,13 @@ if __name__ == '__main__':
 
 
     problem = Problem()
-
-    trainer=CommonTrainer(args,problem,use_cuda)
-    # Convert best model:
-    model=trainer.load_checkpoint(model_label="best")
-    model.cpu()
-    trainer.net=model
-    trainer.save_checkpoint(model)
-    # Convert latest model:
-    model = trainer.load_checkpoint(model_label="latest")
-    model.cpu()
-    trainer.net = model
-    trainer.save_checkpoint(model,model_label="latest")
+    for model_label in args.model_labels.split(","):
+        trainer=CommonTrainer(args,problem,use_cuda)
+        # Convert best model:
+        model=trainer.load_checkpoint(model_label=model_label)
+        model.cpu()
+        trainer.net=model
+        test_loss=trainer.best_test_loss
+        trainer.save_checkpoint(model,test_loss=trainer.best_test_loss,model_label=model_label)
 
     print("Model converted to CPU.")
