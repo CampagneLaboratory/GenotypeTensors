@@ -58,7 +58,8 @@ class CommonTrainer:
         :param args command line arguments.
         :param use_cuda When True, use the GPU.
          """
-
+        self.training_performance_estimators=self.create_training_performance_estimators()
+        self.test_performance_estimators=self.create_test_performance_estimators()
         self.model_label = "best"  # or latest
         self.max_regularization_examples = args.num_unlabeled if hasattr(args, "num_unlabeled") else 0
         self.max_validation_examples = args.num_validation if hasattr(args, "num_validation") else 0
@@ -204,7 +205,7 @@ class CommonTrainer:
         :return: a list of performance metrics corresponding to the epoch where test accuracy was maximum.
         """
         metrics = [epoch, self.args.checkpoint_key]
-        metrics += performance_estimators.estimates_of_metrics()
+        metrics += performance_estimators.estimates_of_metric()
         early_stop = False
 
         with open("all-{}-{}.tsv".format(kind, self.args.checkpoint_key), "a") as perf_file:
@@ -293,6 +294,8 @@ class CommonTrainer:
         epoch_is_one_of_last_ten = epoch > (self.start_epoch + self.args.num_epochs - 10)
         return (epoch % self.args.test_every_n_epochs + 1) == 1 or epoch_is_one_of_last_ten
 
+
+
     def training_loops(self, training_loop_method=None, testing_loop_method=None):
         """Train the model in a completely supervised manner. Returns the performance obtained
            at the end of the configured training run.
@@ -336,35 +339,35 @@ class CommonTrainer:
         """ This method set the criterions for the problem outputs. """
         pass
 
-    def class_frequency(self, recode_as_multi_label=False):
+    def class_frequency(self, recode_as_multi_label=False, class_frequencies=None):
         """
         Estimate class frequencies for the output vectors of the problem and rebuild criterions
         with weights that correct class imbalances.
         """
+        if class_frequencies is None:
+            train_loader_subset = self.problem.train_loader_subset_range(0, min(100000, self.args.num_training))
+            data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
+                                                            batch_names=["training"],
+                                                            volatile={"training": self.problem.get_vector_names()},
+                                                            )
 
-        train_loader_subset = self.problem.train_loader_subset_range(0, min(100000, self.args.num_training))
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
-                                                        batch_names=["training"],
-                                                        volatile={"training": self.problem.get_vector_names()},
-                                                        )
+            class_frequencies = {}  # one frequency vector per output_name
+            done = False
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                if done:
+                    break
+                for output_name in self.problem.get_output_names():
+                    target_s = data_dict["training"][output_name]
+                    if output_name not in class_frequencies.keys():
+                        class_frequencies[output_name] = torch.ones(target_s[0].size())
+                    cf = class_frequencies[output_name]
+                    indices = torch.nonzero(target_s.data)
+                    for example_index in range(len(target_s)):
+                        cf[indices[example_index, 1]] += 1
 
-        class_frequencies = {}  # one frequency vector per output_name
-        done = False
-        for batch_idx, (_, data_dict) in enumerate(data_provider):
-            if done:
-                break
-            for output_name in self.problem.get_output_names():
-                target_s = data_dict["training"][output_name]
-                if output_name not in class_frequencies.keys():
-                    class_frequencies[output_name] = torch.ones(target_s[0].size())
-                cf = class_frequencies[output_name]
-                indices = torch.nonzero(target_s.data)
-                for example_index in range(len(target_s)):
-                    cf[indices[example_index, 1]] += 1
-
-            progress_bar(batch_idx * self.mini_batch_size,
-                         self.max_training_examples,
-                         "Class frequencies")
+                progress_bar(batch_idx * self.mini_batch_size,
+                             self.max_training_examples,
+                             "Class frequencies")
 
         for output_name in self.problem.get_output_names():
 
@@ -547,3 +550,9 @@ class CommonTrainer:
 
     def select_model(self, model_index):
         pass
+
+    def create_test_performance_estimators(self):
+        return None
+
+    def create_training_performance_estimators(self):
+        return None

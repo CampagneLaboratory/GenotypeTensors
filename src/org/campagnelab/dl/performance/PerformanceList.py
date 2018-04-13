@@ -34,6 +34,9 @@ class PerformanceList(list):
         return _flatten(names)
 
     def estimates_of_metrics(self):
+        return self.estimates_of_metric()
+
+    def estimates_of_metric(self):
         estimates=[]
         estimates +=[perf.estimates_of_metric() for perf in self]
         return _flatten(estimates)
