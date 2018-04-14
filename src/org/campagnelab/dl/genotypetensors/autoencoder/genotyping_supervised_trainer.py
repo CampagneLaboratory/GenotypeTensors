@@ -88,7 +88,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                 target_s = data_dict["training"]["softmaxGenotype"]
                 metadata = data_dict["training"]["metaData"]
 
-                self.train_one_epoch(batch_idx, input_s,target_s,metadata)
+                self.train_one_batch(batch_idx, input_s,target_s,metadata)
 
                 if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                     break
