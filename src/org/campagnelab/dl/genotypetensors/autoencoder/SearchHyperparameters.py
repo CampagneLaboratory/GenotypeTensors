@@ -61,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--max-models', type=int, help='Maximum number of models to train in one shot.',
                         default=sys.maxsize)
     parser.add_argument('--num-models-per-gpu', type=int, help='Maximum number of models to train on one GPU.',
-                            default=30)
+                            default=0)
     parser.add_argument('--num-gpus', type=int, help='Number of GPUs to use for search.',
                         default=1)
     args = parser.parse_args()
@@ -76,13 +76,16 @@ if __name__ == '__main__':
         exit(1)
 
     trainers = []
-    # Initialize the trainers:
+    count=0
     with open(args.commands, "r") as command_file:
 
         trainer_arguments = command_file.readlines()
         count = len(trainer_arguments)
         i = 0
 
+    if args.num_models_per_gpu == 0:
+        print("Running with {} models per gpu. Use --num-models-per-gpu to reduce concurrency if needed.".format(count))
+        args.num_models_per_gpu=max(count,1)
 
     problem = None
     if args.problem.startswith("genotyping:"):
@@ -118,6 +121,9 @@ if __name__ == '__main__':
                          args.num_training,
                          "Class frequencies")
     del train_loader_subset
+
+    # Initialize the trainers:
+
     for trainer_command_line in trainer_arguments:
             trainer_parser = define_train_auto_encoder_parser()
             trainer_args = trainer_parser.parse_args(trainer_command_line.split())
