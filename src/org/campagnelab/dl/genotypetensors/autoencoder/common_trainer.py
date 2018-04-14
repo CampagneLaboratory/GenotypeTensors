@@ -154,8 +154,8 @@ class CommonTrainer:
             self.net.cuda()
         cudnn.benchmark = True
 
-        self.class_frequencies = self.class_frequency() if class_frequencies is None else class_frequencies
-        print("class_frequency " + str(self.class_frequencies))
+        self.class_frequencies = self.class_frequency(class_frequencies=class_frequencies)
+        #print("class_frequency " + str(self.class_frequencies))
 
         self.optimizer_training = self.get_default_optimizer_training(args.optimizer, args)
 
