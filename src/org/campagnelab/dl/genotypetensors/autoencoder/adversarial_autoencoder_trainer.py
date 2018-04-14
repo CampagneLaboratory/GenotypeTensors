@@ -35,8 +35,8 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
     def is_better(self, metric, previous_metric):
         return metric > previous_metric
 
-    def init_model(self, create_model_function):
-        super().init_model(create_model_function)
+    def init_model(self, create_model_function,class_frequencies=None):
+        super().init_model(create_model_function,class_frequencies)
 
         self.encoder_semisup_opt = torch.optim.Adam(self.net.encoder.parameters(), lr=self.args.lr,
                                                     weight_decay=self.args.L2)

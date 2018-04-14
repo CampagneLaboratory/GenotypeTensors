@@ -95,7 +95,7 @@ class CommonTrainer:
         self.reweight_by_validation_error = args.reweight_by_validation_error if hasattr( args,"reweight_by_validation_error") else False
         self.num_classes = 0
 
-    def init_model(self, create_model_function):
+    def init_model(self, create_model_function,class_frequencies=None):
         """Resume training if necessary (args.--resume flag is True), or call the
         create_model_function to initialize a new model. This function must be called
         before train.
@@ -156,7 +156,7 @@ class CommonTrainer:
             self.net.cuda()
         cudnn.benchmark = True
 
-        self.class_frequencies = self.class_frequency()
+        self.class_frequencies = self.class_frequency() if class_frequencies is None else class_frequencies
         print("class_frequency " + str(self.class_frequencies))
 
         self.optimizer_training = self.get_default_optimizer_training(args.optimizer, args)

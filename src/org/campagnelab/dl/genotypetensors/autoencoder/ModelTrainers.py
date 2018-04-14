@@ -139,8 +139,7 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
     if train_args.mode == "autoencoder":
         model_trainer = GenotypingAutoEncoderTrainer(args=train_args, problem=train_problem,
                                                      use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_autoencoder_model(
                 model_name,
@@ -150,15 +149,14 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 dropout_p=train_args.dropout_probability,
                 autoencoder_type=train_args.autoencoder_type,
                 use_selu=args.use_selu
-            )))
+            )),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_autoencoder
         testing_loop_method = model_trainer.test_autoencoder
 
     elif train_args.mode == "supervised_somatic":
         model_trainer = SomaticTrainer(args=train_args, problem=train_problem,
                                        use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_classifier_model(
                 model_name,
@@ -168,15 +166,14 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 num_layers=train_args.num_layers,
                 autoencoder_type=train_args.autoencoder_type,
                 use_selu=train_args.use_selu
-            )))
+            )),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.supervised_somatic
         testing_loop_method = model_trainer.test_somatic_classifer
 
     elif train_args.mode == "semisupervised_genotypes":
         model_trainer = GenotypingSemiSupTrainer(args=train_args, problem=train_problem,
                                                  use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_classifier_model(
                 model_name,
@@ -188,15 +185,14 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 num_layers=train_args.num_layers,
                 autoencoder_type=train_args.autoencoder_type,
                 use_selu=args.use_selu
-            )))
+            )),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_semisup
         testing_loop_method = model_trainer.test_semi_sup
 
     elif train_args.mode == "supervised_genotypes":
         model_trainer = GenotypingSupervisedTrainer(args=train_args, problem=train_problem,
                                                     use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_classifier_model(
                 model_name,
@@ -210,15 +206,14 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 drop_decoder=True,
                 prenormalized_inputs=args.normalize,
                 use_selu=args.use_selu,
-            )))
+            )),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_supervised
         testing_loop_method = model_trainer.test_supervised
 
     elif train_args.mode == "semisupervised_autoencoder":
         model_trainer = AdversarialAutoencoderTrainer(args=train_args, problem=train_problem,
                                                       use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_semisup_adv_autoencoder_model(
                 model_name,
@@ -229,15 +224,14 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 n_dim=train_args.n_dim,
                 prenormalized_inputs=args.normalize,
                 use_selu=args.use_selu
-            )))
+            )),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_semisup_aae
         testing_loop_method = model_trainer.test_semisup_aae
 
     elif train_args.mode == "supervised_crossencoder":
         model_trainer = AdversarialCrossencoderTrainer(args=train_args, problem=train_problem,
                                                        use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_semisup_adv_autoencoder_model(
                 model_name,
@@ -248,15 +242,14 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 n_dim=train_args.n_dim,
                 prenormalized_inputs=args.normalize,
                 use_selu=args.use_selu
-            )))
+            )),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_semisup_aae
         testing_loop_method = model_trainer.test_semisup_aae
 
     elif train_args.mode == "supervised_mixup_genotypes":
         model_trainer = GenotypingSupervisedMixupTrainer(args=train_args, problem=train_problem,
                                                          use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_classifier_model(
                 model_name,
@@ -270,15 +263,14 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 drop_decoder=True,
                 prenormalized_inputs=args.normalize,
                 use_selu=args.use_selu
-            )))
+            )),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_supervised_mixup
         testing_loop_method = model_trainer.test_supervised_mixup
 
     elif train_args.mode == "semisupervised_mixup_genotypes":
         model_trainer = GenotypingSemisupervisedMixupTrainer(args=train_args, problem=train_problem,
                                                              use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_classifier_model(
                 model_name,
@@ -292,15 +284,15 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 drop_decoder=True,
                 prenormalized_inputs=args.normalize,
                 use_selu=args.use_selu
-            )))
+            )
+        ),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_semisupervised_mixup
         testing_loop_method = model_trainer.test_semisupervised_mixup
 
     elif train_args.mode == "supervised_funnel_genotypes":
         model_trainer = GenotypingSupervisedTrainer(args=train_args, problem=train_problem,
                                                     use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_genotype_funnel_classifier_model(
                 model_name,
@@ -313,7 +305,7 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 use_selu=args.use_selu,
                 skip_batch_norm=args.skip_batch_norm,
             )
-        ))
+        ),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_supervised
         testing_loop_method = model_trainer.test_supervised
     elif train_args.mode == "supervised_mixup_funnel_genotypes":
@@ -333,7 +325,7 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 use_selu=args.use_selu,
                 skip_batch_norm=args.skip_batch_norm,
             )
-        ))
+        ), class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_supervised_mixup
         testing_loop_method = model_trainer.test_supervised_mixup
     elif train_args.mode == "semisupervised_mixup_funnel_genotypes":
