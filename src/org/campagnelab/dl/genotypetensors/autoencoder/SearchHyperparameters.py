@@ -82,33 +82,7 @@ if __name__ == '__main__':
         trainer_arguments = command_file.readlines()
         count = len(trainer_arguments)
         i = 0
-        for trainer_command_line in trainer_arguments:
-            trainer_parser = define_train_auto_encoder_parser()
-            trainer_args = trainer_parser.parse_args(trainer_command_line.split())
 
-            if trainer_args.max_examples_per_epoch is None:
-                trainer_args.max_examples_per_epoch = trainer_args.num_training
-            trainer_args.num_training = args.num_training
-            print("Executing " + trainer_args.checkpoint_key)
-
-            with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
-                args_file.write(trainer_command_line + "--seed " + str(trainer_args.seed))
-
-            use_cuda = torch.cuda.is_available()
-            is_parallel = False
-            best_acc = 0  # best test accuracy
-            start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-
-            if trainer_args.max_examples_per_epoch is None:
-                trainer_args.max_examples_per_epoch = args.num_training
-            model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(trainer_args,
-                                                                                               problem,
-                                                                                               use_cuda)
-            trainers += [model_trainer]
-            print("Configured {}/{} trainers".format(len(trainers), count))
-            if (len(trainers) > args.max_models): break
-
-    print("Executing hyper-parameter search for {} models.".format(len(trainers)))
 
     problem = None
     if args.problem.startswith("genotyping:"):
@@ -120,7 +94,7 @@ if __name__ == '__main__':
         exit(1)
 
     # Estimate class frequencies:
-
+    print("Estimating class frequencies..")
     train_loader_subset = problem.train_loader_subset_range(0, min(100000, args.num_training))
     data_provider = DataProvider(iterator=zip(train_loader_subset), is_cuda=False,
                                                     batch_names=["training"],
@@ -144,7 +118,36 @@ if __name__ == '__main__':
         progress_bar(batch_idx * args.mini_batch_size,
                      args.num_training,
                      "Class frequencies")
-        for model_trainer in trainers:
+
+        for trainer_command_line in trainer_arguments:
+            trainer_parser = define_train_auto_encoder_parser()
+            trainer_args = trainer_parser.parse_args(trainer_command_line.split())
+
+            if trainer_args.max_examples_per_epoch is None:
+                trainer_args.max_examples_per_epoch = trainer_args.num_training
+            trainer_args.num_training = args.num_training
+            print("Executing " + trainer_args.checkpoint_key)
+
+            with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
+                args_file.write(trainer_command_line + "--seed " + str(trainer_args.seed))
+
+            use_cuda = torch.cuda.is_available()
+            is_parallel = False
+            best_acc = 0  # best test accuracy
+            start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+
+            if trainer_args.max_examples_per_epoch is None:
+                trainer_args.max_examples_per_epoch = args.num_training
+            model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(trainer_args,
+                                                                                               problem,
+                                                                                               use_cuda,
+                                                                                               class_frequencies)
+            trainers += [model_trainer]
+            print("Configured {}/{} trainers".format(len(trainers), count))
+            if (len(trainers) > args.max_models): break
+
+    print("Executing hyper-parameter search for {} models.".format(len(trainers)))
+    for model_trainer in trainers:
             model_trainer.class_frequency(class_frequencies=class_frequencies)
 
     if args.mode == "supervised":

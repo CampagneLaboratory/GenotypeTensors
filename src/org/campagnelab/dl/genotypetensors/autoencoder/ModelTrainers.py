@@ -134,11 +134,13 @@ def define_train_auto_encoder_parser():
                         help="Optimizer to use. Only supervised_genotypes_softmax supports adagrad currently.")
     return parser
 
-def configure_model_trainer(train_args, train_problem,train_use_cuda):
+def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequencies=None):
     args=train_args
     if train_args.mode == "autoencoder":
         model_trainer = GenotypingAutoEncoderTrainer(args=train_args, problem=train_problem,
                                                      use_cuda=train_use_cuda)
+        if class_frequencies is not None:
+            model_trainer.class_frequencies=class_frequencies
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_autoencoder_model(
                 model_name,
