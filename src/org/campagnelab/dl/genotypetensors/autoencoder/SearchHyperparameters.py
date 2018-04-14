@@ -96,30 +96,29 @@ if __name__ == '__main__':
     # Estimate class frequencies:
     print("Estimating class frequencies..")
     train_loader_subset = problem.train_loader_subset_range(0, min(100000, args.num_training))
-    data_provider = DataProvider(iterator=zip(train_loader_subset), is_cuda=False,
-                                                    batch_names=["training"],
-                                                    volatile={"training": problem.get_vector_names()},
-                                                    )
-
     class_frequencies = {}  # one frequency vector per output_name
-    done = False
-    for batch_idx, (_, data_dict) in enumerate(data_provider):
-        if done:
-            break
-        for output_name in problem.get_output_names():
-            target_s = data_dict["training"][output_name]
-            if output_name not in class_frequencies.keys():
-                class_frequencies[output_name] = torch.ones(target_s[0].size())
-            cf = class_frequencies[output_name]
-            indices = torch.nonzero(target_s.data)
-            for example_index in range(len(target_s)):
-                cf[indices[example_index, 1]] += 1
+    with DataProvider(iterator=zip(train_loader_subset), is_cuda=False,
+                      batch_names=["training"],
+                      volatile={"training": problem.get_vector_names()},
+                      ) as    data_provider:
+        done = False
+        for batch_idx, (_, data_dict) in enumerate(data_provider):
+            if done:
+                break
+            for output_name in problem.get_output_names():
+                target_s = data_dict["training"][output_name]
+                if output_name not in class_frequencies.keys():
+                    class_frequencies[output_name] = torch.ones(target_s[0].size())
+                cf = class_frequencies[output_name]
+                indices = torch.nonzero(target_s.data)
+                for example_index in range(len(target_s)):
+                    cf[indices[example_index, 1]] += 1
 
-        progress_bar(batch_idx * args.mini_batch_size,
-                     args.num_training,
-                     "Class frequencies")
+            progress_bar(batch_idx * args.mini_batch_size,
+                         args.num_training,
+                         "Class frequencies")
 
-        for trainer_command_line in trainer_arguments:
+    for trainer_command_line in trainer_arguments:
             trainer_parser = define_train_auto_encoder_parser()
             trainer_args = trainer_parser.parse_args(trainer_command_line.split())
 

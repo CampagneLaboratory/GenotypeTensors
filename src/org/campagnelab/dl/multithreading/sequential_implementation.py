@@ -15,6 +15,12 @@ class DataProvider:
         self.requires_grad = {} if requires_grad is None else requires_grad
         self.recode_functions = {} if recode_functions is None else recode_functions
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def __iter__(self):
         return self
 
@@ -156,7 +162,7 @@ class MultiThreadedCpuGpuDataProvider(CpuGpuDataProvider):
             time.sleep(10 / 1000.0)
 
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
