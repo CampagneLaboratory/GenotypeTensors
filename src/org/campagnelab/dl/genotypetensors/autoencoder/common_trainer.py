@@ -106,13 +106,13 @@ class CommonTrainer:
         args = self.args
         mini_batch_size = self.mini_batch_size
         # restrict limits to actual size of datasets:
-        training_set_length = (len(self.problem.train_loader())) * mini_batch_size
+        training_set_length = (len(self.problem.train_set()))
         if hasattr(args, 'num_training') and args.num_training > training_set_length:
             args.num_training = training_set_length
-        unsup_set_length = (len(self.problem.unlabeled_loader())) * mini_batch_size
+        unsup_set_length = (len(self.problem.unlabeled_set()))
         if hasattr(args, 'num_shaving') and args.num_shaving > unsup_set_length:
             args.num_shaving = unsup_set_length
-        test_set_length = (len(self.problem.validation_loader())) * mini_batch_size
+        test_set_length = (len(self.problem.validation_set()))
         if hasattr(args, 'num_validation') and args.num_validation > test_set_length:
             args.num_validation = test_set_length
 
