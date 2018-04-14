@@ -117,7 +117,7 @@ class CommonTrainer:
         self.max_regularization_examples = args.num_shaving if hasattr(args, 'num_shaving') else 0
         self.max_validation_examples = args.num_validation if hasattr(args, 'num_validation') else 0
         self.max_training_examples = args.num_training if hasattr(args, 'num_training') else 0
-        self.unsuploader = self.problem.unlabeled_loader()
+
         model_built = False
 
         if hasattr(args, 'resume') and args.resume:
