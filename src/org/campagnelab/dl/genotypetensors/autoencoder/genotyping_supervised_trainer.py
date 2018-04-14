@@ -62,7 +62,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
         print('\nTraining, epoch: %d' % epoch)
 
-        self.net.train()
+
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
@@ -100,6 +100,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
     def train_one_batch(self, performance_estimators, batch_idx, input_s, target_s, metadata):
         # outputs used to calculate the loss of the supervised model
         # must be done with the model prior to regularization:
+        self.net.train()
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
         self.optimizer_training.zero_grad()

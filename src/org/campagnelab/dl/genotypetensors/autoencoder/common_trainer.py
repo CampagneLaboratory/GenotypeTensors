@@ -368,7 +368,8 @@ class CommonTrainer:
                 progress_bar(batch_idx * self.mini_batch_size,
                              self.max_training_examples,
                              "Class frequencies")
-
+        else:
+            self.class_frequencies=class_frequencies
         for output_name in self.problem.get_output_names():
 
             class_frequencies_output = class_frequencies[output_name]

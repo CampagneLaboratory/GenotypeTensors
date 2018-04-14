@@ -47,7 +47,7 @@ class DataProvider:
                 var_batch = Variable(batch_data[var_name], requires_grad=(var_name in self.requires_grad[loader_name]),
                                      volatile=(var_name in self.volatile[loader_name]))
                 if is_cuda:
-                    var_batch = var_batch.cuda()
+                    var_batch = var_batch.cuda(async=False)
                 data_dict[loader_name][var_name] = var_batch
             indices_dict[loader_name] = batch_indices
         return indices_dict, data_dict

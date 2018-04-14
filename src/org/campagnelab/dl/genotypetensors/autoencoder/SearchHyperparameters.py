@@ -2,8 +2,10 @@
 from __future__ import print_function
 
 import argparse
+import concurrent
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 import torch
 
@@ -31,7 +33,7 @@ import torch
 from org.campagnelab.dl.genotypetensors.autoencoder.ModelTrainers import configure_model_trainer, \
     define_train_auto_encoder_parser
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 from org.campagnelab.dl.utils.utils import progress_bar
@@ -54,11 +56,14 @@ if __name__ == '__main__':
     parser.add_argument('--num-validation', '-v', type=int, help='Maximum number of validation examples to use.',
                         default=sys.maxsize)
     parser.add_argument("--num-workers", type=int, default=0, help='Number of workers to feed data to the GPUs.')
-    parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=1024)
+    parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=1000)
     parser.add_argument('--max-epochs', type=int, help='Maximum number of epochs to train for.', default=10)
     parser.add_argument('--max-models', type=int, help='Maximum number of models to train in one shot.',
                         default=sys.maxsize)
-
+    parser.add_argument('--num-models-per-gpu', type=int, help='Maximum number of models to train on one GPU.',
+                            default=30)
+    parser.add_argument('--num-gpus', type=int, help='Number of GPUs to use for search.',
+                        default=1)
     args = parser.parse_args()
 
     problem = None
@@ -99,8 +104,8 @@ if __name__ == '__main__':
             model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(trainer_args,
                                                                                                problem,
                                                                                                use_cuda)
-            print("Configured {}/{} trainers".format(len(trainers), count))
             trainers += [model_trainer]
+            print("Configured {}/{} trainers".format(len(trainers), count))
             if (len(trainers) > args.max_models): break
 
     print("Executing hyper-parameter search for {} models.".format(len(trainers)))
@@ -117,7 +122,7 @@ if __name__ == '__main__':
     # Estimate class frequencies:
 
     train_loader_subset = problem.train_loader_subset_range(0, min(100000, args.num_training))
-    data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
+    data_provider = DataProvider(iterator=zip(train_loader_subset), is_cuda=False,
                                                     batch_names=["training"],
                                                     volatile={"training": problem.get_vector_names()},
                                                     )
@@ -143,7 +148,7 @@ if __name__ == '__main__':
             model_trainer.class_frequency(class_frequencies=class_frequencies)
 
     if args.mode == "supervised":
-        def do_training(epoch):
+        def do_training(epoch,thread_executor):
             print('Training, epoch: %d' % epoch)
             for model_trainer in trainers:
                 model_trainer.training_performance_estimators.init_performance_metrics()
@@ -151,7 +156,7 @@ if __name__ == '__main__':
             unsupervised_loss_acc = 0
             num_batches = 0
             train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
-            data_provider = MultiThreadedCpuGpuDataProvider(
+            data_provider = DataProvider(
                 iterator=zip(train_loader_subset),
                 is_cuda=use_cuda,
                 batch_names=["training"],
@@ -170,19 +175,26 @@ if __name__ == '__main__':
                     metadata = data_dict["training"]["metaData"]
                     batch_size = len(input_s)
                     num_batches += 1
+                    futures=[]
                     for model_trainer in trainers:
-                        target_s = recode_for_label_smoothing(target_s, model_trainer.args.epsilon_label_smoothing)
+                        def to_do(model_trainer, input_s, target_s, metadata):
+                            input_s_local = input_s.clone()
+                            target_s_local = target_s.clone()
+                            model_trainer.net.train()
+                            target_s_smoothed = recode_for_label_smoothing(target_s_local,
+                                                                  model_trainer.args.epsilon_label_smoothing)
 
-                        model_trainer.train_one_batch(model_trainer.training_performance_estimators,
-                                                      batch_idx, input_s, target_s, metadata)
-
+                            model_trainer.train_one_batch(model_trainer.training_performance_estimators,
+                                                          batch_idx, input_s_local, target_s_smoothed, metadata)
+                        futures+=[thread_executor.submit(to_do,model_trainer,input_s,target_s,metadata)]
+                    concurrent.futures.wait(futures)
                     if (batch_idx + 1) * batch_size > args.num_training:
                         break
             finally:
                 data_provider.close()
 
 
-        def do_testing(epoch):
+        def do_testing(epoch, thread_executor):
             print('Testing, epoch: %d' % epoch)
             errors = None
 
@@ -190,7 +202,7 @@ if __name__ == '__main__':
                 model_trainer.test_performance_estimators.init_performance_metrics()
 
             validation_loader_subset = problem.validation_loader_range(0, args.num_validation)
-            data_provider = MultiThreadedCpuGpuDataProvider(
+            data_provider = DataProvider(
                 iterator=zip(validation_loader_subset),
                 is_cuda=use_cuda,
                 batch_names=["validation"],
@@ -204,15 +216,20 @@ if __name__ == '__main__':
                 for batch_idx, (_, data_dict) in enumerate(data_provider):
                     input_s = data_dict["validation"]["input"]
                     target_s = data_dict["validation"]["softmaxGenotype"]
-
+                    futures=[]
                     for model_trainer in trainers:
-                        target_s = recode_for_label_smoothing(target_s,
-                                                              model_trainer.args.epsilon_label_smoothing)
+                        def to_do(model_trainer,input_s,target_s):
+                            input_s_local=input_s.clone()
+                            target_s_local=target_s.clone()
+                            target_smoothed = recode_for_label_smoothing(target_s_local,
+                                                                  model_trainer.args.epsilon_label_smoothing)
 
-                        model_trainer.net.eval()
-                        model_trainer.test_one_batch(model_trainer.test_performance_estimators,
-                                                     batch_idx, input_s, target_s,errors)
+                            model_trainer.net.eval()
+                            model_trainer.test_one_batch(model_trainer.test_performance_estimators,
+                                                         batch_idx, input_s_local, target_smoothed,errors)
 
+                        futures+=[thread_executor.submit(to_do,model_trainer,input_s,target_s)]
+                    concurrent.futures.wait(futures)
             finally:
                 data_provider.close()
             #print("test errors by class: ", str(errors))
@@ -241,12 +258,12 @@ if __name__ == '__main__':
 
     else:
         pass
-
-    for epoch in range(args.max_epochs):
-        do_training(epoch)
-        do_testing(epoch)
-        if len(trainers) == 0:
-            break
+    with  ThreadPoolExecutor(max_workers=args.num_models_per_gpu*args.num_gpus) as thread_executor:
+        for epoch in range(args.max_epochs):
+            do_training(epoch,thread_executor)
+            do_testing(epoch,thread_executor)
+            if len(trainers) == 0:
+                break
 
     # don't wait for threads to die, just exit:
     os._exit(0)
