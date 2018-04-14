@@ -79,9 +79,7 @@ class CommonTrainer:
         self.net = None
         self.optimizer_training = None
         self.scheduler_train = None
-        self.unsuploader = self.problem.unlabeled_loader()
-        self.trainloader = self.problem.train_loader()
-        self.testloader = self.problem.validation_loader()
+
         self.is_parallel = False
         self.best_performance_metrics = None
         self.failed_to_improve = 0
