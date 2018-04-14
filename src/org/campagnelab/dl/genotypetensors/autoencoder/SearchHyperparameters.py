@@ -117,7 +117,7 @@ if __name__ == '__main__':
             progress_bar(batch_idx * args.mini_batch_size,
                          args.num_training,
                          "Class frequencies")
-
+    del train_loader_subset
     for trainer_command_line in trainer_arguments:
             trainer_parser = define_train_auto_encoder_parser()
             trainer_args = trainer_parser.parse_args(trainer_command_line.split())
@@ -194,6 +194,7 @@ if __name__ == '__main__':
                         break
             finally:
                 data_provider.close()
+                del train_loader_subset
 
 
         def do_testing(epoch, thread_executor):
@@ -234,6 +235,7 @@ if __name__ == '__main__':
                     concurrent.futures.wait(futures)
             finally:
                 data_provider.close()
+                del validation_loader_subset
             #print("test errors by class: ", str(errors))
 
             for model_trainer in trainers:
