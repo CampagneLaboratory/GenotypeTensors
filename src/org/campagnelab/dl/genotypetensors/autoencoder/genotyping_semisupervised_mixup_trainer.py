@@ -1,4 +1,5 @@
 import torch
+from torch.autograd import Variable
 from torch.nn import MultiLabelSoftMarginLoss
 from torchnet.meter import ConfusionMeter
 
@@ -134,16 +135,18 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             target_s_2 = target_s_2.cuda()
         # assume metadata_2 is like metadata_1, since we don't know the indel status for the unlabeled set
         metadata_2 = metadata_1.clone()
-
         input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_u_2, target_s_1, target_s_2)
+        input_s_mixup=Variable(input_s_mixup.data,requires_grad=True)
+        target_s_mixup=Variable(target_s_mixup.data,requires_grad=False)
+        self.optimizer_training.zero_grad()
+        self.net.zero_grad()
 
         # outputs used to calculate the loss of the supervised model
         # must be done with the model prior to regularization:
 
-        self.optimizer_training.zero_grad()
-        self.net.zero_grad()
+
         output_s = self.net(input_s_mixup)
-        output_s_p = self.get_p(output_s)
+        #output_s_p = self.get_p(output_s)
         _, target_index = torch.max(target_s_mixup, dim=1)
         supervised_loss = self.criterion_classifier(output_s, target_s_mixup)
 
@@ -156,19 +159,12 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         self.optimizer_training.step()
         performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
         performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
-                                                       output_s_p, targets=target_index)
+                                                       output_s, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
                          performance_estimators.progress_message(
                              ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
-
-    def get_p(self, output_s):
-        # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
-        # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
-        output_s_exp = torch.exp(output_s)
-        output_s_p = torch.div(output_s_exp, torch.add(output_s_exp, 1))
-        return output_s_p
 
     def reset_before_test_epoch(self):
         self.cm = ConfusionMeter(self.num_classes, normalized=False)
