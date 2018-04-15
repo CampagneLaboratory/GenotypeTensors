@@ -304,19 +304,22 @@ if __name__ == '__main__':
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 input_s = data_dict["validation"]["input"]
                 target_s = data_dict["validation"]["softmaxGenotype"]
+                metadata = data_dict["validation"]["metaData"]
                 futures=[]
                 for model_trainer in trainers:
-                    def to_do(model_trainer, input_s, target_s, errors):
+                    def to_do(model_trainer, input_s, target_s, metadata, errors):
                         input_s_local=input_s.clone()
                         target_s_local=target_s.clone()
+                        metadata_local=metadata.clone()
                         target_smoothed = recode_for_label_smoothing(target_s_local,
                                                               model_trainer.args.epsilon_label_smoothing)
 
                         model_trainer.net.eval()
                         model_trainer.test_one_batch(model_trainer.test_performance_estimators,
-                                                     batch_idx, input_s_local, target_smoothed, errors=None)
+                                                     batch_idx, input_s_local, target_smoothed,metadata=metadata_local,
+                                                     errors=errors)
 
-                    futures += [thread_executor.submit(to_do, model_trainer, input_s, target_s, None)]
+                    futures += [thread_executor.submit(to_do, model_trainer, input_s, target_s, metadata, None)]
                 concurrent.futures.wait(futures)
                 # Report any exceptions encountered in to_do:
                 raise_to_do_exceptions(futures)

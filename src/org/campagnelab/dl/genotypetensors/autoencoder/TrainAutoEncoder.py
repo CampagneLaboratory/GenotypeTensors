@@ -1,13 +1,9 @@
 '''Train an auto-encoder for .vec/vecp files.'''
 from __future__ import print_function
 
-import argparse
-import random
-import string
-import sys
-import threading
-
 import os
+import sys
+
 import torch
 
 # MIT License
@@ -33,24 +29,6 @@ import torch
 # SOFTWARE.
 from org.campagnelab.dl.genotypetensors.autoencoder.ModelTrainers import configure_model_trainer, \
     define_train_auto_encoder_parser
-from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_autoencoder_trainer import AdversarialAutoencoderTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_crossencoder_trainer import \
-    AdversarialCrossencoderTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
-from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import \
-    create_genotype_funnel_classifier_model
-from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisupervised_mixup_trainer import \
-    GenotypingSemisupervisedMixupTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_mixup_trainer import \
-    GenotypingSupervisedMixupTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_supervised_trainer import GenotypingSupervisedTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_trainer import GenotypingAutoEncoderTrainer
-from org.campagnelab.dl.genotypetensors.autoencoder.sbi_classifier import create_classifier_model
-from org.campagnelab.dl.genotypetensors.autoencoder.semisup_adversarial_autoencoder import (
-    create_semisup_adv_autoencoder_model
-)
-from org.campagnelab.dl.genotypetensors.autoencoder.somatic_trainer import SomaticTrainer
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 
 if __name__ == '__main__':

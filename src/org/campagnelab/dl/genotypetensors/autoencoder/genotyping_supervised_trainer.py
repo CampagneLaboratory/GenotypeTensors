@@ -192,7 +192,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         self.test_performance_estimators=performance_estimators
         return performance_estimators
 
-    def test_one_batch(self,performance_estimators, batch_idx, input_s, target_s, errors=None):
+    def test_one_batch(self,performance_estimators, batch_idx, input_s, target_s,metadata=None, errors=None):
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 

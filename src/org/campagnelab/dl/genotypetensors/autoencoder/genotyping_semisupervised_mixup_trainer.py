@@ -1,12 +1,7 @@
-import numpy
 import torch
-from torch.autograd import Variable
-from torch.distributions import Categorical
 from torch.nn import MultiLabelSoftMarginLoss
-
-import numpy as np
 from torchnet.meter import ConfusionMeter
-from random import random
+
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
@@ -179,7 +174,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         self.cm = ConfusionMeter(self.num_classes, normalized=False)
 
     def test_one_batch(self, performance_estimators,
-                       batch_idx, input_s, target_s, errors=None):
+                       batch_idx, input_s, target_s, metadata=None, errors=None):
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 

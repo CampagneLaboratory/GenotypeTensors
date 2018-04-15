@@ -210,7 +210,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         return performance_estimators
 
 
-    def test_one_batch(self,performance_estimators, batch_idx, input_s, target_s, errors):
+    def test_one_batch(self,performance_estimators, batch_idx, input_s, target_s,metadata=None, errors=None):
         if errors is None:
             errors = torch.zeros(target_s[0].size())
         self.net.eval()
