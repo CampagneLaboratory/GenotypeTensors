@@ -133,8 +133,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
                                              category_prior=category_prior)
         if self.use_cuda:
             target_s_2 = target_s_2.cuda()
-        # assume metadata_2 is like metadata_1, since we don't know the indel status for the unlabeled set
-        metadata_2 = metadata_1.clone()
+
         input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_u_2, target_s_1, target_s_2)
         input_s_mixup=Variable(input_s_mixup.data,requires_grad=True)
         target_s_mixup=Variable(target_s_mixup.data,requires_grad=False)
@@ -149,13 +148,12 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         #output_s_p = self.get_p(output_s)
         _, target_index = torch.max(target_s_mixup, dim=1)
         supervised_loss = self.criterion_classifier(output_s, target_s_mixup)
-
-        batch_weight = self.estimate_batch_weight_mixup(metadata_1, metadata_2, indel_weight=indel_weight,
+        # assume weight is the same for the two batches (we don't know metadata on the unlabeled batch):
+        batch_weight = self.estimate_batch_weight(metadata_1, indel_weight=indel_weight,
                                                         snp_weight=snp_weight)
 
-        weighted_supervised_loss = supervised_loss * batch_weight
-        optimized_loss = weighted_supervised_loss
-        optimized_loss.backward()
+        supervised_loss = supervised_loss * batch_weight
+        supervised_loss.backward()
         self.optimizer_training.step()
         performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
         performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],

@@ -459,26 +459,25 @@ class CommonTrainer:
             categorical_distribution = self.prepare_distribution(mini_batch_size, num_classes, category_prior,
                                                                  recode_labels)
 
-        self.categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
+        categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
 
         categories_as_int = categorical_distribution.sample().view(mini_batch_size, -1)
-        self.categories_one_hot.zero_()
-        self.categories_one_hot.scatter_(1, categories_as_int, 1)
+        categories_one_hot.zero_()
+        categories_one_hot.scatter_(1, categories_as_int, 1)
         if recode_labels is not None:
             # apply label recode function:
-            self.categories_one_hot = recode_labels(self.categories_one_hot)
-        categories_real = Variable(self.categories_one_hot.clone(), requires_grad=False)
+            categories_one_hot = recode_labels(categories_one_hot)
+        categories_real = Variable(categories_one_hot.clone(), requires_grad=False)
         return categories_real
 
     def dreamup_target_for(self, num_classes, category_prior,input):
-        if self.best_model is None or self.args.label_strategy == "UNIFORM":
-            category_prior=numpy.ones(self.num_classes)/self.num_classes
+        if self.best_model is None or self.args.label_strategy == "SAMPLING":
+
             return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
                                             category_prior=category_prior,
                                             recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
-
-        if self.best_model is None or self.args.label_strategy == "SAMPLING":
-
+        if self.best_model is None or self.args.label_strategy == "UNIFORM":
+            category_prior=numpy.ones(self.num_classes)/self.num_classes
             return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
                                             category_prior=category_prior,
                                             recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
@@ -486,7 +485,7 @@ class CommonTrainer:
             self.best_model.eval()
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
             # training set as training progresses:
-            best_model_output = self.best_model(Variable(input.data, volatile=True))
+            best_model_output = self.best_model(Variable(input.data, volatile=True).cuda())
             model_output_p=self.get_p(best_model_output).data
             # assume three classes and predicted= [0.9, 0.1, 0]
             # assume confusion matrix is [10, 10, 0,
@@ -512,7 +511,7 @@ class CommonTrainer:
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
             # training set as training progresses:
             self.best_model.eval()
-            best_model_output = self.best_model(Variable(input.data, volatile=True))
+            best_model_output = self.best_model(Variable(input.data, volatile=True).cuda())
             model_output_p = self.get_p(best_model_output).data
             # assume three classes and predicted= [0.9, 0.1, 0]
             # assume confusion matrix is [10, 10, 0,
