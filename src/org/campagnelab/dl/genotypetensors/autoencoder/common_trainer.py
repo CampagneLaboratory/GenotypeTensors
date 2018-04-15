@@ -459,15 +459,15 @@ class CommonTrainer:
         categorical_distribution = self.prepare_distribution(mini_batch_size, num_classes, category_prior,
                                                                  recode_labels)
 
-        categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
+        categories_one_hot = torch.zeros(mini_batch_size, num_classes)
 
         categories_as_int = categorical_distribution.sample().view(mini_batch_size, -1)
-        categories_one_hot.zero_()
+        #categories_one_hot.zero_()
         categories_one_hot.scatter_(1, categories_as_int, 1)
         if recode_labels is not None:
             # apply label recode function:
             categories_one_hot = recode_labels(categories_one_hot)
-        categories_real = Variable(categories_one_hot.clone(), requires_grad=False)
+        categories_real = Variable(categories_one_hot, requires_grad=False)
         return categories_real
 
     def dreamup_target_for(self, num_classes, category_prior,input):
