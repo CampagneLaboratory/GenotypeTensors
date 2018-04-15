@@ -64,6 +64,9 @@ if __name__ == '__main__':
                             default=0)
     parser.add_argument('--num-gpus', type=int, help='Number of GPUs to use for search.',
                         default=1)
+    parser.add_argument('--num-estimate-class-frequencies', type=int, help='Number of examples to look at to estimate '
+                                                                           'class frequencies.',
+                        default=sys.maxsize)
     args = parser.parse_args()
 
     problem = None
@@ -75,6 +78,7 @@ if __name__ == '__main__':
         print("Unsupported problem: " + args.problem)
         exit(1)
     args.num_training=min(args.num_training,len(problem.train_set()))
+    args.num_estimate_class_frequencies=min(args.num_estimate_class_frequencies,len(problem.train_set()))
     args.num_validation=min(args.num_validation,len(problem.validation_set()))
     trainers = []
     count=0
@@ -99,7 +103,7 @@ if __name__ == '__main__':
 
     # Estimate class frequencies:
     print("Estimating class frequencies..")
-    train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
+    train_loader_subset = problem.train_loader_subset_range(0, args.num_estimate_class_frequencies)
     class_frequencies = {}  # one frequency vector per output_name
     with DataProvider(iterator=zip(train_loader_subset), is_cuda=False,
                       batch_names=["training"],
