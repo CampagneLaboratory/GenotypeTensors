@@ -133,7 +133,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         if self.use_cuda:
             target_s_2 = target_s_2.cuda()
         # assume metadata_2 is like metadata_1, since we don't know the indel status for the unlabeled set
-        metadata_2 = metadata_1
+        metadata_2 = metadata_1.clone()
 
         input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_u_2, target_s_1, target_s_2)
 
