@@ -455,8 +455,8 @@ class CommonTrainer:
 
     def get_category_sample(self, mini_batch_size, num_classes, category_prior, recode_labels=None,
                             categorical_distribution=None):
-        if categorical_distribution is None:
-            categorical_distribution = self.prepare_distribution(mini_batch_size, num_classes, category_prior,
+
+        categorical_distribution = self.prepare_distribution(mini_batch_size, num_classes, category_prior,
                                                                  recode_labels)
 
         categories_one_hot = torch.FloatTensor(mini_batch_size, num_classes)
@@ -471,16 +471,17 @@ class CommonTrainer:
         return categories_real
 
     def dreamup_target_for(self, num_classes, category_prior,input):
-        if self.best_model is None or self.args.label_strategy == "SAMPLING":
-
-            return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
-                                            category_prior=category_prior,
-                                            recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
         if self.best_model is None or self.args.label_strategy == "UNIFORM":
             category_prior=numpy.ones(self.num_classes)/self.num_classes
             return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
                                             category_prior=category_prior,
                                             recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
+        if self.best_model is None or self.args.label_strategy == "SAMPLING":
+
+            return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
+                                            category_prior=category_prior,
+                                            recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
+
         elif self.args.label_strategy == "VAL_CONFUSION":
             self.best_model.eval()
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
