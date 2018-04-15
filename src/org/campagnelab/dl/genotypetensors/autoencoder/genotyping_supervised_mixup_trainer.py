@@ -46,6 +46,19 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
                                                               problem_std=problem_std)
                                            if self.args.normalize
                                            else x)
+    def create_training_performance_estimators(self):
+        performance_estimators =PerformanceList()
+        performance_estimators += [FloatHelper("supervised_loss")]
+        performance_estimators += [AccuracyHelper("train_")]
+        self.training_performance_estimators = performance_estimators
+        return performance_estimators
+
+    def create_test_performance_estimators(self):
+        performance_estimators = PerformanceList()
+        performance_estimators += [LossHelper("test_supervised_loss")]
+        performance_estimators += [AccuracyHelper("test_")]
+        self.test_performance_estimators=performance_estimators
+        return performance_estimators
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -71,9 +84,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         return metric > previous_metric
 
     def train_supervised_mixup(self, epoch):
-        performance_estimators = PerformanceList()
-        performance_estimators += [FloatHelper("supervised_loss")]
-        performance_estimators += [AccuracyHelper("train_")]
+        performance_estimators = self.create_training_performance_estimators()
 
         print('\nTraining, epoch: %d' % epoch)
 
@@ -99,8 +110,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             }
         )
 
-        indel_weight = self.args.indel_weight_factor
-        snp_weight = 1.0
+
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 input_s_1 = data_dict["training_1"]["input"]
@@ -111,33 +121,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
                 metadata_2 = data_dict["training_2"]["metaData"]
                 num_batches += 1
 
-                input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_s_2, target_s_1, target_s_2)
-
-                # outputs used to calculate the loss of the supervised model
-                # must be done with the model prior to regularization:
-
-                self.optimizer_training.zero_grad()
-                self.net.zero_grad()
-                output_s = self.net(input_s_mixup)
-                output_s_p = self.get_p(output_s)
-                _, target_index = torch.max(target_s_mixup, dim=1)
-                supervised_loss = self.criterion_classifier(output_s, target_s_mixup)
-
-                batch_weight = self.estimate_batch_weight_mixup(metadata_1, metadata_2, indel_weight=indel_weight,
-                                                                snp_weight=snp_weight)
-
-                weighted_supervised_loss = supervised_loss * batch_weight
-                optimized_loss = weighted_supervised_loss
-                optimized_loss.backward()
-                self.optimizer_training.step()
-                performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
-                performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
-                                                               output_s_p, targets=target_index)
-                if not self.args.no_progress:
-                    progress_bar(batch_idx * self.mini_batch_size,
-                             self.max_training_examples,
-                             performance_estimators.progress_message(
-                                 ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
+                self.train_one_batch(performance_estimators, batch_idx, input_s_1, input_s_2, target_s_1,target_s_2, metadata_1,metadata_2)
 
                 if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                     break
@@ -145,6 +129,36 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             data_provider.close()
 
         return performance_estimators
+
+    def train_one_batch(self, performance_estimators, batch_idx, input_s_1, input_s_2, target_s_1,target_s_2, metadata_1,metadata_2):
+        input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_s_2, target_s_1, target_s_2)
+        self.net.train()
+        # outputs used to calculate the loss of the supervised model
+        # must be done with the model prior to regularization:
+
+        self.optimizer_training.zero_grad()
+        self.net.zero_grad()
+        output_s = self.net(input_s_mixup)
+        output_s_p = self.get_p(output_s)
+        _, target_index = torch.max(target_s_mixup, dim=1)
+        supervised_loss = self.criterion_classifier(output_s, target_s_mixup)
+        indel_weight = self.args.indel_weight_factor
+        snp_weight = 1.0
+        batch_weight = self.estimate_batch_weight_mixup(metadata_1, metadata_2, indel_weight=indel_weight,
+                                                        snp_weight=snp_weight)
+
+        weighted_supervised_loss = supervised_loss * batch_weight
+        optimized_loss = weighted_supervised_loss
+        optimized_loss.backward()
+        self.optimizer_training.step()
+        performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
+        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                                                       output_s_p, targets=target_index)
+        if not self.args.no_progress:
+            progress_bar(batch_idx * self.mini_batch_size,
+                         self.max_training_examples,
+                         performance_estimators.progress_message(
+                             ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
 
     def get_p(self, output_s):
         # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
@@ -156,11 +170,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
     def test_supervised_mixup(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
         errors = None
-        performance_estimators = PerformanceList()
-        performance_estimators += [LossHelper("test_supervised_loss")]
-        performance_estimators += [AccuracyHelper("test_")]
-
-        self.net.eval()
+        performance_estimators = self.create_test_performance_estimators()
 
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
@@ -181,25 +191,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 input_s = data_dict["validation"]["input"]
                 target_s = data_dict["validation"]["softmaxGenotype"]
-
-                if errors is None:
-                    errors = torch.zeros(target_s[0].size())
-
-                output_s = self.net(input_s)
-                output_s_p = self.get_p(output_s)
-
-                _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
-                _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
-                supervised_loss = self.criterion_classifier(output_s, target_s)
-                self.estimate_errors(errors, output_s_p, target_s)
-
-                performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
-                performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
-                                                               output_s_p, targets=target_index)
-                if not self.args.no_progress:
-                    progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                             performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
-                                                                      "test_accuracy"]))
+                self.test_one_batch(performance_estimators,batch_idx, input_s, target_s, errors)
 
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                     break
@@ -216,3 +208,24 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         if not self.args.constant_learning_rates:
             self.scheduler_train.step(test_metric, epoch)
         return performance_estimators
+
+
+    def test_one_batch(self,performance_estimators, batch_idx, input_s, target_s, errors):
+        if errors is None:
+            errors = torch.zeros(target_s[0].size())
+        self.net.eval()
+        output_s = self.net(input_s)
+        output_s_p = self.get_p(output_s)
+
+        _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
+        _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
+        supervised_loss = self.criterion_classifier(output_s, target_s)
+        #self.estimate_errors(errors, output_s_p, target_s)
+
+        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+                                                       output_s_p, targets=target_index)
+        if not self.args.no_progress:
+            progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
+                         performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
+                                                                  "test_accuracy"]))

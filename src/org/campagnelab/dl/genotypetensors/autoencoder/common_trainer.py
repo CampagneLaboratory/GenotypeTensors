@@ -222,6 +222,8 @@ class CommonTrainer:
 
 
         self.save_model(best_test_loss=metric, epoch=epoch, model=self.net, model_label="latest")
+        if epoch==0:
+            self.save_model(best_test_loss=metric, epoch=epoch, model=self.net, model_label="best")
 
         if metric is not None and not self.is_better(metric, self.best_test_loss):
             self.failed_to_improve += 1
@@ -274,12 +276,11 @@ class CommonTrainer:
         torch.save(state, './models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
 
     def load_checkpoint(self, model_label="best"):
+
         if not os.path.isdir('models'):
             os.mkdir('models')
         state = torch.load('./models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
         model = state['model']
-        model.cpu()
-        model.eval()
         return model
 
     def load_checkpoint_state(self, model_label="best"):

@@ -48,8 +48,8 @@ if __name__ == '__main__':
     parser.add_argument('--mode', help='Training mode: determines how the mini-batch is loaded. When supervised,'
                                        'only training set examples are loaded. With semi-supervised, both training '
                                        'set and unlabeled set are loaded.',
-                        default="supervised",
-                        choices=["supervised", "semi-supervised"])
+                        default="supervised_direct",
+                        choices=["supervised_direct", "supervised_mixup"])
     parser.add_argument('--num-training', '-n', "--max-training-examples", type=int,
                         help='Maximum number of training examples to use.',
                         default=sys.maxsize)
@@ -155,14 +155,25 @@ if __name__ == '__main__':
     for model_trainer in trainers:
             model_trainer.class_frequency(class_frequencies=class_frequencies)
 
-    if args.mode == "supervised":
-        def do_training(epoch,thread_executor):
-            print('Training, epoch: %d' % epoch)
-            for model_trainer in trainers:
-                model_trainer.training_performance_estimators.init_performance_metrics()
 
-            unsupervised_loss_acc = 0
-            num_batches = 0
+    def raise_to_do_exceptions(futures):
+        # Report any exceptions encountered in to_do:
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                raise e
+
+
+    def do_training(epoch,thread_executor):
+        print('Training, epoch: %d' % epoch)
+        for model_trainer in trainers:
+            model_trainer.training_performance_estimators.init_performance_metrics()
+
+        unsupervised_loss_acc = 0
+        num_batches = 0
+        train_loaders=[]
+        if args.mode == "supervised_direct":
             train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
             data_provider = DataProvider(
                 iterator=zip(train_loader_subset),
@@ -170,104 +181,138 @@ if __name__ == '__main__':
                 batch_names=["training"],
                 requires_grad={"training": ["input"]},
                 volatile={"training": ["metaData"]},
-                recode_functions={
-                    "softmaxGenotype": lambda x: recode_for_label_smoothing(x, 0),
-                }
-            )
-            try:
+               )
+            train_loaders+=[train_loader_subset]
+        elif args.mode == "supervised_mixup":
+            train_loader_subset1 = problem.train_loader_subset_range(0, args.num_training)
+            train_loader_subset2 = problem.train_loader_subset_range(0, args.num_training)
+            data_provider = DataProvider(
+                iterator=zip(train_loader_subset1,train_loader_subset2),
+                is_cuda=use_cuda,
+                batch_names=["training_1","training_2"],
+                requires_grad={"training_1": ["input"],"training_2": ["input"]},
+                volatile={"training_1": ["metaData"],"training_2": ["metaData"]},                    )
+            train_loaders += [train_loader_subset1,train_loader_subset2]
+        try:
 
-                snp_weight = 1.0
-                for batch_idx, (_, data_dict) in enumerate(data_provider):
+            snp_weight = 1.0
+            todo_arguments=[]
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                if args.mode == "supervised_direct":
                     input_s = data_dict["training"]["input"]
                     target_s = data_dict["training"]["softmaxGenotype"]
                     metadata = data_dict["training"]["metaData"]
-                    batch_size = len(input_s)
-                    num_batches += 1
-                    futures=[]
-                    for model_trainer in trainers:
-                        def to_do(model_trainer, input_s, target_s, metadata):
+                    todo_arguments= [input_s, target_s, metadata]
+                if args.mode == "supervised_mixup":
+                    input_s_1 = data_dict["training_1"]["input"]
+                    target_s_1 = data_dict["training_1"]["softmaxGenotype"]
+                    metadata_1 = data_dict["training_1"]["metaData"]
+                    input_s_2 = data_dict["training_2"]["input"]
+                    target_s_2 = data_dict["training_2"]["softmaxGenotype"]
+                    metadata_2 = data_dict["training_2"]["metaData"]
+                    todo_arguments = [input_s_1, target_s_1, metadata_1,input_s_2, target_s_2, metadata_2]
+
+                batch_size = len(todo_arguments[0])
+                num_batches += 1
+                futures=[]
+                for model_trainer in trainers:
+                    def to_do(model_trainer, *todo_arguments):
+                        if args.mode == "supervised_direct":
+
                             input_s_local = input_s.clone()
                             target_s_local = target_s.clone()
-                            model_trainer.net.train()
                             target_s_smoothed = recode_for_label_smoothing(target_s_local,
                                                                   model_trainer.args.epsilon_label_smoothing)
-
+                            model_trainer.net.train()
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators,
                                                           batch_idx, input_s_local, target_s_smoothed, metadata)
-                        futures+=[thread_executor.submit(to_do,model_trainer,input_s,target_s,metadata)]
-                    concurrent.futures.wait(futures)
-                    if (batch_idx + 1) * batch_size > args.num_training:
-                        break
-            finally:
-                data_provider.close()
-                del train_loader_subset
+
+                        if args.mode == "supervised_mixup":
+                            input_s_1_local = input_s_1.clone()
+                            target_s_1_local = target_s_1.clone()
+                            target_s_1_smoothed = recode_for_label_smoothing(target_s_1_local,
+                                                                           model_trainer.args.epsilon_label_smoothing)
+                            input_s_2_local = input_s_2.clone()
+                            target_s_2_local = target_s_2.clone()
+                            target_s_2_smoothed = recode_for_label_smoothing(target_s_2_local,
+                                                                             model_trainer.args.epsilon_label_smoothing)
+                            model_trainer.net.train()
+                            model_trainer.train_one_batch(model_trainer.training_performance_estimators,
+                                                          batch_idx, input_s_1_local,input_s_2_local,
+                                                          target_s_1_smoothed,target_s_2_smoothed,
+                                                          metadata_1,metadata_2)
+                    futures += [thread_executor.submit(to_do,model_trainer, *todo_arguments)]
+                concurrent.futures.wait(futures)
+                # Report any exceptions encountered in to_do:
+                raise_to_do_exceptions(futures)
+                if (batch_idx + 1) * batch_size > args.num_training:
+                    break
+        finally:
+            data_provider.close()
+            for train_loader in train_loaders:
+                del train_loader
 
 
-        def do_testing(epoch, thread_executor):
-            print('Testing, epoch: %d' % epoch)
-            errors = None
+    def do_testing(epoch, thread_executor):
+        print('Testing, epoch: %d' % epoch)
+        for model_trainer in trainers:
+            model_trainer.test_performance_estimators.init_performance_metrics()
 
-            for model_trainer in trainers:
-                model_trainer.test_performance_estimators.init_performance_metrics()
+        validation_loader_subset = problem.validation_loader_range(0, args.num_validation)
+        data_provider = DataProvider(
+            iterator=zip(validation_loader_subset),
+            is_cuda=use_cuda,
+            batch_names=["validation"],
+            requires_grad={"validation": []},
+            volatile={
+                "validation": ["input", "softmaxGenotype"]
+            },
+        )
+        try:
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                input_s = data_dict["validation"]["input"]
+                target_s = data_dict["validation"]["softmaxGenotype"]
+                futures=[]
+                for model_trainer in trainers:
+                    def to_do(model_trainer, input_s, target_s, errors):
+                        input_s_local=input_s.clone()
+                        target_s_local=target_s.clone()
+                        target_smoothed = recode_for_label_smoothing(target_s_local,
+                                                              model_trainer.args.epsilon_label_smoothing)
 
-            validation_loader_subset = problem.validation_loader_range(0, args.num_validation)
-            data_provider = DataProvider(
-                iterator=zip(validation_loader_subset),
-                is_cuda=use_cuda,
-                batch_names=["validation"],
-                requires_grad={"validation": []},
-                volatile={
-                    "validation": ["input", "softmaxGenotype"]
-                },
+                        model_trainer.net.eval()
+                        model_trainer.test_one_batch(model_trainer.test_performance_estimators,
+                                                     batch_idx, input_s_local, target_smoothed, errors=None)
 
-            )
-            try:
-                for batch_idx, (_, data_dict) in enumerate(data_provider):
-                    input_s = data_dict["validation"]["input"]
-                    target_s = data_dict["validation"]["softmaxGenotype"]
-                    futures=[]
-                    for model_trainer in trainers:
-                        def to_do(model_trainer,input_s,target_s):
-                            input_s_local=input_s.clone()
-                            target_s_local=target_s.clone()
-                            target_smoothed = recode_for_label_smoothing(target_s_local,
-                                                                  model_trainer.args.epsilon_label_smoothing)
+                    futures += [thread_executor.submit(to_do, model_trainer, input_s, target_s, None)]
+                concurrent.futures.wait(futures)
+                # Report any exceptions encountered in to_do:
+                raise_to_do_exceptions(futures)
+        finally:
+            data_provider.close()
+            del validation_loader_subset
+        #print("test errors by class: ", str(errors))
 
-                            model_trainer.net.eval()
-                            model_trainer.test_one_batch(model_trainer.test_performance_estimators,
-                                                         batch_idx, input_s_local, target_smoothed,errors)
+        for model_trainer in trainers:
+            perfs = PerformanceList()
+            perfs += model_trainer.training_performance_estimators
+            perfs += model_trainer.test_performance_estimators
+            if epoch==0:
+                model_trainer.log_performance_header(perfs)
 
-                        futures+=[thread_executor.submit(to_do,model_trainer,input_s,target_s)]
-                    concurrent.futures.wait(futures)
-            finally:
-                data_provider.close()
-                del validation_loader_subset
-            #print("test errors by class: ", str(errors))
+            early_stop, perfs = model_trainer.log_performance_metrics(epoch, perfs)
 
-            for model_trainer in trainers:
-                perfs = PerformanceList()
-                perfs+=[model_trainer.training_performance_estimators]
-                perfs+=[model_trainer.test_performance_estimators]
-                if epoch==0:
+            if early_stop:
+                # early stopping requested, no longer train this model:
+                trainers.remove(model_trainer)
+                return
+            # Apply learning rate schedule:
+            test_metric = model_trainer.test_performance_estimators.get_metric(model_trainer.get_test_metric_name())
+            assert test_metric is not None, (model_trainer.get_test_metric_name() +
+                                             "must be found among estimated performance metrics")
+            if not model_trainer.args.constant_learning_rates:
+                model_trainer.scheduler_train.step(test_metric, epoch)
 
-                    model_trainer.log_performance_header(perfs)
-
-                early_stop, perfs = model_trainer.log_performance_metrics(epoch, perfs)
-
-                if early_stop:
-                    # early stopping requested, no longer train this model:
-                    trainers.remove(model_trainer)
-                    return
-                # Apply learning rate schedule:
-                test_metric = model_trainer.test_performance_estimators.get_metric(model_trainer.get_test_metric_name())
-                assert test_metric is not None, (model_trainer.get_test_metric_name() +
-                                                 "must be found among estimated performance metrics")
-                if not model_trainer.args.constant_learning_rates:
-                    model_trainer.scheduler_train.step(test_metric, epoch)
-
-
-    else:
-        pass
     with  ThreadPoolExecutor(max_workers=args.num_models_per_gpu*args.num_gpus) as thread_executor:
         for epoch in range(args.max_epochs):
             do_training(epoch,thread_executor)

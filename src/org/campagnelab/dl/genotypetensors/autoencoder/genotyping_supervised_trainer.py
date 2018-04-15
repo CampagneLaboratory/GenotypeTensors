@@ -88,7 +88,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                 target_s = data_dict["training"]["softmaxGenotype"]
                 metadata = data_dict["training"]["metaData"]
 
-                self.train_one_batch(batch_idx, input_s,target_s,metadata)
+                self.train_one_batch(performance_estimators,batch_idx, input_s,target_s,metadata)
 
                 if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                     break
@@ -160,7 +160,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                 input_s = data_dict["validation"]["input"]
                 target_s = data_dict["validation"]["softmaxGenotype"]
                 self.net.eval()
-                self.test_one_batch(batch_idx, input_s, target_s,errors)
+                self.test_one_batch(performance_estimators,batch_idx, input_s, target_s,errors=errors)
 
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                     break
@@ -192,7 +192,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         self.test_performance_estimators=performance_estimators
         return performance_estimators
 
-    def test_one_batch(self,performance_estimators, batch_idx, input_s, target_s, errors):
+    def test_one_batch(self,performance_estimators, batch_idx, input_s, target_s, errors=None):
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 
