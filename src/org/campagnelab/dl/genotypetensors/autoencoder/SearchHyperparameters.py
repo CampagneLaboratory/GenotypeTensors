@@ -49,7 +49,7 @@ if __name__ == '__main__':
                                        'only training set examples are loaded. With semi-supervised, both training '
                                        'set and unlabeled set are loaded.',
                         default="supervised_direct",
-                        choices=["supervised_direct", "supervised_mixup"])
+                        choices=["supervised_direct", "supervised_mixup","semisupervised"])
     parser.add_argument('--num-training', '-n', "--max-training-examples", type=int,
                         help='Maximum number of training examples to use.',
                         default=sys.maxsize)
@@ -193,6 +193,17 @@ if __name__ == '__main__':
                 requires_grad={"training_1": ["input"],"training_2": ["input"]},
                 volatile={"training_1": ["metaData"],"training_2": ["metaData"]},                    )
             train_loaders += [train_loader_subset1,train_loader_subset2]
+        if args.mode == "semisupervised":
+            train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
+            unlabeled_loader = problem.unlabeled_loader()
+            data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),
+                                                            is_cuda=use_cuda,
+                                                            batch_names=["training", "unlabeled"],
+                                                            requires_grad={"training": ["input"],
+                                                                           "unlabeled": ["input"]},
+                                                            volatile={"training": ["metaData"], "unlabeled": []}
+                                                            )
+            train_loaders += [train_loader_subset, unlabeled_loader]
         try:
 
             snp_weight = 1.0
@@ -211,7 +222,12 @@ if __name__ == '__main__':
                     target_s_2 = data_dict["training_2"]["softmaxGenotype"]
                     metadata_2 = data_dict["training_2"]["metaData"]
                     todo_arguments = [input_s_1, target_s_1, metadata_1,input_s_2, target_s_2, metadata_2]
-
+                if args.mode == "semisupervised":
+                    input_s = data_dict["training"]["input"]
+                    target_s = data_dict["training"]["softmaxGenotype"]
+                    metadata = data_dict["training"]["metaData"]
+                    input_u = data_dict["unlabeled"]["input"]
+                    todo_arguments = [input_s, target_s, metadata, input_u]
                 batch_size = len(todo_arguments[0])
                 num_batches += 1
                 futures=[]
@@ -221,11 +237,12 @@ if __name__ == '__main__':
 
                             input_s_local = input_s.clone()
                             target_s_local = target_s.clone()
+                            metadata_local = metadata.clone()
                             target_s_smoothed = recode_for_label_smoothing(target_s_local,
                                                                   model_trainer.args.epsilon_label_smoothing)
                             model_trainer.net.train()
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators,
-                                                          batch_idx, input_s_local, target_s_smoothed, metadata)
+                                                          batch_idx, input_s_local, target_s_smoothed, metadata_local)
 
                         if args.mode == "supervised_mixup":
                             input_s_1_local = input_s_1.clone()
@@ -236,11 +253,24 @@ if __name__ == '__main__':
                             target_s_2_local = target_s_2.clone()
                             target_s_2_smoothed = recode_for_label_smoothing(target_s_2_local,
                                                                              model_trainer.args.epsilon_label_smoothing)
+                            metadata_1_local = metadata_1.clone()
+                            metadata_2_local = metadata_2.clone()
                             model_trainer.net.train()
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators,
-                                                          batch_idx, input_s_1_local,input_s_2_local,
-                                                          target_s_1_smoothed,target_s_2_smoothed,
-                                                          metadata_1,metadata_2)
+                                                          batch_idx, input_s_1_local, input_s_2_local,
+                                                          target_s_1_smoothed, target_s_2_smoothed,
+                                                          metadata_1_local, metadata_2_local)
+                        if args.mode == "semisupervised":
+                            input_s_local = input_s.clone()
+                            target_s_local = target_s.clone()
+                            target_s_smoothed = recode_for_label_smoothing(target_s_local,
+                                                                           model_trainer.args.epsilon_label_smoothing)
+                            input_u_local = input_u.clone()
+                            metadata_local = metadata.clone()
+                            model_trainer.net.train()
+                            model_trainer.train_one_batch(model_trainer.training_performance_estimators, batch_idx,
+                                                          input_s_local, target_s_smoothed, metadata_local, input_u_local)
+
                     futures += [thread_executor.submit(to_do,model_trainer, *todo_arguments)]
                 concurrent.futures.wait(futures)
                 # Report any exceptions encountered in to_do:
@@ -257,6 +287,7 @@ if __name__ == '__main__':
         print('Testing, epoch: %d' % epoch)
         for model_trainer in trainers:
             model_trainer.test_performance_estimators.init_performance_metrics()
+            model_trainer.reset_before_test_epoch()
 
         validation_loader_subset = problem.validation_loader_range(0, args.num_validation)
         data_provider = DataProvider(
@@ -268,6 +299,7 @@ if __name__ == '__main__':
                 "validation": ["input", "softmaxGenotype"]
             },
         )
+
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 input_s = data_dict["validation"]["input"]
@@ -312,6 +344,7 @@ if __name__ == '__main__':
                                              "must be found among estimated performance metrics")
             if not model_trainer.args.constant_learning_rates:
                 model_trainer.scheduler_train.step(test_metric, epoch)
+            model_trainer.compute_after_test_epoch()
 
     with  ThreadPoolExecutor(max_workers=args.num_models_per_gpu*args.num_gpus) as thread_executor:
         for epoch in range(args.max_epochs):

@@ -556,3 +556,23 @@ class CommonTrainer:
 
     def create_training_performance_estimators(self):
         return None
+
+    def reset_before_train_epoch(self):
+        """Call this method before an epoch of calling train_one_batch. This is used to initialize
+        variables in the trainer that need to reset before each training epoch. """
+        pass
+
+    def reset_before_test_epoch(self):
+        """Call this method before an epoch of calling test_one_batch. This is used to initialize
+        variables in the trainer that need to reset before each test epoch. """
+        pass
+
+    def compute_after_train_epoch(self):
+        """Call this method after an epoch of calling train_one_batch. This is used to compute
+        variables in the trainer after each train epoch. """
+        pass
+
+    def compute_after_test_epoch(self):
+        """Call this method after an epoch of calling test_one_batch. This is used to compute
+        variables in the trainer after each test epoch. """
+        pass
