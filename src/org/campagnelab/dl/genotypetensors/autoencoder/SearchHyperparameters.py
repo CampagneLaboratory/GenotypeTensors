@@ -74,7 +74,8 @@ if __name__ == '__main__':
     else:
         print("Unsupported problem: " + args.problem)
         exit(1)
-
+    args.num_training=min(args.num_training,len(problem.train_set()))
+    args.num_validation=min(args.num_validation,len(problem.validation_set()))
     trainers = []
     count=0
     with open(args.commands, "r") as command_file:
