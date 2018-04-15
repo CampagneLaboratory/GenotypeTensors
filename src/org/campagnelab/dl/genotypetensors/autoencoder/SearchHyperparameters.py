@@ -98,7 +98,7 @@ if __name__ == '__main__':
 
     # Estimate class frequencies:
     print("Estimating class frequencies..")
-    train_loader_subset = problem.train_loader_subset_range(0, min(100000, args.num_training))
+    train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
     class_frequencies = {}  # one frequency vector per output_name
     with DataProvider(iterator=zip(train_loader_subset), is_cuda=False,
                       batch_names=["training"],
