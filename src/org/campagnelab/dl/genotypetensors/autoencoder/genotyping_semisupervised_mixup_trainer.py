@@ -129,8 +129,8 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
-        target_s_2 = self.dreamup_target_for(input=input_u_2, num_classes=self.num_classes,
-                                             category_prior=category_prior)
+        target_s_2 = self.dreamup_target_for( num_classes=self.num_classes,
+                                             category_prior=category_prior,input=input_u_2)
         if self.use_cuda:
             target_s_2 = target_s_2.cuda()
 

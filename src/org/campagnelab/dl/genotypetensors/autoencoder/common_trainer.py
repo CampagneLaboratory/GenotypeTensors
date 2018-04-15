@@ -471,18 +471,23 @@ class CommonTrainer:
         return categories_real
 
     def dreamup_target_for(self, num_classes, category_prior,input):
-        if self.best_model is None or self.args.label_strategy == "UNIFORM":
+        strategy=self.args.label_strategy
+        if self.best_model is None:
+            strategy="SAMPLING"
+
+        if  strategy == "UNIFORM" :
             category_prior=numpy.ones(self.num_classes)/self.num_classes
             return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
                                             category_prior=category_prior,
                                             recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
-        if self.best_model is None or self.args.label_strategy == "SAMPLING":
+
+        if strategy == "SAMPLING":
 
             return self.get_category_sample(self.mini_batch_size, num_classes=num_classes,
                                             category_prior=category_prior,
                                             recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
 
-        elif self.args.label_strategy == "VAL_CONFUSION":
+        elif strategy ==  "VAL_CONFUSION":
             self.best_model.eval()
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
             # training set as training progresses:
@@ -508,7 +513,7 @@ class CommonTrainer:
             targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
             return Variable(targets2,requires_grad=False)
             # print("normalized: "+str(targets2))
-        elif self.args.label_strategy == "VAL_CONFUSION_SAMPLING":
+        elif strategy == "VAL_CONFUSION_SAMPLING":
             # we use the best model we trained so far to predict the outputs. These labels will overfit to the
             # training set as training progresses:
             self.best_model.eval()
