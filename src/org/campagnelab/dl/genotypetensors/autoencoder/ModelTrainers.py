@@ -331,8 +331,7 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
     elif train_args.mode == "semisupervised_mixup_funnel_genotypes":
         model_trainer = GenotypingSemisupervisedMixupTrainer(args=train_args, problem=train_problem,
                                                              use_cuda=train_use_cuda)
-        if class_frequencies is not None:
-            model_trainer.class_frequencies=class_frequencies
+
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: create_genotype_funnel_classifier_model(
                 model_name,
@@ -345,7 +344,7 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                 use_selu=args.use_selu,
                 skip_batch_norm=args.skip_batch_norm,
             )
-        ))
+        ),class_frequencies=class_frequencies)
         training_loop_method = model_trainer.train_semisupervised_mixup
         testing_loop_method = model_trainer.test_semisupervised_mixup
     else:
