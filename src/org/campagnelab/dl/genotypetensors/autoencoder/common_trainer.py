@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 
 import torch
 from torch.autograd import Variable
@@ -79,7 +80,7 @@ class CommonTrainer:
         self.net = None
         self.optimizer_training = None
         self.scheduler_train = None
-
+        self.lock=threading.Lock()
         self.is_parallel = False
         self.best_performance_metrics = None
         self.failed_to_improve = 0
@@ -169,6 +170,9 @@ class CommonTrainer:
             return torch.optim.Adagrad(self.net.parameters(), lr=opt_args.lr, weight_decay=opt_args.L2)
         else:
             raise Exception("Unknown optimizer name: {}".format(optimizer_name))
+
+    def set_common_lock(self, common_lock=None):
+        self.lock=common_lock
 
     def create_scheduler_for_optimizer(self,optimizer):
         return construct_scheduler(
@@ -435,7 +439,8 @@ class CommonTrainer:
             "Input tensor has {} examples, target tensor has {} examples".format(input_1.size()[0],
                                                                                  input_2.size()[0])
         )
-        lam = np.random.beta(self.args.mixup_alpha, self.args.mixup_alpha)
+        with self.lock:
+            lam = np.random.beta(self.args.mixup_alpha, self.args.mixup_alpha)
         input_mixup = lam * input_1 + (1.0 - lam) * input_2
         target_mixup = lam * target_1 + (1.0 - lam) * target_2
         return input_mixup, target_mixup

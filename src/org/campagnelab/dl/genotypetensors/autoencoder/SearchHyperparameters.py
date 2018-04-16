@@ -5,6 +5,7 @@ import argparse
 import concurrent
 import os
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import torch
@@ -128,7 +129,7 @@ if __name__ == '__main__':
     del train_loader_subset
 
     # Initialize the trainers:
-
+    global_lock=threading.Lock()
     for trainer_command_line in trainer_arguments:
             trainer_parser = define_train_auto_encoder_parser()
             trainer_args = trainer_parser.parse_args(trainer_command_line.split())
@@ -152,6 +153,7 @@ if __name__ == '__main__':
                                                                                                problem,
                                                                                                use_cuda,
                                                                                                class_frequencies)
+            model_trainer.set_common_lock(global_lock)
             trainers += [model_trainer]
             print("Configured {}/{} trainers".format(len(trainers), count))
             if (len(trainers) > args.max_models): break
@@ -278,7 +280,8 @@ if __name__ == '__main__':
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators, batch_idx,
                                                           input_s_local, target_s_smoothed, metadata_local, input_u_local)
 
-                    futures += [thread_executor.submit(to_do,model_trainer, batch_idx, todo_arguments)]
+                    for _ in range(0,1000):
+                        futures += [thread_executor.submit(to_do,model_trainer, batch_idx, todo_arguments)]
 
                 concurrent.futures.wait(futures)
                 # Report any exceptions encountered in to_do:
