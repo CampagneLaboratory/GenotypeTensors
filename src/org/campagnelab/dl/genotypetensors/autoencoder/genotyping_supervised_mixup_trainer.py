@@ -130,7 +130,8 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
 
         return performance_estimators
 
-    def train_one_batch(self, performance_estimators, batch_idx, input_s_1, input_s_2, target_s_1,target_s_2, metadata_1,metadata_2):
+    def train_one_batch(self, performance_estimators, batch_idx, input_s_1, input_s_2,
+                        target_s_1,target_s_2, metadata_1,metadata_2):
         input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_s_2, target_s_1, target_s_2)
         self.net.train()
         # outputs used to calculate the loss of the supervised model

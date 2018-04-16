@@ -92,7 +92,7 @@ class CommonTrainer:
         self.class_frequencies=None
         self.epsilon = args.epsilon_label_smoothing if hasattr( args,"epsilon_label_smoothing") else 0.0
         self.reweight_by_validation_error = args.reweight_by_validation_error if hasattr( args,"reweight_by_validation_error") else False
-        self.num_classes = 0
+        self.num_classes = problem.output_size("softmaxGenotype")[0]
 
     def init_model(self, create_model_function,class_frequencies=None):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -439,8 +439,8 @@ class CommonTrainer:
             "Input tensor has {} examples, target tensor has {} examples".format(input_1.size()[0],
                                                                                  input_2.size()[0])
         )
-        with self.lock:
-            lam = np.random.beta(self.args.mixup_alpha, self.args.mixup_alpha)
+
+        lam = np.random.beta(self.args.mixup_alpha, self.args.mixup_alpha)
         input_mixup = lam * input_1 + (1.0 - lam) * input_2
         target_mixup = lam * target_1 + (1.0 - lam) * target_2
         return input_mixup, target_mixup
@@ -465,13 +465,15 @@ class CommonTrainer:
                                                                  recode_labels)
 
         categories_one_hot = torch.zeros(mini_batch_size, num_classes)
+        #categories_as_int=None
+        with self.lock:
+            categories_as_int = categorical_distribution.sample().view(mini_batch_size, -1)
 
-        categories_as_int = categorical_distribution.sample().view(mini_batch_size, -1)
-        #categories_one_hot.zero_()
         categories_one_hot.scatter_(1, categories_as_int, 1)
         if recode_labels is not None:
             # apply label recode function:
             categories_one_hot = recode_labels(categories_one_hot)
+
         categories_real = Variable(categories_one_hot, requires_grad=False)
         return categories_real
 

@@ -50,7 +50,7 @@ if __name__ == '__main__':
                                        'only training set examples are loaded. With semi-supervised, both training '
                                        'set and unlabeled set are loaded.',
                         default="supervised_direct",
-                        choices=["supervised_direct", "supervised_mixup","semisupervised"])
+                        choices=["supervised_direct", "supervised_mixup", "semisupervised"])
     parser.add_argument('--num-training', '-n', "--max-training-examples", type=int,
                         help='Maximum number of training examples to use.',
                         default=sys.maxsize)
@@ -62,12 +62,17 @@ if __name__ == '__main__':
     parser.add_argument('--max-models', type=int, help='Maximum number of models to train in one shot.',
                         default=sys.maxsize)
     parser.add_argument('--num-models-per-gpu', type=int, help='Maximum number of models to train on one GPU.',
-                            default=0)
+                        default=0)
     parser.add_argument('--num-gpus', type=int, help='Number of GPUs to use for search.',
                         default=1)
     parser.add_argument('--num-estimate-class-frequencies', type=int, help='Number of examples to look at to estimate '
                                                                            'class frequencies.',
                         default=sys.maxsize)
+    parser.add_argument('--debug', action='store_true', help='Used to debug some code.')
+    parser.add_argument('--num-debug',  type=int,
+                        help='Maximum number of debug iterations.',
+                        default=sys.maxsize)
+
     args = parser.parse_args()
 
     problem = None
@@ -78,11 +83,11 @@ if __name__ == '__main__':
     else:
         print("Unsupported problem: " + args.problem)
         exit(1)
-    args.num_training=min(args.num_training,len(problem.train_set()))
-    args.num_estimate_class_frequencies=min(args.num_estimate_class_frequencies,len(problem.train_set()))
-    args.num_validation=min(args.num_validation,len(problem.validation_set()))
+    args.num_training = min(args.num_training, len(problem.train_set()))
+    args.num_estimate_class_frequencies = min(args.num_estimate_class_frequencies, len(problem.train_set()))
+    args.num_validation = min(args.num_validation, len(problem.validation_set()))
     trainers = []
-    count=0
+    count = 0
     with open(args.commands, "r") as command_file:
 
         trainer_arguments = command_file.readlines()
@@ -91,7 +96,7 @@ if __name__ == '__main__':
 
     if args.num_models_per_gpu == 0:
         print("Running with {} models per gpu. Use --num-models-per-gpu to reduce concurrency if needed.".format(count))
-        args.num_models_per_gpu=max(count,1)
+        args.num_models_per_gpu = max(count, 1)
 
     problem = None
     if args.problem.startswith("genotyping:"):
@@ -129,38 +134,38 @@ if __name__ == '__main__':
     del train_loader_subset
 
     # Initialize the trainers:
-    global_lock=threading.Lock()
+    global_lock = threading.Lock()
     for trainer_command_line in trainer_arguments:
-            trainer_parser = define_train_auto_encoder_parser()
-            trainer_args = trainer_parser.parse_args(trainer_command_line.split())
+        trainer_parser = define_train_auto_encoder_parser()
+        trainer_args = trainer_parser.parse_args(trainer_command_line.split())
 
-            if trainer_args.max_examples_per_epoch is None:
-                trainer_args.max_examples_per_epoch = trainer_args.num_training
-            trainer_args.num_training = args.num_training
-            print("Executing " + trainer_args.checkpoint_key)
+        if trainer_args.max_examples_per_epoch is None:
+            trainer_args.max_examples_per_epoch = trainer_args.num_training
+        trainer_args.num_training = args.num_training
+        print("Executing " + trainer_args.checkpoint_key)
 
-            with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
-                args_file.write(trainer_command_line + "--seed " + str(trainer_args.seed))
+        with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
+            args_file.write(trainer_command_line + "--seed " + str(trainer_args.seed))
 
-            use_cuda = torch.cuda.is_available()
-            is_parallel = False
-            best_acc = 0  # best test accuracy
-            start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+        use_cuda = torch.cuda.is_available()
+        is_parallel = False
+        best_acc = 0  # best test accuracy
+        start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
-            if trainer_args.max_examples_per_epoch is None:
-                trainer_args.max_examples_per_epoch = args.num_training
-            model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(trainer_args,
-                                                                                               problem,
-                                                                                               use_cuda,
-                                                                                               class_frequencies)
-            model_trainer.set_common_lock(global_lock)
-            trainers += [model_trainer]
-            print("Configured {}/{} trainers".format(len(trainers), count))
-            if (len(trainers) > args.max_models): break
+        if trainer_args.max_examples_per_epoch is None:
+            trainer_args.max_examples_per_epoch = args.num_training
+        model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(trainer_args,
+                                                                                           problem,
+                                                                                           use_cuda,
+                                                                                           class_frequencies)
+        model_trainer.set_common_lock(global_lock)
+        trainers += [model_trainer]
+        print("Configured {}/{} trainers".format(len(trainers), count))
+        if (len(trainers) > args.max_models): break
 
     print("Executing hyper-parameter search for {} models.".format(len(trainers)))
     for model_trainer in trainers:
-            model_trainer.class_frequency(class_frequencies=class_frequencies)
+        model_trainer.class_frequency(class_frequencies=class_frequencies)
 
 
     def raise_to_do_exceptions(futures):
@@ -172,14 +177,38 @@ if __name__ == '__main__':
                 raise e
 
 
-    def do_training(epoch,thread_executor):
+    if args.debug:
+        with  ThreadPoolExecutor(max_workers=args.num_models_per_gpu * args.num_gpus) as thread_executor:
+
+            def todo(model_trainer):
+                model_trainer.args.label_strategy = "UNIFORM"
+                num_classes = problem.output_size("softmaxGenotype")[0]
+                model_trainer.num_classes = num_classes
+                model_trainer.epsilon_label_smoothing = 0.1
+                return model_trainer.dreamup_target_for(category_prior=None,
+                                                        num_classes=num_classes, input=None)
+
+
+            for index in range(0, args.num_debug):
+                futures = []
+                for model_trainer in trainers:
+                    futures += [thread_executor.submit(todo, model_trainer)]
+                concurrent.futures.wait(futures)
+                raise_to_do_exceptions(futures)
+                progress_bar(index,
+                             args.num_debug,
+                             "Debug iterations")
+        exit(0)
+
+
+    def do_training(epoch, thread_executor):
         print('Training, epoch: %d' % epoch)
         for model_trainer in trainers:
             model_trainer.training_performance_estimators.init_performance_metrics()
 
         unsupervised_loss_acc = 0
         num_batches = 0
-        train_loaders=[]
+        train_loaders = []
         if args.mode == "supervised_direct":
             train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
             data_provider = DataProvider(
@@ -188,18 +217,18 @@ if __name__ == '__main__':
                 batch_names=["training"],
                 requires_grad={"training": ["input"]},
                 volatile={"training": ["metaData"]},
-               )
-            train_loaders+=[train_loader_subset]
+            )
+            train_loaders += [train_loader_subset]
         elif args.mode == "supervised_mixup":
             train_loader_subset1 = problem.train_loader_subset_range(0, args.num_training)
             train_loader_subset2 = problem.train_loader_subset_range(0, args.num_training)
             data_provider = DataProvider(
-                iterator=zip(train_loader_subset1,train_loader_subset2),
+                iterator=zip(train_loader_subset1, train_loader_subset2),
                 is_cuda=use_cuda,
-                batch_names=["training_1","training_2"],
-                requires_grad={"training_1": ["input"],"training_2": ["input"]},
-                volatile={"training_1": ["metaData"],"training_2": ["metaData"]},                    )
-            train_loaders += [train_loader_subset1,train_loader_subset2]
+                batch_names=["training_1", "training_2"],
+                requires_grad={"training_1": ["input"], "training_2": ["input"]},
+                volatile={"training_1": ["metaData"], "training_2": ["metaData"]}, )
+            train_loaders += [train_loader_subset1, train_loader_subset2]
         if args.mode == "semisupervised":
             train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
             unlabeled_loader = problem.unlabeled_loader()
@@ -208,19 +237,20 @@ if __name__ == '__main__':
                                                             batch_names=["training", "unlabeled"],
                                                             requires_grad={"training": ["input"],
                                                                            "unlabeled": ["input"]},
-                                                            volatile={"training": ["metaData"], "unlabeled": ["metaData"]}
+                                                            volatile={"training": ["metaData"],
+                                                                      "unlabeled": ["metaData"]}
                                                             )
             train_loaders += [train_loader_subset, unlabeled_loader]
         try:
 
             snp_weight = 1.0
-            todo_arguments=[]
+            todo_arguments = []
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 if args.mode == "supervised_direct":
                     input_s = data_dict["training"]["input"]
                     target_s = data_dict["training"]["softmaxGenotype"]
                     metadata = data_dict["training"]["metaData"]
-                    todo_arguments= [input_s, target_s, metadata]
+                    todo_arguments = [input_s, target_s, metadata]
                 if args.mode == "supervised_mixup":
                     input_s_1 = data_dict["training_1"]["input"]
                     target_s_1 = data_dict["training_1"]["softmaxGenotype"]
@@ -228,7 +258,7 @@ if __name__ == '__main__':
                     input_s_2 = data_dict["training_2"]["input"]
                     target_s_2 = data_dict["training_2"]["softmaxGenotype"]
                     metadata_2 = data_dict["training_2"]["metaData"]
-                    todo_arguments = [input_s_1, target_s_1, metadata_1,input_s_2, target_s_2, metadata_2]
+                    todo_arguments = [input_s_1, target_s_1, metadata_1, input_s_2, target_s_2, metadata_2]
                 if args.mode == "semisupervised":
                     input_s = data_dict["training"]["input"]
                     target_s = data_dict["training"]["softmaxGenotype"]
@@ -237,26 +267,26 @@ if __name__ == '__main__':
                     todo_arguments = [input_s, target_s, metadata, input_u]
                 batch_size = len(todo_arguments[0])
                 num_batches += 1
-                futures=[]
+                futures = []
                 for model_trainer in trainers:
                     def to_do(model_trainer, batch_idx, todo_arguments):
                         if args.mode == "supervised_direct":
-                            input_s, target_s, metadata=todo_arguments
+                            input_s, target_s, metadata = todo_arguments
                             input_s_local = input_s.clone()
                             target_s_local = target_s.clone()
                             metadata_local = metadata.clone()
                             target_s_smoothed = recode_for_label_smoothing(target_s_local,
-                                                                  model_trainer.args.epsilon_label_smoothing)
+                                                                           model_trainer.args.epsilon_label_smoothing)
                             model_trainer.net.train()
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators,
                                                           batch_idx, input_s_local, target_s_smoothed, metadata_local)
 
                         if args.mode == "supervised_mixup":
-                            input_s_1, target_s_1, metadata_1, input_s_2, target_s_2, metadata_2=todo_arguments
+                            input_s_1, target_s_1, metadata_1, input_s_2, target_s_2, metadata_2 = todo_arguments
                             input_s_1_local = input_s_1.clone()
                             target_s_1_local = target_s_1.clone()
                             target_s_1_smoothed = recode_for_label_smoothing(target_s_1_local,
-                                                                           model_trainer.args.epsilon_label_smoothing)
+                                                                             model_trainer.args.epsilon_label_smoothing)
                             input_s_2_local = input_s_2.clone()
                             target_s_2_local = target_s_2.clone()
                             target_s_2_smoothed = recode_for_label_smoothing(target_s_2_local,
@@ -269,7 +299,8 @@ if __name__ == '__main__':
                                                           target_s_1_smoothed, target_s_2_smoothed,
                                                           metadata_1_local, metadata_2_local)
                         if args.mode == "semisupervised":
-                            input_s, target_s, metadata, input_u=todo_arguments
+
+                            input_s, target_s, metadata, input_u = todo_arguments
                             input_s_local = input_s.clone()
                             target_s_local = target_s.clone()
                             target_s_smoothed = recode_for_label_smoothing(target_s_local,
@@ -278,10 +309,14 @@ if __name__ == '__main__':
                             metadata_local = metadata.clone()
                             model_trainer.net.train()
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators, batch_idx,
-                                                          input_s_local, target_s_smoothed, metadata_local, input_u_local)
+                                                          input_s_local, target_s_smoothed, metadata_local,
+                                                          input_u_local)
+                            with global_lock:
+                                for argument in todo_arguments:
+                                    del argument
+                                del todo_arguments
 
-
-                    futures += [thread_executor.submit(to_do,model_trainer, batch_idx, todo_arguments)]
+                    futures += [thread_executor.submit(to_do, model_trainer, batch_idx, todo_arguments)]
 
                 concurrent.futures.wait(futures)
                 # Report any exceptions encountered in to_do:
@@ -316,18 +351,18 @@ if __name__ == '__main__':
                 input_s = data_dict["validation"]["input"]
                 target_s = data_dict["validation"]["softmaxGenotype"]
                 metadata = data_dict["validation"]["metaData"]
-                futures=[]
+                futures = []
                 for model_trainer in trainers:
                     def to_do(model_trainer, input_s, target_s, metadata, errors):
-                        input_s_local=input_s.clone()
-                        target_s_local=target_s.clone()
-                        metadata_local=metadata.clone()
+                        input_s_local = input_s.clone()
+                        target_s_local = target_s.clone()
+                        metadata_local = metadata.clone()
                         target_smoothed = recode_for_label_smoothing(target_s_local,
-                                                              model_trainer.args.epsilon_label_smoothing)
+                                                                     model_trainer.args.epsilon_label_smoothing)
 
                         model_trainer.net.eval()
                         model_trainer.test_one_batch(model_trainer.test_performance_estimators,
-                                                     batch_idx, input_s_local, target_smoothed,metadata=metadata_local,
+                                                     batch_idx, input_s_local, target_smoothed, metadata=metadata_local,
                                                      errors=errors)
 
                     futures += [thread_executor.submit(to_do, model_trainer, input_s, target_s, metadata, None)]
@@ -337,13 +372,13 @@ if __name__ == '__main__':
         finally:
             data_provider.close()
             del validation_loader_subset
-        #print("test errors by class: ", str(errors))
+        # print("test errors by class: ", str(errors))
 
         for model_trainer in trainers:
             perfs = PerformanceList()
             perfs += model_trainer.training_performance_estimators
             perfs += model_trainer.test_performance_estimators
-            if epoch==0:
+            if epoch == 0:
                 model_trainer.log_performance_header(perfs)
 
             early_stop, perfs = model_trainer.log_performance_metrics(epoch, perfs)
@@ -360,10 +395,11 @@ if __name__ == '__main__':
                 model_trainer.scheduler_train.step(test_metric, epoch)
             model_trainer.compute_after_test_epoch()
 
-    with  ThreadPoolExecutor(max_workers=args.num_models_per_gpu*args.num_gpus) as thread_executor:
+
+    with  ThreadPoolExecutor(max_workers=args.num_models_per_gpu * args.num_gpus) as thread_executor:
         for epoch in range(args.max_epochs):
-            do_training(epoch,thread_executor)
-            do_testing(epoch,thread_executor)
+            do_training(epoch, thread_executor)
+            do_testing(epoch, thread_executor)
             if len(trainers) == 0:
                 break
 
