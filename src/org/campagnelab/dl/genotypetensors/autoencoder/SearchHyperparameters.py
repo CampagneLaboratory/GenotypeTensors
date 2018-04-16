@@ -385,7 +385,8 @@ if __name__ == '__main__':
 
             if early_stop:
                 # early stopping requested, no longer train this model:
-                trainers.remove(model_trainer)
+                with global_lock:
+                    trainers.remove(model_trainer)
                 return
             # Apply learning rate schedule:
             test_metric = model_trainer.test_performance_estimators.get_metric(model_trainer.get_test_metric_name())
