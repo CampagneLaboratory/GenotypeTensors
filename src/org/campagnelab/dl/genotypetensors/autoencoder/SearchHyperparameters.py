@@ -8,6 +8,7 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+import gc
 import torch
 
 # MIT License
@@ -400,7 +401,9 @@ if __name__ == '__main__':
     with  ThreadPoolExecutor(max_workers=args.num_models_per_gpu * args.num_gpus) as thread_executor:
         for epoch in range(args.max_epochs):
             do_training(epoch, thread_executor)
+            gc.collect()
             do_testing(epoch, thread_executor)
+            gc.collect()
             if len(trainers) == 0:
                 break
 
