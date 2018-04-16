@@ -280,8 +280,8 @@ if __name__ == '__main__':
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators, batch_idx,
                                                           input_s_local, target_s_smoothed, metadata_local, input_u_local)
 
-                    for _ in range(0,1000):
-                        futures += [thread_executor.submit(to_do,model_trainer, batch_idx, todo_arguments)]
+
+                    futures += [thread_executor.submit(to_do,model_trainer, batch_idx, todo_arguments)]
 
                 concurrent.futures.wait(futures)
                 # Report any exceptions encountered in to_do:
