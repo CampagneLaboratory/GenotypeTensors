@@ -43,7 +43,7 @@ categorical
 --indel-weight-factor
 uniform
 1
-2
+10
 
 --use-selu
 flag

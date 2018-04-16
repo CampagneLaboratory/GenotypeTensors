@@ -39,7 +39,7 @@ int
 
 --indel-weight-factor
 uniform
-2
+1
 10
 
 --max-epochs
