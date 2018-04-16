@@ -66,7 +66,3 @@ categorical
 1380555472934619889
 4998247378381417234
 3054026417247595138
-
---abort-when-failed-to-improve
-categorical
-5
