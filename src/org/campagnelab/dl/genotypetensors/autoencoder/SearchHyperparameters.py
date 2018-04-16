@@ -206,7 +206,7 @@ if __name__ == '__main__':
                                                             batch_names=["training", "unlabeled"],
                                                             requires_grad={"training": ["input"],
                                                                            "unlabeled": ["input"]},
-                                                            volatile={"training": ["metaData"], "unlabeled": []}
+                                                            volatile={"training": ["metaData"], "unlabeled": ["metaData"]}
                                                             )
             train_loaders += [train_loader_subset, unlabeled_loader]
         try:
@@ -237,9 +237,9 @@ if __name__ == '__main__':
                 num_batches += 1
                 futures=[]
                 for model_trainer in trainers:
-                    def to_do(model_trainer, *todo_arguments):
+                    def to_do(model_trainer, batch_idx, todo_arguments):
                         if args.mode == "supervised_direct":
-
+                            input_s, target_s, metadata=todo_arguments
                             input_s_local = input_s.clone()
                             target_s_local = target_s.clone()
                             metadata_local = metadata.clone()
@@ -250,6 +250,7 @@ if __name__ == '__main__':
                                                           batch_idx, input_s_local, target_s_smoothed, metadata_local)
 
                         if args.mode == "supervised_mixup":
+                            input_s_1, target_s_1, metadata_1, input_s_2, target_s_2, metadata_2=todo_arguments
                             input_s_1_local = input_s_1.clone()
                             target_s_1_local = target_s_1.clone()
                             target_s_1_smoothed = recode_for_label_smoothing(target_s_1_local,
@@ -266,6 +267,7 @@ if __name__ == '__main__':
                                                           target_s_1_smoothed, target_s_2_smoothed,
                                                           metadata_1_local, metadata_2_local)
                         if args.mode == "semisupervised":
+                            input_s, target_s, metadata, input_u=todo_arguments
                             input_s_local = input_s.clone()
                             target_s_local = target_s.clone()
                             target_s_smoothed = recode_for_label_smoothing(target_s_local,
@@ -276,7 +278,8 @@ if __name__ == '__main__':
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators, batch_idx,
                                                           input_s_local, target_s_smoothed, metadata_local, input_u_local)
 
-                    futures += [thread_executor.submit(to_do,model_trainer, *todo_arguments)]
+                    futures += [thread_executor.submit(to_do,model_trainer, batch_idx, todo_arguments)]
+
                 concurrent.futures.wait(futures)
                 # Report any exceptions encountered in to_do:
                 raise_to_do_exceptions(futures)
