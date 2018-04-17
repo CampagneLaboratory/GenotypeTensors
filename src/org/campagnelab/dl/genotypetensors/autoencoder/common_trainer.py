@@ -495,67 +495,69 @@ class CommonTrainer:
                                             recode_labels=lambda x: recode_for_label_smoothing(x, epsilon=self.epsilon))
 
         elif strategy ==  "VAL_CONFUSION":
-            self.best_model.eval()
-            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-            # training set as training progresses:
-            best_model_output = self.best_model(Variable(input.data, volatile=True).cuda())
-            model_output_p=self.get_p(best_model_output).data
-            # assume three classes and predicted= [0.9, 0.1, 0]
-            # assume confusion matrix is [10, 10, 0,
-            #                             80, 20, 10,
-            #                              0, 30, 40]
+            with self.lock:
+                self.best_model.eval()
+                # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+                # training set as training progresses:
+                best_model_output = self.best_model(Variable(input.data, volatile=True).cuda())
+                model_output_p=self.get_p(best_model_output).data
+                # assume three classes and predicted= [0.9, 0.1, 0]
+                # assume confusion matrix is [10, 10, 0,
+                #                             80, 20, 10,
+                #                              0, 30, 40]
 
-            # reweight confusion matrix by probability of predictions:
+                # reweight confusion matrix by probability of predictions:
 
-            normalized_confusion_matrix=torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
-                                                     dim=0, maxnorm=1)
-            if self.use_cuda:
-                normalized_confusion_matrix = normalized_confusion_matrix.cuda()
-                model_output_p=model_output_p.cuda()
-            # result will be: [17,11,1,
-            #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
-            select =  (normalized_confusion_matrix.t()@model_output_p.t()).t()
+                normalized_confusion_matrix=torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
+                                                         dim=0, maxnorm=1)
+                if self.use_cuda:
+                    normalized_confusion_matrix = normalized_confusion_matrix.cuda()
+                    model_output_p=model_output_p.cuda()
+                # result will be: [17,11,1,
+                #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
+                select =  (normalized_confusion_matrix.t()@model_output_p.t()).t()
 
-            # Renormalize each row to get probability of each class according to the best model and validation confusion:
-            targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
-            return Variable(targets2,requires_grad=False)
-            # print("normalized: "+str(targets2))
+                # Renormalize each row to get probability of each class according to the best model and validation confusion:
+                targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
+                return Variable(targets2,requires_grad=False)
+                # print("normalized: "+str(targets2))
         elif strategy == "VAL_CONFUSION_SAMPLING":
-            # we use the best model we trained so far to predict the outputs. These labels will overfit to the
-            # training set as training progresses:
-            self.best_model.eval()
-            best_model_output = self.best_model(Variable(input.data, volatile=True).cuda())
-            model_output_p = self.get_p(best_model_output).data
-            # assume three classes and predicted= [0.9, 0.1, 0]
-            # assume confusion matrix is [10, 10, 0,
-            #                             80, 20, 10,
-            #                              0, 30, 40]
+            with self.lock:
+                # we use the best model we trained so far to predict the outputs. These labels will overfit to the
+                # training set as training progresses:
+                self.best_model.eval()
+                best_model_output = self.best_model(Variable(input.data, volatile=True).cuda())
+                model_output_p = self.get_p(best_model_output).data
+                # assume three classes and predicted= [0.9, 0.1, 0]
+                # assume confusion matrix is [10, 10, 0,
+                #                             80, 20, 10,
+                #                              0, 30, 40]
 
-            # reweight confusion matrix by probability of predictions:
-            normalized_confusion_matrix = torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
-                                                       dim=0, maxnorm=1)
-            if self.use_cuda:
-                normalized_confusion_matrix = normalized_confusion_matrix.cuda()
-                model_output_p=model_output_p.cuda()
+                # reweight confusion matrix by probability of predictions:
+                normalized_confusion_matrix = torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
+                                                           dim=0, maxnorm=1)
+                if self.use_cuda:
+                    normalized_confusion_matrix = normalized_confusion_matrix.cuda()
+                    model_output_p=model_output_p.cuda()
 
-            # result will be: [17,11,1,
-            #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
-            select = (normalized_confusion_matrix.t() @ model_output_p.t()).t()
+                # result will be: [17,11,1,
+                #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
+                select = (normalized_confusion_matrix.t() @ model_output_p.t()).t()
 
-            # Renormalize each row to get probability of each class according to the best model and validation confusion:
-            targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
-            result = torch.zeros(targets2.size())
-            # sample from these distributions:
-            for example in range(len(targets2)):
-                categorical_distribution = self.prepare_distribution(1, num_classes=num_classes,
-                                                                     category_prior=targets2[example])
-                result[example] = self.get_category_sample(1, num_classes=num_classes,
-                                                           categorical_distribution=categorical_distribution,
-                                                           category_prior=None,
-                                                           recode_labels=lambda x: recode_for_label_smoothing(x,
-                                                                                                              epsilon=self.epsilon)).data[
-                    0]
-            return Variable(result, requires_grad=False)
+                # Renormalize each row to get probability of each class according to the best model and validation confusion:
+                targets2 = torch.renorm(select, p=1, dim=0, maxnorm=1)
+                result = torch.zeros(targets2.size())
+                # sample from these distributions:
+                for example in range(len(targets2)):
+                    categorical_distribution = self.prepare_distribution(1, num_classes=num_classes,
+                                                                         category_prior=targets2[example])
+                    result[example] = self.get_category_sample(1, num_classes=num_classes,
+                                                               categorical_distribution=categorical_distribution,
+                                                               category_prior=None,
+                                                               recode_labels=lambda x: recode_for_label_smoothing(x,
+                                                                                                                  epsilon=self.epsilon)).data[
+                        0]
+                return Variable(result, requires_grad=False)
 
     def num_models(self):
         return 1

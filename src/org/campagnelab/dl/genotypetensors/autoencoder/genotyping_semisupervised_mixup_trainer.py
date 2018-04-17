@@ -129,31 +129,33 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
+
         target_s_2 = self.dreamup_target_for( num_classes=self.num_classes,
                                              category_prior=category_prior,input=input_u_2)
+
         if self.use_cuda:
             target_s_2 = target_s_2.cuda()
+        with self.lock:
+            input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_u_2, target_s_1, target_s_2)
 
-        input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_u_2, target_s_1, target_s_2)
-        input_s_mixup=Variable(input_s_mixup.data,requires_grad=True)
-        target_s_mixup=Variable(target_s_mixup.data,requires_grad=False)
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
 
         # outputs used to calculate the loss of the supervised model
         # must be done with the model prior to regularization:
-
-
         output_s = self.net(input_s_mixup)
         output_s_p = self.get_p(output_s)
         _, target_index = torch.max(target_s_mixup, dim=1)
+
         supervised_loss = self.criterion_classifier(output_s, target_s_mixup)
         # assume weight is the same for the two batches (we don't know metadata on the unlabeled batch):
-        batch_weight = self.estimate_batch_weight(metadata_1, indel_weight=indel_weight,
+        with self.lock:
+            batch_weight = self.estimate_batch_weight(metadata_1, indel_weight=indel_weight,
                                                         snp_weight=snp_weight)
 
         supervised_loss = supervised_loss * batch_weight
         supervised_loss.backward()
+
         self.optimizer_training.step()
         performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
         performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
@@ -169,8 +171,8 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
     def test_one_batch(self, performance_estimators,
                        batch_idx, input_s, target_s, metadata=None, errors=None):
-        if errors is None:
-            errors = torch.zeros(target_s[0].size())
+        #if errors is None:
+        #    errors = torch.zeros(target_s[0].size())
 
         output_s = self.net(input_s)
         output_s_p = self.get_p(output_s)
@@ -180,7 +182,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         self.cm.add(predicted=output_index.data, target=target_index.data)
 
         supervised_loss = self.criterion_classifier(output_s, target_s)
-        self.estimate_errors(errors, output_s_p, target_s)
+        #self.estimate_errors(errors, output_s_p, target_s)
 
         performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
         performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
@@ -238,6 +240,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         self.compute_after_test_epoch()
 
         return performance_estimators
+
     def compute_after_test_epoch(self):
         """Call this method after an epoch of calling test_one_batch. This is used to compute
         variables in the trainer after each test epoch. """
