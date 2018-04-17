@@ -145,7 +145,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
 
         output_s = self.net(input_s_mixup)
-        #output_s_p = self.get_p(output_s)
+        output_s_p = self.get_p(output_s)
         _, target_index = torch.max(target_s_mixup, dim=1)
         supervised_loss = self.criterion_classifier(output_s, target_s_mixup)
         # assume weight is the same for the two batches (we don't know metadata on the unlabeled batch):
@@ -157,7 +157,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         self.optimizer_training.step()
         performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
         performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
-                                                       output_s, targets=target_index)
+                                                       output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
