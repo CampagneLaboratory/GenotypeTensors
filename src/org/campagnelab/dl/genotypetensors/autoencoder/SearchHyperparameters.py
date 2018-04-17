@@ -160,6 +160,7 @@ if __name__ == '__main__':
                                                                                            use_cuda,
                                                                                            class_frequencies)
         model_trainer.set_common_lock(global_lock)
+        model_trainer.args.max_epochs=args.max_epochs
         trainers += [model_trainer]
         print("Configured {}/{} trainers".format(len(trainers), count))
         if (len(trainers) > args.max_models): break
