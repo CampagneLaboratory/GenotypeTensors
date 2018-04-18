@@ -62,7 +62,6 @@ uniform
 --label-strategy
 categorical
 SAMPLING
-VAL_CONFUSION
 UNIFORM
 
 --seed
