@@ -16,7 +16,7 @@ class Critic(torch.nn.Module):
     """ The critic predicts if inputs are from the training or unlabeled set. """
     def __init__(self, args, input_size):
         super().__init__()
-        self.delegate=GenotypeSoftmaxClassifer(num_inputs=input_size, target_size=1,
+        self.delegate=GenotypeSoftmaxClassifer(num_inputs=input_size, target_size=2,
                                  num_layers=args.num_layers,
                                  reduction_rate=args.reduction_rate,
                                  model_capacity=args.model_capacity,
@@ -70,11 +70,11 @@ class ADDA_Model(torch.nn.Module):
             # a supervised model is not installed, return the adapted features.
             return adapted_features
 
-def make_variable(tensor, volatile=False):
+def make_variable(tensor, volatile=False, requires_grad=True):
     """Convert Tensor to Variable."""
     if torch.cuda.is_available():
         tensor = tensor.cuda()
-    return Variable(tensor, volatile=volatile)
+    return Variable(tensor, volatile=volatile,requires_grad=requires_grad)
 
 
 class GenotypingADDATrainer(CommonTrainer):
@@ -166,11 +166,11 @@ class GenotypingADDATrainer(CommonTrainer):
         feat_concat = torch.cat((feat_src, feat_tgt), 0)
 
         # predict on discriminator
-        pred_concat = self.critic(feat_concat.detach())
+        pred_concat = self.critic(feat_concat)
 
         # prepare real and fake label
-        label_src = make_variable(torch.ones(feat_src.size(0)).long())
-        label_tgt = make_variable(torch.zeros(feat_tgt.size(0)).long())
+        label_src = make_variable(torch.ones(feat_src.size(0)).long(),requires_grad=False)
+        label_tgt = make_variable(torch.zeros(feat_tgt.size(0)).long(),requires_grad=False)
         label_concat = torch.cat((label_src, label_tgt), 0)
 
         # compute loss for critic
@@ -198,7 +198,7 @@ class GenotypingADDATrainer(CommonTrainer):
         pred_tgt = self.critic(feat_tgt)
 
         # prepare fake labels
-        label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long())
+        label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long(),requires_grad=False)
 
         # compute loss for target encoder
         loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
@@ -234,8 +234,8 @@ class GenotypingADDATrainer(CommonTrainer):
         pred_cls = torch.squeeze(pred_concat.max(1)[1])
 
         # prepare real and fake label
-        label_src = make_variable(torch.ones(input_supervised.size(0)).long())
-        label_tgt = make_variable(torch.zeros(input_unlabeled.size(0)).long())
+        label_src = make_variable(torch.ones(input_supervised.size(0)).long(),volatile=True,requires_grad=False)
+        label_tgt = make_variable(torch.zeros(input_unlabeled.size(0)).long(),volatile=True,requires_grad=False)
         label_concat = torch.cat((label_src, label_tgt), 0)
         accuracy = (pred_cls == label_concat).float().mean()
         # compute loss for critic
@@ -251,7 +251,7 @@ class GenotypingADDATrainer(CommonTrainer):
         pred_tgt = self.critic(feat_tgt)
 
         # prepare fake labels
-        label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long())
+        label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long(),volatile=True,requires_grad=False)
 
         # compute loss for target encoder
         loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
