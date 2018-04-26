@@ -158,16 +158,16 @@ class CommonTrainer:
         self.class_frequencies = self.class_frequency(class_frequencies=class_frequencies)
         #print("class_frequency " + str(self.class_frequencies))
 
-        self.optimizer_training = self.get_default_optimizer_training(args.optimizer, args)
+        self.optimizer_training = self.get_default_optimizer_training(self.net,args.optimizer, args)
 
         self.scheduler_train = self.create_scheduler_for_optimizer(self.optimizer_training)
 
-    def get_default_optimizer_training(self, optimizer_name, opt_args):
+    def get_default_optimizer_training(self, model, optimizer_name, opt_args):
         if optimizer_name == "SGD":
-            return torch.optim.SGD(self.net.parameters(), lr=opt_args.lr, momentum=opt_args.momentum,
+            return torch.optim.SGD(model.parameters(), lr=opt_args.lr, momentum=opt_args.momentum,
                                    weight_decay=opt_args.L2)
         elif optimizer_name == "adagrad":
-            return torch.optim.Adagrad(self.net.parameters(), lr=opt_args.lr, weight_decay=opt_args.L2)
+            return torch.optim.Adagrad(model.parameters(), lr=opt_args.lr, weight_decay=opt_args.L2)
         else:
             raise Exception("Unknown optimizer name: {}".format(optimizer_name))
 
@@ -311,9 +311,9 @@ class CommonTrainer:
         lr_train_helper = LearningRateHelper(scheduler=self.scheduler_train, learning_rate_name="train_lr")
         previous_test_perfs = None
         perfs = PerformanceList()
+        self.optimizer_training = self.get_default_optimizer_training(self.net, self.args.optimizer, self.args)
 
         for epoch in range(self.start_epoch, self.start_epoch + self.args.num_epochs):
-            self.optimizer_training = self.get_default_optimizer_training(self.args.optimizer, self.args)
             perfs = PerformanceList()
             perfs += training_loop_method(epoch)
 
