@@ -279,10 +279,10 @@ class GenotypingADDATrainer(CommonTrainer):
             performance_estimator.init_performance_metrics()
 
         self.reset_before_test_epoch()
-        train_loader_subset = self.problem.validation_loader_range(0, self.args.num_training)
+        validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
         unlabeled_loader_subset = self.problem.unlabeled_loader()
         data_provider = MultiThreadedCpuGpuDataProvider(
-            iterator=zip(train_loader_subset, unlabeled_loader_subset),
+            iterator=zip(validation_loader_subset, unlabeled_loader_subset),
             is_cuda=self.use_cuda,
             batch_names=["validation", "unlabeled"],
             requires_grad={"validation": ["input"], "unlabeled": ["input"]},
