@@ -10,6 +10,7 @@ from org.campagnelab.dl.genotypetensors.autoencoder.adversarial_crossencoder_tra
 from org.campagnelab.dl.genotypetensors.autoencoder.autoencoder import create_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import \
     create_genotype_funnel_classifier_model
+from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_adda_trainer import GenotypingADDATrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisup_trainer import GenotypingSemiSupTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotyping_semisupervised_mixup_trainer import \
     GenotypingSemisupervisedMixupTrainer
@@ -75,7 +76,7 @@ def define_train_auto_encoder_parser():
                                  "supervised_genotypes", "semisupervised_autoencoder", "supervised_crossencoder",
                                  "supervised_mixup_genotypes", "semisupervised_mixup_genotypes",
                                  "supervised_funnel_genotypes", "supervised_mixup_funnel_genotypes",
-                                 "semisupervised_mixup_funnel_genotypes"])
+                                 "semisupervised_mixup_funnel_genotypes", "ADDA"])
     parser.add_argument('--epoch-min-accuracy', default=0, type=float,
                         help='Stop training early if test accuracy is below this value after an epoch of training.'
                              ' This option helps prune poor hyperparameter values. You could set the value to 10 to '
@@ -136,7 +137,17 @@ def define_train_auto_encoder_parser():
 
 def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequencies=None):
     args=train_args
-    if train_args.mode == "autoencoder":
+    if train_args.mode == "ADDA":
+        model_trainer = GenotypingADDATrainer(args=train_args, problem=train_problem,
+                                                     use_cuda=train_use_cuda)
+        model_trainer.init_model(create_model_function=(
+            lambda model_name, problem_type: model_trainer.create_ADDA_model(
+                problem=train_problem, args=train_args)))
+
+        training_loop_method = model_trainer.train_adda
+        testing_loop_method = model_trainer.test_adda
+
+    elif train_args.mode == "autoencoder":
         model_trainer = GenotypingAutoEncoderTrainer(args=train_args, problem=train_problem,
                                                      use_cuda=train_use_cuda)
 

@@ -168,6 +168,8 @@ class CommonTrainer:
                                    weight_decay=opt_args.L2)
         elif optimizer_name == "adagrad":
             return torch.optim.Adagrad(model.parameters(), lr=opt_args.lr, weight_decay=opt_args.L2)
+        elif optimizer_name == "Adam":
+            return torch.optim.Adam(model.parameters(), lr=opt_args.lr, weight_decay=opt_args.L2)
         else:
             raise Exception("Unknown optimizer name: {}".format(optimizer_name))
 
