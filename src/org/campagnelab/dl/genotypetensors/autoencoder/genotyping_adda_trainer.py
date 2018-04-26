@@ -140,6 +140,8 @@ class GenotypingADDATrainer(CommonTrainer):
                 input_u_2 = data_dict["unlabeled"]["input"]
 
                 num_batches += 1
+                # allow 10 epochs of pre-training the critic:
+                self.do_train_encoder=epoch>1
 
                 self.train_one_batch(performance_estimators, batch_idx, input_s_1, input_u_2)
 
@@ -156,7 +158,7 @@ class GenotypingADDATrainer(CommonTrainer):
         ###########################
         # 2.1 train discriminator #
         ###########################
-
+        batch_size = input_unlabeled.size(0)
         # zero gradients for optimizer
         self.optimizer_critic.zero_grad()
         self.optimizer_tgt.zero_grad()
@@ -171,8 +173,11 @@ class GenotypingADDATrainer(CommonTrainer):
         pred_concat = self.critic(feat_concat)
 
         # prepare real and fake label
-        label_src = make_variable(torch.ones(feat_src.size(0)).long(),requires_grad=False)
-        label_tgt = make_variable(torch.zeros(feat_tgt.size(0)).long(),requires_grad=False)
+        source_is_training_set = torch.ones(batch_size).long()
+        source_is_unlabeled_set = torch.zeros(batch_size).long()
+
+        label_src = make_variable(source_is_training_set, requires_grad=False)
+        label_tgt = make_variable(source_is_unlabeled_set, requires_grad=False)
         label_concat = torch.cat((label_src, label_tgt), 0)
 
         # compute loss for critic
@@ -188,6 +193,24 @@ class GenotypingADDATrainer(CommonTrainer):
         ############################
         # 2.2 train target encoder #
         ############################
+        if self.do_train_encoder:
+            # train to make unlabeled into training:
+
+            source_is_training_set = source_is_training_set
+            self.train_encoder_with(batch_idx, performance_estimators, input_unlabeled, source_is_training_set)
+            # train to keep training as training:
+            self.train_encoder_with(batch_idx, performance_estimators, input_supervised, source_is_training_set)
+        else:
+            performance_estimators.set_metric(batch_idx, "train_encoder_loss", -1)
+        performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.data[0])
+        performance_estimators.set_metric(batch_idx, "train_accuracy",accuracy.data[0])
+        if not self.args.no_progress:
+            progress_bar(batch_idx * self.mini_batch_size,
+                         self.max_training_examples,
+                         performance_estimators.progress_message(
+                             ["train_critic_loss", "train_encoder_loss", "train_accuracy"]))
+
+    def train_encoder_with(self,batch_idx, performance_estimators, features, labels):
         self.tgt_encoder.train()
         self.critic.train()
         # zero gradients for optimizer
@@ -197,13 +220,13 @@ class GenotypingADDATrainer(CommonTrainer):
         self.critic.zero_grad()
 
         # Run the unlabeled examples through the encoder:
-        feat_tgt = self.tgt_encoder(input_unlabeled)
+        feat_tgt = self.tgt_encoder(features)
 
         # predict on discriminator
         pred_tgt = self.critic(feat_tgt)
 
         # prepare fake labels, as if the unlabeled was from the training set:
-        label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long(),requires_grad=False)
+        label_tgt = make_variable(labels, requires_grad=False)
 
         # compute loss for target encoder
         loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
@@ -211,16 +234,7 @@ class GenotypingADDATrainer(CommonTrainer):
 
         # Optimize target encoder
         self.optimizer_tgt.step()
-
-        performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.data[0])
         performance_estimators.set_metric(batch_idx, "train_encoder_loss", loss_tgt.data[0])
-        performance_estimators.set_metric(batch_idx, "train_accuracy",accuracy.data[0])
-        if not self.args.no_progress:
-            progress_bar(batch_idx * self.mini_batch_size,
-                         self.max_training_examples,
-                         performance_estimators.progress_message(
-                             ["train_critic_loss", "train_encoder_loss", "train_accuracy"]))
-
     def reset_before_test_epoch(self):
         self.cm = ConfusionMeter(self.num_classes, normalized=False)
 
@@ -232,35 +246,18 @@ class GenotypingADDATrainer(CommonTrainer):
         #################################
         #    Evaluate  w/o encoder      #
         #################################
-        feat_concat = torch.cat((input_supervised, input_unlabeled), 0)
-
-        # predict on discriminator
-        pred_concat = self.critic(feat_concat.detach())
-        pred_cls = torch.squeeze(pred_concat.max(1)[1])
-
-        # prepare real and fake label
-        label_src = make_variable(torch.ones(input_supervised.size(0)).long(),volatile=True,requires_grad=False)
-        label_tgt = make_variable(torch.zeros(input_unlabeled.size(0)).long(),volatile=True,requires_grad=False)
-        label_concat = torch.cat((label_src, label_tgt), 0)
-        real_accuracy = (pred_cls == label_concat).float().mean()
-        # compute loss for critic
-        loss_critic = self.criterion_classifier(pred_concat, label_concat)
+        batch_size = input_supervised.size(0)
+        source_is_training_set = torch.ones(batch_size).long()
+        source_is_unlabeled_set = torch.zeros(batch_size).long()
+        loss_critic, real_accuracy=self.evaluate_test_accuracy(input_supervised,       input_unlabeled,
+                                                               source_is_training_set, source_is_unlabeled_set)
 
         #################################
         #    Evaluate with encoder      #
         #################################
         # extract and target features
-        feat_concat = torch.cat((input_supervised, self.tgt_encoder(input_unlabeled)), 0)
-
-        # predict on discriminator
-        pred_concat = self.critic(feat_concat.detach())
-        pred_cls = torch.squeeze(pred_concat.max(1)[1])
-
-        # prepare real and fake label
-        label_src = make_variable(torch.ones(input_supervised.size(0)).long(), volatile=True, requires_grad=False)
-        label_tgt = make_variable(torch.zeros(input_unlabeled.size(0)).long(), volatile=True, requires_grad=False)
-        label_concat = torch.cat((label_src, label_tgt), 0)
-        recoded_accuracy = (pred_cls == label_concat).float().mean()
+        loss_encoded, recoded_accuracy = self.evaluate_test_accuracy(input_supervised,   self.tgt_encoder(input_unlabeled),
+                                                                 source_is_training_set, source_is_training_set)
 
         performance_estimators.set_metric(batch_idx, "test_critic_loss", loss_critic.data[0])
         performance_estimators.set_metric(batch_idx, "test_real_accuracy", real_accuracy.data[0])
@@ -334,3 +331,20 @@ class GenotypingADDATrainer(CommonTrainer):
 
         print("model" + str(model))
         return model
+
+    def evaluate_test_accuracy(self, input_supervised, input_unlabeled, source_is_training_set,
+                               source_is_unlabeled_set):
+        feat_concat = torch.cat((input_supervised, input_unlabeled), 0)
+
+        # predict on discriminator
+        pred_concat = self.critic(feat_concat.detach())
+        pred_cls = torch.squeeze(pred_concat.max(1)[1])
+
+        # prepare real and fake label
+        label_src = make_variable(source_is_training_set, volatile=True, requires_grad=False)
+        label_tgt = make_variable(source_is_unlabeled_set, volatile=True, requires_grad=False)
+        label_concat = torch.cat((label_src, label_tgt), 0)
+        accuracy = (pred_cls == label_concat).float().mean()
+        # compute loss for critic
+        loss_critic = self.criterion_classifier(pred_concat, label_concat)
+        return loss_critic, accuracy
