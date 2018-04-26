@@ -93,7 +93,7 @@ class GenotypingADDATrainer(CommonTrainer):
         self.optimizer_critic = None
 
     def get_test_metric_name(self):
-        return "test_accuracy"
+        return "progress"
 
     def is_better(self, metric, previous_metric):
         return metric > previous_metric
@@ -111,6 +111,7 @@ class GenotypingADDATrainer(CommonTrainer):
         performance_estimators += [FloatHelper("test_critic_loss")]
         performance_estimators += [FloatHelper("test_encoder_loss")]
         performance_estimators += [FloatHelper("test_accuracy")]
+        performance_estimators += [FloatHelper("progress")]
         self.test_performance_estimators = performance_estimators
         return performance_estimators
 
@@ -153,13 +154,16 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def train_one_batch(self, performance_estimators, batch_idx, input_supervised, input_unlabeled):
         self.critic.train()
+        self.tgt_encoder.eval()
         ###########################
         # 2.1 train discriminator #
         ###########################
 
         # zero gradients for optimizer
         self.optimizer_critic.zero_grad()
-
+        self.optimizer_tgt.zero_grad()
+        self.tgt_encoder.zero_grad()
+        self.critic.zero_grad()
         # extract and concat features
         feat_src = input_supervised
         feat_tgt = input_unlabeled
@@ -187,10 +191,12 @@ class GenotypingADDATrainer(CommonTrainer):
         # 2.2 train target encoder #
         ############################
         self.tgt_encoder.train()
+        self.critic.eval()
         # zero gradients for optimizer
         self.optimizer_critic.zero_grad()
         self.optimizer_tgt.zero_grad()
-
+        self.tgt_encoder.zero_grad()
+        self.critic.zero_grad()
         # extract and target features
         feat_tgt = self.tgt_encoder(input_unlabeled)
 
@@ -259,6 +265,7 @@ class GenotypingADDATrainer(CommonTrainer):
         performance_estimators.set_metric(batch_idx, "test_critic_loss", loss_critic.data[0])
         performance_estimators.set_metric(batch_idx, "test_encoder_loss", loss_tgt.data[0])
         performance_estimators.set_metric(batch_idx, "test_accuracy", accuracy.data[0])
+        performance_estimators.set_metric(batch_idx, "progress", abs(0.5-accuracy.data[0]))
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                          performance_estimators.progress_message(["test_critic_loss", "test_encoder_loss",
