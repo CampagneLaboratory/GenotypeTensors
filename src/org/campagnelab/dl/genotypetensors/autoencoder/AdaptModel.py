@@ -64,7 +64,8 @@ if __name__ == '__main__':
         supervised_model=state["model"]
         test_loss = state["best_test_loss"]
         adapt_model.install_supervised_model(supervised_model)
-
+        adapt_model.critic=None
+        adapt_model.eval()
         trainer.save_model(best_test_loss=test_loss,epoch=epoch, model=adapt_model,model_label=model_label+"-ADDA")
         print("Model adapted and saved with label "+model_label+"-ADDA")
 

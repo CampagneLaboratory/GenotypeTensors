@@ -107,8 +107,8 @@ class GenotypingADDATrainer(CommonTrainer):
     def create_test_performance_estimators(self):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("test_critic_loss")]
-        performance_estimators += [FloatHelper("test_encoder_loss")]
-        performance_estimators += [FloatHelper("test_accuracy")]
+        performance_estimators += [FloatHelper("test_real_accuracy")]
+        performance_estimators += [FloatHelper("test_encoded_accuracy")]
         performance_estimators += [FloatHelper("progress")]
         self.test_performance_estimators = performance_estimators
         return performance_estimators
@@ -152,7 +152,7 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def train_one_batch(self, performance_estimators, batch_idx, input_supervised, input_unlabeled):
         self.critic.train()
-        self.tgt_encoder.eval()
+        self.tgt_encoder.train()
         ###########################
         # 2.1 train discriminator #
         ###########################
@@ -230,7 +230,7 @@ class GenotypingADDATrainer(CommonTrainer):
         self.critic.eval()
 
         #################################
-        #         Evaluate  critic      #
+        #    Evaluate  w/o encoder      #
         #################################
         feat_concat = torch.cat((input_supervised, input_unlabeled), 0)
 
@@ -242,33 +242,34 @@ class GenotypingADDATrainer(CommonTrainer):
         label_src = make_variable(torch.ones(input_supervised.size(0)).long(),volatile=True,requires_grad=False)
         label_tgt = make_variable(torch.zeros(input_unlabeled.size(0)).long(),volatile=True,requires_grad=False)
         label_concat = torch.cat((label_src, label_tgt), 0)
-        accuracy = (pred_cls == label_concat).float().mean()
+        real_accuracy = (pred_cls == label_concat).float().mean()
         # compute loss for critic
         loss_critic = self.criterion_classifier(pred_concat, label_concat)
 
         #################################
-        #    Evaluate target encoder    #
+        #    Evaluate with encoder      #
         #################################
         # extract and target features
-        feat_tgt = self.tgt_encoder(input_unlabeled)
+        feat_concat = torch.cat((input_supervised, self.tgt_encoder(input_unlabeled)), 0)
 
         # predict on discriminator
-        pred_tgt = self.critic(feat_tgt)
+        pred_concat = self.critic(feat_concat.detach())
+        pred_cls = torch.squeeze(pred_concat.max(1)[1])
 
-        # prepare fake labels
-        label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long(),volatile=True,requires_grad=False)
-
-        # compute loss for target encoder
-        loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
+        # prepare real and fake label
+        label_src = make_variable(torch.ones(input_supervised.size(0)).long(), volatile=True, requires_grad=False)
+        label_tgt = make_variable(torch.zeros(input_unlabeled.size(0)).long(), volatile=True, requires_grad=False)
+        label_concat = torch.cat((label_src, label_tgt), 0)
+        recoded_accuracy = (pred_cls == label_concat).float().mean()
 
         performance_estimators.set_metric(batch_idx, "test_critic_loss", loss_critic.data[0])
-        performance_estimators.set_metric(batch_idx, "test_encoder_loss", loss_tgt.data[0])
-        performance_estimators.set_metric(batch_idx, "test_accuracy", accuracy.data[0])
-        performance_estimators.set_metric(batch_idx, "progress", abs(0.5-accuracy.data[0]))
+        performance_estimators.set_metric(batch_idx, "test_real_accuracy", real_accuracy.data[0])
+        performance_estimators.set_metric(batch_idx, "test_encoded_accuracy", recoded_accuracy.data[0])
+        performance_estimators.set_metric(batch_idx, "progress", abs(0.5-recoded_accuracy.data[0]))
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                          performance_estimators.progress_message(["test_critic_loss", "test_encoder_loss",
-                                                                  "test_accuracy"]))
+                                                                  "test_real_accuracy","test_encoded_accuracy"]))
 
     def test_adda(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
