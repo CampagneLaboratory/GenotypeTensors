@@ -26,7 +26,7 @@ class Critic(torch.nn.Module):
         self.softmax=torch.nn.LogSoftmax(1)
 
     def forward(self, input):
-        self.softmax(self.delegate(input))
+        return self.softmax(self.delegate(input))
 
 
 class TargetEncoder(torch.nn.Module):
@@ -44,13 +44,13 @@ class TargetEncoder(torch.nn.Module):
                                                  ngpus=1,
                                                  use_selu=args.use_selu,
                                                  skip_batch_norm=args.skip_batch_norm)
-        self.softmax = torch.nn.LogSoftmax(1)
 
     def forward(self, input):
-        self.delegate(input)
+        return self.delegate(input)
 
 class ADDA_Model(torch.nn.Module):
     def __init__(self, critic, target_encoder):
+        super().__init__()
         self.critic=critic
         self.target_encoder=target_encoder
         self.supervised_model=None
@@ -85,18 +85,12 @@ class GenotypingADDATrainer(CommonTrainer):
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
         self.criterion_classifier = torch.nn.CrossEntropyLoss()
-        beta1 = 0.5
-        beta2 = 0.9
+
 
         # target encoder:
-        self.optimizer_tgt = torch.optim.Adam(self.tgt_encoder.parameters(),
-                                              lr=self.args.lr,  # encoder learning rate
-                                              betas=(beta1, beta2))
+        self.optimizer_tgt = None
         # critic:
-        self.optimizer_critic = torch.optim.Adam(self.critic.parameters(),
-                                      lr=self.args.lr, # critic learning rate
-                                      betas=(beta1, beta2))
-
+        self.optimizer_critic = None
 
     def get_test_metric_name(self):
         return "test_accuracy"
@@ -108,7 +102,7 @@ class GenotypingADDATrainer(CommonTrainer):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("train_critic_loss")]
         performance_estimators += [FloatHelper("train_encoder_loss")]
-        performance_estimators += [AccuracyHelper("train_")]
+        performance_estimators += [FloatHelper("train_accuracy")]
         self.training_performance_estimators = performance_estimators
         return performance_estimators
 
@@ -116,7 +110,7 @@ class GenotypingADDATrainer(CommonTrainer):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("test_critic_loss")]
         performance_estimators += [FloatHelper("test_encoder_loss")]
-        performance_estimators += [AccuracyHelper("test_")]
+        performance_estimators += [FloatHelper("test_accuracy")]
         self.test_performance_estimators = performance_estimators
         return performance_estimators
 
@@ -132,12 +126,13 @@ class GenotypingADDATrainer(CommonTrainer):
         num_batches = 0
 
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        unlabeled_loader_subset = self.problem.unlabeled_loader_subset_range(0,self.args.num_unlabeled)
+        unlabeled_loader_subset = self.problem.unlabeled_loader()
         data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader_subset),
             is_cuda=self.use_cuda,
             batch_names=["training", "unlabeled"],
             requires_grad={"training": ["input"], "unlabeled": ["input"]},
+            volatile={"training": ["metaData"], "unlabeled": ["metaData"]},
         )
 
         try:
@@ -179,7 +174,7 @@ class GenotypingADDATrainer(CommonTrainer):
         label_concat = torch.cat((label_src, label_tgt), 0)
 
         # compute loss for critic
-        loss_critic = self.criterion(pred_concat, label_concat)
+        loss_critic = self.criterion_classifier(pred_concat, label_concat)
         loss_critic.backward()
 
         # optimize critic
@@ -206,7 +201,7 @@ class GenotypingADDATrainer(CommonTrainer):
         label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long())
 
         # compute loss for target encoder
-        loss_tgt = self.criterion(pred_tgt, label_tgt)
+        loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
         loss_tgt.backward()
 
         # optimize target encoder
@@ -214,12 +209,12 @@ class GenotypingADDATrainer(CommonTrainer):
 
         performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.data[0])
         performance_estimators.set_metric(batch_idx, "train_encoder_loss", loss_tgt.data[0])
-        performance_estimators.set_metric(batch_idx, "train_accuracy",accuracy)
+        performance_estimators.set_metric(batch_idx, "train_accuracy",accuracy.data[0])
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
                          performance_estimators.progress_message(
-                             ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
+                             ["train_critic_loss", "train_encoder_loss", "train_accuracy"]))
 
     def reset_before_test_epoch(self):
         self.cm = ConfusionMeter(self.num_classes, normalized=False)
@@ -244,7 +239,7 @@ class GenotypingADDATrainer(CommonTrainer):
         label_concat = torch.cat((label_src, label_tgt), 0)
         accuracy = (pred_cls == label_concat).float().mean()
         # compute loss for critic
-        loss_critic = self.criterion(pred_concat, label_concat)
+        loss_critic = self.criterion_classifier(pred_concat, label_concat)
 
         #################################
         #    Evaluate target encoder    #
@@ -259,11 +254,11 @@ class GenotypingADDATrainer(CommonTrainer):
         label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long())
 
         # compute loss for target encoder
-        loss_tgt = self.criterion(pred_tgt, label_tgt)
+        loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
 
         performance_estimators.set_metric(batch_idx, "test_critic_loss", loss_critic.data[0])
         performance_estimators.set_metric(batch_idx, "test_encoder_loss", loss_tgt.data[0])
-        performance_estimators.set_metric(batch_idx, "test_accuracy", accuracy)
+        performance_estimators.set_metric(batch_idx, "test_accuracy", accuracy.data[0])
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                          performance_estimators.progress_message(["test_critic_loss", "test_encoder_loss",
@@ -278,12 +273,13 @@ class GenotypingADDATrainer(CommonTrainer):
 
         self.reset_before_test_epoch()
         train_loader_subset = self.problem.validation_loader_range(0, self.args.num_training)
-        unlabeled_loader_subset = self.problem.unlabeled_loader_subset_range(0, self.args.num_unlabeled)
+        unlabeled_loader_subset = self.problem.unlabeled_loader()
         data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader_subset),
             is_cuda=self.use_cuda,
             batch_names=["validation", "unlabeled"],
             requires_grad={"validation": ["input"], "unlabeled": ["input"]},
+            volatile={"validation": ["metaData"],"unlabeled": ["metaData"]},
         )
 
         try:
@@ -315,10 +311,20 @@ class GenotypingADDATrainer(CommonTrainer):
         input_size = problem.input_size("input")
         assert len(input_size) == 1, "This ADDA implementation requires 1D input features."
 
-        input_size = problem.input_size("input")
+        input_size = problem.input_size("input")[0]
         self.tgt_encoder = TargetEncoder(args=args, input_size=input_size)
-        self.critic = Critic(args=args, input_size=input_size[0])
+        self.critic = Critic(args=args, input_size=input_size)
         model= ADDA_Model(critic=self.critic, target_encoder=self.tgt_encoder)
+        beta1 = 0.5
+        beta2 = 0.9
+        # target encoder:
+        self.optimizer_tgt = torch.optim.Adam(self.tgt_encoder.parameters(),
+                                              lr=self.args.lr,  # encoder learning rate
+                                              betas=(beta1, beta2))
+        # critic:
+        self.optimizer_critic = torch.optim.Adam(self.critic.parameters(),
+                                                 lr=self.args.lr,  # critic learning rate
+                                                 betas=(beta1, beta2))
 
         print("model" + str(model))
         return model
