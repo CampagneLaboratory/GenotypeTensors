@@ -96,7 +96,7 @@ class GenotypingADDATrainer(CommonTrainer):
         return "progress"
 
     def is_better(self, metric, previous_metric):
-        return metric > previous_metric
+        return metric < previous_metric
 
     def create_training_performance_estimators(self):
         performance_estimators = PerformanceList()
