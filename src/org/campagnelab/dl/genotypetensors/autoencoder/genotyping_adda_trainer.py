@@ -1,16 +1,14 @@
 import torch
 from torch.autograd import Variable
-from torch.nn import MultiLabelSoftMarginLoss
 from torchnet.meter import ConfusionMeter
 
-from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
+from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
-from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
-from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
-from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
+from org.campagnelab.dl.utils.utils import progress_bar
+
 
 class Critic(torch.nn.Module):
     """ The critic predicts if inputs are from the training or unlabeled set. """
@@ -197,20 +195,21 @@ class GenotypingADDATrainer(CommonTrainer):
         self.optimizer_tgt.zero_grad()
         self.tgt_encoder.zero_grad()
         self.critic.zero_grad()
-        # extract and target features
+
+        # Run the unlabeled examples through the encoder:
         feat_tgt = self.tgt_encoder(input_unlabeled)
 
         # predict on discriminator
         pred_tgt = self.critic(feat_tgt)
 
-        # prepare fake labels
+        # prepare fake labels, as if the unlabeled was from the training set:
         label_tgt = make_variable(torch.ones(feat_tgt.size(0)).long(),requires_grad=False)
 
         # compute loss for target encoder
         loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
         loss_tgt.backward()
 
-        # optimize target encoder
+        # Optimize target encoder
         self.optimizer_tgt.step()
 
         performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.data[0])
@@ -273,7 +272,6 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def test_adda(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
-        errors = None
         performance_estimators = self.create_test_performance_estimators()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
