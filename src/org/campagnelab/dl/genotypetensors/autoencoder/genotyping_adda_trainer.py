@@ -38,7 +38,7 @@ class TargetEncoder(torch.nn.Module):
         self.delegate = GenotypeSoftmaxClassifer(num_inputs=input_size,
                                                  target_size=input_size,
                                                  num_layers=args.num_layers,
-                                                 reduction_rate=1,
+                                                 reduction_rate=0.9,
                                                  model_capacity=args.model_capacity,
                                                  dropout_p=args.dropout_probability,
                                                  ngpus=1,
@@ -191,7 +191,7 @@ class GenotypingADDATrainer(CommonTrainer):
         # 2.2 train target encoder #
         ############################
         self.tgt_encoder.train()
-        self.critic.eval()
+        self.critic.train()
         # zero gradients for optimizer
         self.optimizer_critic.zero_grad()
         self.optimizer_tgt.zero_grad()
