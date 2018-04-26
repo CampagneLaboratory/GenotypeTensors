@@ -42,7 +42,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    print("Loading supervised model " + args.supervised_model)
     use_cuda = torch.cuda.is_available()
 
     problem = Problem()
@@ -55,9 +54,9 @@ if __name__ == '__main__':
     adapt_model=adapt_state["model"]
 
     for model_label in args.model_labels.split(","):
-        trainer = CommonTrainer(args, problem, use_cuda)
         args.checkpoint_key = args.supervised_model
         trainer=CommonTrainer(args,problem,use_cuda)
+        print("Loading supervised model " + args.supervised_model + " ({})".format(model_label))
         # Convert best model:
         state=trainer.load_checkpoint_state(model_label=model_label)
 
