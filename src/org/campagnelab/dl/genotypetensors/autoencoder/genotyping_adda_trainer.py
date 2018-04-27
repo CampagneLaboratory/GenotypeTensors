@@ -98,7 +98,7 @@ class GenotypingADDATrainer(CommonTrainer):
         self.optimizer_critic = None
 
     def get_test_metric_name(self):
-        return "train_encoder_loss"
+        return "progress"
 
     def is_better(self, metric, previous_metric):
         return metric < previous_metric
@@ -134,8 +134,8 @@ class GenotypingADDATrainer(CommonTrainer):
 
         unsupervised_loss_acc = 0
         num_batches = 0
-
-        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        # Use the entire training set to draw examples, even num_training is limiting the length of an epoch.
+        train_loader_subset = self.problem.train_loader_subset_range(0, len(self.problem.train_set()))
         unlabeled_loader_subset = self.problem.unlabeled_loader()
         data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader_subset),
@@ -362,6 +362,7 @@ class GenotypingADDATrainer(CommonTrainer):
         state = trainer.load_checkpoint_state(model_label="best")
         # NB: the source model must have a field called features that extracts features from its input.
         self.source_model=state["model"].features
+        self.source_model.eval()
 
         # let's measure the dimensionality of the source model's features:
         input_size = problem.input_size("input")[0]
