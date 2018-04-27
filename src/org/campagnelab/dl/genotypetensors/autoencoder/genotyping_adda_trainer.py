@@ -330,12 +330,15 @@ class GenotypingADDATrainer(CommonTrainer):
         # let's measure the dimensionality of the source model's features:
         input_size = problem.input_size("input")[0]
         inputs=Variable(torch.rand(10,input_size))
+        if self.use_cuda:
+            self.source_model.cuda()
+            inputs=inputs.cuda()
         feature_input_size=self.source_model(inputs).size(1)
 
         self.tgt_encoder = TargetEncoder(args=args, input_size=feature_input_size)
         self.critic = Critic(args=args, input_size=feature_input_size)
         model= ADDA_Model(critic=self.critic, target_encoder=self.tgt_encoder)
-        beta1 = 0.5
+        beta1 = 0.3
         beta2 = 0.9
         # target encoder:
         self.optimizer_tgt = torch.optim.Adam(self.tgt_encoder.parameters(),
