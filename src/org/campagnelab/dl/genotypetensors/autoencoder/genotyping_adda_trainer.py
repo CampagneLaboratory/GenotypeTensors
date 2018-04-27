@@ -340,7 +340,8 @@ class GenotypingADDATrainer(CommonTrainer):
         self.tgt_encoder = TargetEncoder(args=args, input_size=feature_input_size)
         self.critic = Critic(args=args, input_size=feature_input_size)
         model= ADDA_Model(critic=self.critic, target_encoder=self.tgt_encoder)
-        model.install_supervised_model(self.source_model)
+        # we install the full model, with features and classifier:
+        model.install_supervised_model(state["model"])
         beta1 = 0.3
         beta2 = 0.9
         # target encoder:
