@@ -58,17 +58,19 @@ class ADDA_Model(torch.nn.Module):
     def install_supervised_model(self,supervised_model):
         """Install a supervised model. After installing a model, a call to forward will use the model with ADDA adapted
         features as input to produce the supervised output. """
+        assert hasattr(supervised_model,"features"), "supervised model must have features property"
+        assert hasattr(supervised_model,"softmax_genotype_linear"), "softmax_genotype_linear model must have features property"
         self.supervised_model=supervised_model
 
     def forward(self, input):
-        adapted_features=self.target_encoder(input)
-        if self.supervised_model is not None:
-            # a supervised model was installed, return the result of supervised classification, with the features
-            # adpated with ADDA
-            return self.supervised_model(adapted_features)
-        else:
-            # a supervised model is not installed, return the adapted features.
-            return adapted_features
+
+        assert self.supervised_model is not None, "a supervised model must be installed"
+        # a supervised model was installed, return the result of supervised classification, with the features
+        # adpated with ADDA
+
+        features= self.supervised_model.features(input)
+        adapted_features = self.target_encoder(features)
+        return self.supervised_model.softmax_genotype_linear(adapted_features)
 
 def make_variable(tensor, volatile=False, requires_grad=True):
     """Convert Tensor to Variable."""
@@ -338,6 +340,7 @@ class GenotypingADDATrainer(CommonTrainer):
         self.tgt_encoder = TargetEncoder(args=args, input_size=feature_input_size)
         self.critic = Critic(args=args, input_size=feature_input_size)
         model= ADDA_Model(critic=self.critic, target_encoder=self.tgt_encoder)
+        model.install_supervised_model(self.source_model)
         beta1 = 0.3
         beta2 = 0.9
         # target encoder:
