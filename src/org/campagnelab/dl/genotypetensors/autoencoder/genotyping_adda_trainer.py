@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+import sys
 import torch
 from torch.autograd import Variable
 from torchnet.meter import ConfusionMeter
@@ -24,6 +25,7 @@ class Critic(torch.nn.Module):
                                  use_selu=args.use_selu,
                                  skip_batch_norm=args.skip_batch_norm)
         self.softmax=torch.nn.LogSoftmax(1)
+        self.training_perf=None
 
     def forward(self, input):
         return self.softmax(self.delegate(input))
@@ -96,7 +98,7 @@ class GenotypingADDATrainer(CommonTrainer):
         self.optimizer_critic = None
 
     def get_test_metric_name(self):
-        return "progress"
+        return "train_encoder_loss"
 
     def is_better(self, metric, previous_metric):
         return metric < previous_metric
@@ -106,15 +108,19 @@ class GenotypingADDATrainer(CommonTrainer):
         performance_estimators += [FloatHelper("train_critic_loss")]
         performance_estimators += [FloatHelper("train_encoder_loss")]
         performance_estimators += [FloatHelper("train_accuracy")]
+        performance_estimators += [FloatHelper("train_encoded_accuracy")]
+        performance_estimators += [FloatHelper("ratio")]
         self.training_performance_estimators = performance_estimators
         return performance_estimators
 
     def create_test_performance_estimators(self):
         performance_estimators = PerformanceList()
-        performance_estimators += [FloatHelper("test_critic_loss")]
-        performance_estimators += [FloatHelper("test_real_accuracy")]
-        performance_estimators += [FloatHelper("test_encoded_accuracy")]
+        #performance_estimators += [FloatHelper("test_critic_loss")]
+        #performance_estimators += [FloatHelper("test_real_accuracy")]
+        #performance_estimators += [FloatHelper("test_encoded_accuracy")]
         performance_estimators += [FloatHelper("progress")]
+        performance_estimators += [FloatHelper("ratio")]
+        performance_estimators += [FloatHelper("train_encoder_loss")]
         self.test_performance_estimators = performance_estimators
         return performance_estimators
 
@@ -145,8 +151,8 @@ class GenotypingADDATrainer(CommonTrainer):
                 input_u_2 = data_dict["unlabeled"]["input"]
 
                 num_batches += 1
-                # allow 10 epochs of pre-training the critic:
-                self.do_train_encoder=True#epoch>1
+                # allow some epochs of pre-training the critic without training the encoder:
+                self.do_train_encoder= True #epoch>2
 
                 self.train_one_batch(performance_estimators, batch_idx, input_s_1, input_u_2)
 
@@ -154,12 +160,12 @@ class GenotypingADDATrainer(CommonTrainer):
                     break
         finally:
             data_provider.close()
-
+        self.training_perfs=performance_estimators
         return performance_estimators
 
     def train_one_batch(self, performance_estimators, batch_idx, input_supervised, input_unlabeled):
         self.critic.train()
-        self.tgt_encoder.train()
+        self.tgt_encoder.eval()
         ###########################
         # 2.1 train discriminator #
         ###########################
@@ -172,6 +178,11 @@ class GenotypingADDATrainer(CommonTrainer):
         # extract and concat features
         feat_src = self.source_model(input_supervised)
         feat_tgt = self.source_model(input_unlabeled)
+        # Sometimes, convert the target features through the encoder, otherwise the critic will only see the
+        # unencoded target examples and won't be able to adapt as the encoder evolves to evade the critic
+        import random
+        if random.random()>0.5:
+            feat_tgt= self.tgt_encoder(feat_tgt)
         feat_concat = torch.cat((feat_src, feat_tgt), 0)
 
         # predict on discriminator
@@ -202,18 +213,26 @@ class GenotypingADDATrainer(CommonTrainer):
             # train to make unlabeled into training:
 
             source_is_training_set = source_is_training_set
-            self.train_encoder_with(batch_idx, performance_estimators, self.source_model(input_unlabeled), source_is_training_set)
-            # train to keep training as training:
+            train_encoded_accuracy=self.train_encoder_with(batch_idx, performance_estimators, self.source_model(input_unlabeled), source_is_training_set)
+            performance_estimators.set_metric(batch_idx, "train_encoded_accuracy", train_encoded_accuracy)
+
+            ## train to keep training as training:
             self.train_encoder_with(batch_idx, performance_estimators, self.source_model(input_supervised), source_is_training_set)
+            ratio = self.calculate_ratio(train_encoded_accuracy, accuracy.data[0])
+            performance_estimators.set_metric(batch_idx,"ratio",ratio)
         else:
-            performance_estimators.set_metric(batch_idx, "train_encoder_loss", -1)
+            performance_estimators.set_metric(batch_idx, "train_encoder_loss", sys.maxsize)
+            performance_estimators.set_metric(batch_idx, "train_encoded_accuracy", -1)
+            performance_estimators.set_metric(batch_idx, "ratio", sys.maxsize)
+
         performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.data[0])
         performance_estimators.set_metric(batch_idx, "train_accuracy",accuracy.data[0])
+
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
                          performance_estimators.progress_message(
-                             ["train_critic_loss", "train_encoder_loss", "train_accuracy"]))
+                             ["train_critic_loss", "train_encoder_loss", "train_accuracy", "train_encoded_accuracy","ratio"]))
 
     def train_encoder_with(self,batch_idx, performance_estimators, features, labels):
         self.tgt_encoder.train()
@@ -229,10 +248,11 @@ class GenotypingADDATrainer(CommonTrainer):
 
         # predict on discriminator
         pred_tgt = self.critic(feat_tgt)
-
+        pred_cls = torch.squeeze(pred_tgt.max(1)[1])
         # prepare fake labels, as if the unlabeled was from the training set:
         label_tgt = make_variable(labels, requires_grad=False)
 
+        accuracy = (pred_cls == label_tgt).float().mean()
         # compute loss for target encoder
         loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
         loss_tgt.backward()
@@ -240,6 +260,8 @@ class GenotypingADDATrainer(CommonTrainer):
         # Optimize target encoder
         self.optimizer_tgt.step()
         performance_estimators.set_metric(batch_idx, "train_encoder_loss", loss_tgt.data[0])
+        return accuracy.data[0]
+
     def reset_before_test_epoch(self):
         self.cm = ConfusionMeter(self.num_classes, normalized=False)
 
@@ -282,6 +304,18 @@ class GenotypingADDATrainer(CommonTrainer):
             performance_estimator.init_performance_metrics()
 
         self.reset_before_test_epoch()
+        train_encoded_accuracy=self.training_performance_estimators.get_metric("train_encoded_accuracy")
+        raw_accuracy=self.training_performance_estimators.get_metric("train_accuracy")
+        ratio=self.calculate_ratio(train_encoded_accuracy, raw_accuracy)
+        performance_estimators.set_metric(0,"progress",abs(train_encoded_accuracy-0.5))
+        performance_estimators.set_metric(0,"ratio",ratio)
+        train_encoder_loss=self.training_performance_estimators.get_metric("train_encoder_loss")
+        performance_estimators.set_metric(0,"train_encoder_loss",train_encoder_loss)
+        print("Test epoch {} {}".format( epoch, performance_estimators.progress_message(["progress","ratio","train_encoder_loss"])))
+
+        return performance_estimators
+
+    def ignore(self,performance_estimators, epoch):
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
         unlabeled_loader_subset = self.problem.unlabeled_loader()
         data_provider = MultiThreadedCpuGpuDataProvider(
@@ -372,3 +406,10 @@ class GenotypingADDATrainer(CommonTrainer):
         # compute loss for critic
         loss_critic = self.criterion_classifier(pred_concat, label_concat)
         return loss_critic, accuracy
+
+    def calculate_ratio(self, train_encoded_accuracy, raw_accuracy):
+        epsilon = 1E-6
+        ratio_raw = abs(raw_accuracy - 0.5 )
+        ratio_encoded = abs(train_encoded_accuracy - 0.5 )
+        ratio = (ratio_encoded+ epsilon) / (ratio_raw+ epsilon)
+        return ratio
