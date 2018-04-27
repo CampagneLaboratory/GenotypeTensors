@@ -131,7 +131,7 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
                     opt.step()
 
                 # Train discriminators:
-                self.net.encoder.eval()
+                self.net.encoder.train()
                 self.net.discriminator_cat.train()
                 self.net.discriminator_prior.train()
                 self.zero_grad_all_optimizers()
@@ -152,7 +152,7 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
                 self.zero_grad_all_optimizers()
 
                 if self.use_pdf:
-                    self.net.encoder.eval()
+                    self.net.encoder.train()
                     _, latent_code = self.net.encoder(input_s1)
                     weight = self.estimate_example_density_weight(latent_code)
                 else:

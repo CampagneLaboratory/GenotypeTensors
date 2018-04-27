@@ -100,7 +100,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             opt.step()
 
         # Train discriminators:
-        self.net.encoder.eval()
+        self.net.encoder.train()
         self.net.discriminator_cat.train()
         self.net.discriminator_prior.train()
         self.zero_grad_all_optimizers()
@@ -124,7 +124,7 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         self.zero_grad_all_optimizers()
         weight = 1
         if self.use_pdf:
-            self.net.encoder.eval()
+            self.net.encoder.train()
             _, latent_code = self.net.encoder(input_s)
             weight *= self.estimate_example_density_weight(latent_code)
         indel_weight = self.args.indel_weight_factor
