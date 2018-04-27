@@ -82,7 +82,8 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
-        self.criterion_classifier = torch.nn.CrossEntropyLoss()
+        # we need to use NLLLoss because the critic already has LogSoftmax as its last layer:
+        self.criterion_classifier = torch.nn.NLLLoss()
 
 
         # target encoder:
