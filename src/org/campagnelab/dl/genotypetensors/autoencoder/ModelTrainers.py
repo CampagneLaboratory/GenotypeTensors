@@ -133,6 +133,8 @@ def define_train_auto_encoder_parser():
                         help="If set, don't add batch normalization for softmax supervised genotype classifier")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "adagrad"], default="SGD",
                         help="Optimizer to use. Only supervised_genotypes_softmax supports adagrad currently.")
+    parser.add_argument('--adda-source-model', help='Checkpoint key for the model to adapt.',
+                        default=None)
     return parser
 
 def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequencies=None):

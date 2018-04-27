@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import torch
 from torch.autograd import Variable
 from torchnet.meter import ConfusionMeter
@@ -142,7 +144,7 @@ class GenotypingADDATrainer(CommonTrainer):
 
                 num_batches += 1
                 # allow 10 epochs of pre-training the critic:
-                self.do_train_encoder=epoch>1
+                self.do_train_encoder=True#epoch>1
 
                 self.train_one_batch(performance_estimators, batch_idx, input_s_1, input_u_2)
 
@@ -166,8 +168,8 @@ class GenotypingADDATrainer(CommonTrainer):
         self.tgt_encoder.zero_grad()
         self.critic.zero_grad()
         # extract and concat features
-        feat_src = input_supervised
-        feat_tgt = input_unlabeled
+        feat_src = self.source_model(input_supervised)
+        feat_tgt = self.source_model(input_unlabeled)
         feat_concat = torch.cat((feat_src, feat_tgt), 0)
 
         # predict on discriminator
@@ -198,9 +200,9 @@ class GenotypingADDATrainer(CommonTrainer):
             # train to make unlabeled into training:
 
             source_is_training_set = source_is_training_set
-            self.train_encoder_with(batch_idx, performance_estimators, input_unlabeled, source_is_training_set)
+            self.train_encoder_with(batch_idx, performance_estimators, self.source_model(input_unlabeled), source_is_training_set)
             # train to keep training as training:
-            self.train_encoder_with(batch_idx, performance_estimators, input_supervised, source_is_training_set)
+            self.train_encoder_with(batch_idx, performance_estimators, self.source_model(input_supervised), source_is_training_set)
         else:
             performance_estimators.set_metric(batch_idx, "train_encoder_loss", -1)
         performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.data[0])
@@ -250,15 +252,17 @@ class GenotypingADDATrainer(CommonTrainer):
         batch_size = input_supervised.size(0)
         source_is_training_set = torch.ones(batch_size).long()
         source_is_unlabeled_set = torch.zeros(batch_size).long()
-        loss_critic, real_accuracy=self.evaluate_test_accuracy(input_supervised,       input_unlabeled,
+        features_src=self.source_model(input_supervised)
+        features_tgt=self.source_model(input_unlabeled)
+        loss_critic, real_accuracy=self.evaluate_test_accuracy(features_src,           features_tgt,
                                                                source_is_training_set, source_is_unlabeled_set)
 
         #################################
         #    Evaluate with encoder      #
         #################################
         # extract and target features
-        loss_encoded, recoded_accuracy = self.evaluate_test_accuracy(input_supervised,   self.tgt_encoder(input_unlabeled),
-                                                                 source_is_training_set, source_is_training_set)
+        loss_encoded, recoded_accuracy = self.evaluate_test_accuracy(features_src,           self.tgt_encoder(features_tgt),
+                                                                     source_is_training_set, source_is_training_set)
 
         performance_estimators.set_metric(batch_idx, "test_critic_loss", loss_critic.data[0])
         performance_estimators.set_metric(batch_idx, "test_real_accuracy", real_accuracy.data[0])
@@ -313,11 +317,23 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def create_ADDA_model(self, problem, args):
         input_size = problem.input_size("input")
+        assert hasattr(args,"adda_source_model") and args.adda_source_model is not None, "Argument --adda-source-model is required"
         assert len(input_size) == 1, "This ADDA implementation requires 1D input features."
+        trainer = CommonTrainer(deepcopy(args), problem, self.use_cuda)
+        trainer.args.checkpoint_key=args.adda_source_model
+        print("Loading source mode for ADDA adaptation: " + args.adda_source_model)
+        # Convert best model:
+        state = trainer.load_checkpoint_state(model_label="best")
+        # NB: the source model must have a field called features that extracts features from its input.
+        self.source_model=state["model"].features
 
+        # let's measure the dimensionality of the source model's features:
         input_size = problem.input_size("input")[0]
-        self.tgt_encoder = TargetEncoder(args=args, input_size=input_size)
-        self.critic = Critic(args=args, input_size=input_size)
+        inputs=Variable(torch.rand(10,input_size))
+        feature_input_size=self.source_model(inputs).size(1)
+
+        self.tgt_encoder = TargetEncoder(args=args, input_size=feature_input_size)
+        self.critic = Critic(args=args, input_size=feature_input_size)
         model= ADDA_Model(critic=self.critic, target_encoder=self.tgt_encoder)
         beta1 = 0.5
         beta2 = 0.9
