@@ -31,48 +31,37 @@ class Critic(torch.nn.Module):
         return self.softmax(self.delegate(input))
 
 
-class TargetEncoder(torch.nn.Module):
-    """ The target encoder transforms the inputs form the unlabeled set to make
-    them more similar to the inputs from the training set. """
-
-    def __init__(self, args, input_size):
-        super().__init__()
-        self.delegate = GenotypeSoftmaxClassifer(num_inputs=input_size,
-                                                 target_size=input_size,
-                                                 num_layers=args.num_layers,
-                                                 reduction_rate=0.9,
-                                                 model_capacity=args.model_capacity,
-                                                 dropout_p=args.dropout_probability,
-                                                 ngpus=1,
-                                                 use_selu=args.use_selu,
-                                                 skip_batch_norm=args.skip_batch_norm)
-
-    def forward(self, input):
-        return self.delegate(input)
 
 class ADDA_Model(torch.nn.Module):
-    def __init__(self, critic, target_encoder):
+    def __init__(self, critic, full_model1,full_model2):
         super().__init__()
         self.critic=critic
-        self.target_encoder=target_encoder
-        self.supervised_model=None
+        for model in [ full_model1,full_model2]:
+            assert hasattr(model, "features"), "supervised model must have features property"
+            assert hasattr(model,
+                           "softmax_genotype_linear"), "softmax_genotype_linear model must have features property"
+        self.target_encoder=full_model1.features
+        self.source_encoder=full_model2.features
+        self.supervised_model=full_model2
 
-    def install_supervised_model(self,supervised_model):
+
+    def install_supervised_model(self):
         """Install a supervised model. After installing a model, a call to forward will use the model with ADDA adapted
         features as input to produce the supervised output. """
-        assert hasattr(supervised_model,"features"), "supervised model must have features property"
-        assert hasattr(supervised_model,"softmax_genotype_linear"), "softmax_genotype_linear model must have features property"
-        self.supervised_model=supervised_model
+
+        self.source_encoder=None
+        self.target_encoder.eval()
+        # overwrite the supervised features with the adapted feature encoder:
+        self.supervised_model.features=self.target_encoder
+        self.target_encoder=None
 
     def forward(self, input):
 
-        assert self.supervised_model is not None, "a supervised model must be installed"
-        # a supervised model was installed, return the result of supervised classification, with the features
-        # adpated with ADDA
-
-        features= self.supervised_model.features(input)
-        adapted_features = self.target_encoder(features)
-        return self.supervised_model.softmax_genotype_linear(adapted_features)
+        if self.source_encoder is None:
+            # an adapted encoder was installed in the supervised model. We can simply use the model as is:
+            return self.supervised_model(input)
+        else:
+            self.supervised_model.softmax_genotype_linear(self.target_encoder(input))
 
 def make_variable(tensor, volatile=False, requires_grad=True):
     """Convert Tensor to Variable."""
@@ -90,7 +79,8 @@ class GenotypingADDATrainer(CommonTrainer):
         super().__init__(args, problem, use_cuda)
         # we need to use NLLLoss because the critic already has LogSoftmax as its last layer:
         self.criterion_classifier = torch.nn.NLLLoss()
-
+        self.src_encoder=None
+        self.tgt_encoder=None
 
         # target encoder:
         self.optimizer_tgt = None
@@ -98,7 +88,7 @@ class GenotypingADDATrainer(CommonTrainer):
         self.optimizer_critic = None
 
     def get_test_metric_name(self):
-        return "progress"
+        return "train_encoder_loss"
 
     def is_better(self, metric, previous_metric):
         return metric < previous_metric
@@ -113,16 +103,7 @@ class GenotypingADDATrainer(CommonTrainer):
         self.training_performance_estimators = performance_estimators
         return performance_estimators
 
-    def create_test_performance_estimators(self):
-        performance_estimators = PerformanceList()
-        #performance_estimators += [FloatHelper("test_critic_loss")]
-        #performance_estimators += [FloatHelper("test_real_accuracy")]
-        #performance_estimators += [FloatHelper("test_encoded_accuracy")]
-        performance_estimators += [FloatHelper("progress")]
-        performance_estimators += [FloatHelper("ratio")]
-        performance_estimators += [FloatHelper("train_encoder_loss")]
-        self.test_performance_estimators = performance_estimators
-        return performance_estimators
+
 
     def train_adda(self, epoch):
         performance_estimators = self.create_training_performance_estimators()
@@ -161,11 +142,18 @@ class GenotypingADDATrainer(CommonTrainer):
         finally:
             data_provider.close()
         self.training_perfs=performance_estimators
+        # Apply learning rate schedule:
+        test_metric = performance_estimators.get_metric(self.get_test_metric_name())
+        assert test_metric is not None, (self.get_test_metric_name() +
+                                         "must be found among estimated performance metrics")
+        if not self.args.constant_learning_rates:
+            self.scheduler_train.step(test_metric, epoch)
         return performance_estimators
 
     def train_one_batch(self, performance_estimators, batch_idx, input_supervised, input_unlabeled):
         self.critic.train()
-        self.tgt_encoder.eval()
+        self.tgt_encoder.train()
+        self.src_encoder.train()
         ###########################
         # 2.1 train discriminator #
         ###########################
@@ -176,13 +164,8 @@ class GenotypingADDATrainer(CommonTrainer):
         self.tgt_encoder.zero_grad()
         self.critic.zero_grad()
         # extract and concat features
-        feat_src = self.source_model(input_supervised)
-        feat_tgt = self.source_model(input_unlabeled)
-        # Sometimes, convert the target features through the encoder, otherwise the critic will only see the
-        # unencoded target examples and won't be able to adapt as the encoder evolves to evade the critic
-        import random
-        if random.random()>0.5:
-            feat_tgt= self.tgt_encoder(feat_tgt)
+        feat_src = self.src_encoder(input_supervised)
+        feat_tgt = self.tgt_encoder(input_unlabeled)
         feat_concat = torch.cat((feat_src, feat_tgt), 0)
 
         # predict on discriminator
@@ -209,21 +192,15 @@ class GenotypingADDATrainer(CommonTrainer):
         ############################
         # 2.2 train target encoder #
         ############################
-        if self.do_train_encoder:
-            # train to make unlabeled into training:
 
-            source_is_training_set = source_is_training_set
-            train_encoded_accuracy=self.train_encoder_with(batch_idx, performance_estimators, self.source_model(input_unlabeled), source_is_training_set)
-            performance_estimators.set_metric(batch_idx, "train_encoded_accuracy", train_encoded_accuracy)
+        # train to make unlabeled into training:
 
-            ## train to keep training as training:
-            self.train_encoder_with(batch_idx, performance_estimators, self.source_model(input_supervised), source_is_training_set)
-            ratio = self.calculate_ratio(train_encoded_accuracy, accuracy.data[0])
-            performance_estimators.set_metric(batch_idx,"ratio",ratio)
-        else:
-            performance_estimators.set_metric(batch_idx, "train_encoder_loss", sys.maxsize)
-            performance_estimators.set_metric(batch_idx, "train_encoded_accuracy", -1)
-            performance_estimators.set_metric(batch_idx, "ratio", sys.maxsize)
+        source_is_training_set = source_is_training_set
+        train_encoded_accuracy=self.train_encoder_with(batch_idx, performance_estimators, input_unlabeled, source_is_training_set)
+        performance_estimators.set_metric(batch_idx, "train_encoded_accuracy", train_encoded_accuracy)
+
+        ratio = self.calculate_ratio(train_encoded_accuracy, accuracy.data[0])
+        performance_estimators.set_metric(batch_idx,"ratio",ratio)
 
         performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.data[0])
         performance_estimators.set_metric(batch_idx, "train_accuracy",accuracy.data[0])
@@ -267,6 +244,7 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def test_one_batch(self, performance_estimators,
                        batch_idx, input_supervised, input_unlabeled):
+        self.src_encoder.eval()
         self.tgt_encoder.eval()
         self.critic.eval()
 
@@ -276,19 +254,18 @@ class GenotypingADDATrainer(CommonTrainer):
         batch_size = input_supervised.size(0)
         source_is_training_set = torch.ones(batch_size).long()
         source_is_unlabeled_set = torch.zeros(batch_size).long()
-        features_src=self.source_model(input_supervised)
-        features_tgt=self.source_model(input_unlabeled)
-        loss_critic, real_accuracy=self.evaluate_test_accuracy(features_src,           features_tgt,
+        features_src=self.src_encoder(input_supervised)
+        loss_critic, real_accuracy=self.evaluate_test_accuracy(features_src,           self.src_encoder(input_unlabeled),
                                                                source_is_training_set, source_is_unlabeled_set)
 
         #################################
         #    Evaluate with encoder      #
         #################################
         # extract and target features
-        loss_encoded, recoded_accuracy = self.evaluate_test_accuracy(features_src,           self.tgt_encoder(features_tgt),
+        loss_encoded, recoded_accuracy = self.evaluate_test_accuracy(features_src,           self.tgt_encoder(input_unlabeled),
                                                                      source_is_training_set, source_is_training_set)
 
-        performance_estimators.set_metric(batch_idx, "test_critic_loss", loss_critic.data[0])
+        performance_estimators.set_metric(batch_idx, "test_critic_loss", loss_encoded.data[0])
         performance_estimators.set_metric(batch_idx, "test_real_accuracy", real_accuracy.data[0])
         performance_estimators.set_metric(batch_idx, "test_encoded_accuracy", recoded_accuracy.data[0])
         performance_estimators.set_metric(batch_idx, "progress", abs(0.5-recoded_accuracy.data[0]))
@@ -304,18 +281,28 @@ class GenotypingADDATrainer(CommonTrainer):
             performance_estimator.init_performance_metrics()
 
         self.reset_before_test_epoch()
-        train_encoded_accuracy=self.training_performance_estimators.get_metric("train_encoded_accuracy")
-        raw_accuracy=self.training_performance_estimators.get_metric("train_accuracy")
-        ratio=self.calculate_ratio(train_encoded_accuracy, raw_accuracy)
-        performance_estimators.set_metric(0,"progress",abs(train_encoded_accuracy-0.5))
-        performance_estimators.set_metric(0,"ratio",ratio)
-        train_encoder_loss=self.training_performance_estimators.get_metric("train_encoder_loss")
-        performance_estimators.set_metric(0,"train_encoder_loss",train_encoder_loss)
-        print("Test epoch {} {}".format( epoch, performance_estimators.progress_message(["progress","ratio","train_encoder_loss"])))
+
 
         return performance_estimators
 
-    def ignore(self,performance_estimators, epoch):
+    def create_test_performance_estimators(self):
+        performance_estimators = PerformanceList()
+        #performance_estimators += [FloatHelper("test_critic_loss")]
+        #performance_estimators += [FloatHelper("test_real_accuracy")]
+        #performance_estimators += [FloatHelper("test_encoded_accuracy")]
+        #performance_estimators += [FloatHelper("progress")]
+        #performance_estimators += [FloatHelper("ratio")]
+        #performance_estimators += [FloatHelper("train_encoder_loss")]
+        self.test_performance_estimators = performance_estimators
+        return performance_estimators
+
+    def test_adda_ignore(self, epoch):
+        print('\nTesting, epoch: %d' % epoch)
+        performance_estimators = self.create_test_performance_estimators()
+        for performance_estimator in performance_estimators:
+            performance_estimator.init_performance_metrics()
+
+        self.reset_before_test_epoch()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
         unlabeled_loader_subset = self.problem.unlabeled_loader()
         data_provider = MultiThreadedCpuGpuDataProvider(
@@ -340,43 +327,41 @@ class GenotypingADDATrainer(CommonTrainer):
         finally:
             data_provider.close()
 
-        # Apply learning rate schedule:
-        test_metric = performance_estimators.get_metric(self.get_test_metric_name())
-        assert test_metric is not None, (self.get_test_metric_name() +
-                                         "must be found among estimated performance metrics")
-        if not self.args.constant_learning_rates:
-            self.scheduler_train.step(test_metric, epoch)
-
         self.compute_after_test_epoch()
 
         return performance_estimators
+
+    def load_source_model(self,args,problem, source_model_key):
+        trainer = CommonTrainer(deepcopy(args), problem, self.use_cuda)
+        trainer.args.checkpoint_key = source_model_key
+        print("Loading source mode for ADDA adaptation: " + args.adda_source_model)
+        # Convert best model:
+        state = trainer.load_checkpoint_state(model_label="best")
+        # NB: the source model must have a field called features that extracts features from its input.
+        return state["model"]
 
     def create_ADDA_model(self, problem, args):
         input_size = problem.input_size("input")
         assert hasattr(args,"adda_source_model") and args.adda_source_model is not None, "Argument --adda-source-model is required"
         assert len(input_size) == 1, "This ADDA implementation requires 1D input features."
-        trainer = CommonTrainer(deepcopy(args), problem, self.use_cuda)
-        trainer.args.checkpoint_key=args.adda_source_model
-        print("Loading source mode for ADDA adaptation: " + args.adda_source_model)
-        # Convert best model:
-        state = trainer.load_checkpoint_state(model_label="best")
-        # NB: the source model must have a field called features that extracts features from its input.
-        self.source_model=state["model"].features
-        self.source_model.eval()
+        source_model=self.load_source_model(args,problem,source_model_key=args.adda_source_model)
+        source_model_copy=self.load_source_model(args,problem,source_model_key=args.adda_source_model)
 
         # let's measure the dimensionality of the source model's features:
         input_size = problem.input_size("input")[0]
         inputs=Variable(torch.rand(10,input_size))
         if self.use_cuda:
-            self.source_model.cuda()
+            source_model.cuda()
+            source_model_copy.cuda()
             inputs=inputs.cuda()
-        feature_input_size=self.source_model(inputs).size(1)
+        feature_input_size=source_model.features(inputs).size(1)
 
-        self.tgt_encoder = TargetEncoder(args=args, input_size=feature_input_size)
         self.critic = Critic(args=args, input_size=feature_input_size)
-        model= ADDA_Model(critic=self.critic, target_encoder=self.tgt_encoder)
+        self.src_encoder = source_model.features
+        self.tgt_encoder=source_model_copy.features
+        model= ADDA_Model(critic=self.critic, full_model1=source_model,full_model2=source_model_copy)
         # we install the full model, with features and classifier:
-        model.install_supervised_model(state["model"])
+        model.install_supervised_model()
         beta1 = 0.3
         beta2 = 0.9
         # target encoder:
