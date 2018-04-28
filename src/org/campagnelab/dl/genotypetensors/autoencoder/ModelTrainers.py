@@ -135,6 +135,8 @@ def define_train_auto_encoder_parser():
                         help="Optimizer to use. Only supervised_genotypes_softmax supports adagrad currently.")
     parser.add_argument('--adda-source-model', help='Checkpoint key for the model to adapt.',
                         default=None)
+    parser.add_argument("--adda-pass-through", action="store_true",
+                        help="If set, train the ADDA encoder to pass-through examples from the training set as unperturbed as possible.")
     return parser
 
 def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequencies=None):

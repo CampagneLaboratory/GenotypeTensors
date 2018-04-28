@@ -220,6 +220,13 @@ class GenotypingADDATrainer(CommonTrainer):
         train_encoded_accuracy=self.train_encoder_with(batch_idx, performance_estimators, input_unlabeled, source_is_training_set)
         performance_estimators.set_metric(batch_idx, "train_encoded_accuracy", train_encoded_accuracy)
 
+        if self.args.adda_pass_through:
+            # train pass-through for training set examples:
+            source_is_training_set = source_is_training_set
+            train_encoded_accuracy = self.train_encoder_with(batch_idx, performance_estimators, input_supervised,
+                                                             source_is_training_set)
+            performance_estimators.set_metric(batch_idx, "train_encoded_accuracy", train_encoded_accuracy)
+
         ratio = self.calculate_ratio(train_encoded_accuracy, accuracy.data[0])
         performance_estimators.set_metric(batch_idx,"ratio",ratio)
 
@@ -292,8 +299,7 @@ class GenotypingADDATrainer(CommonTrainer):
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
-                                                                  "test_accuracy"]))
+                         performance_estimators.progress_message(["test_accuracy", "test_encoded_accuracy"]))
 
     def test_adda_ignore(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
