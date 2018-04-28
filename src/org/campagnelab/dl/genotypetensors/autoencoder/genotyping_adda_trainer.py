@@ -3,8 +3,11 @@ from copy import deepcopy
 import sys
 import torch
 from torch.autograd import Variable
+from torch.nn import MultiLabelSoftMarginLoss
 from torchnet.meter import ConfusionMeter
-
+from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
+from org.campagnelab.dl.performance.FloatHelper import FloatHelper
+from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
@@ -33,17 +36,22 @@ class Critic(torch.nn.Module):
 
 
 class ADDA_Model(torch.nn.Module):
-    def __init__(self, critic, full_model1,full_model2):
+    def __init__(self, critic):
         super().__init__()
         self.critic=critic
+        self.source_encoder = None
+        self.target_encoder = None
+        self.supervised_model = None
+
+    def install_source_models(self,full_model1, full_model2):
+
         for model in [ full_model1,full_model2]:
             assert hasattr(model, "features"), "supervised model must have features property"
             assert hasattr(model,
                            "softmax_genotype_linear"), "softmax_genotype_linear model must have features property"
-        self.target_encoder=full_model1.features
-        self.source_encoder=full_model2.features
+        self.source_encoder = full_model1.features
         self.supervised_model=full_model2
-
+        self.target_encoder = self.supervised_model.features
 
     def install_supervised_model(self):
         """Install a supervised model. After installing a model, a call to forward will use the model with ADDA adapted
@@ -61,7 +69,10 @@ class ADDA_Model(torch.nn.Module):
             # an adapted encoder was installed in the supervised model. We can simply use the model as is:
             return self.supervised_model(input)
         else:
-            self.supervised_model.softmax_genotype_linear(self.target_encoder(input))
+            return self.supervised_model.softmax_genotype_linear(self.target_encoder(input))
+    def forward_with_src_encoding(self, input):
+
+        return self.supervised_model.softmax_genotype_linear(self.source_encoder(input))
 
 def make_variable(tensor, volatile=False, requires_grad=True):
     """Convert Tensor to Variable."""
@@ -78,7 +89,8 @@ class GenotypingADDATrainer(CommonTrainer):
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
         # we need to use NLLLoss because the critic already has LogSoftmax as its last layer:
-        self.criterion_classifier = torch.nn.NLLLoss()
+        self.criterion_nll = torch.nn.NLLLoss()
+        self.criterion_classifier = None
         self.src_encoder=None
         self.tgt_encoder=None
 
@@ -86,6 +98,11 @@ class GenotypingADDATrainer(CommonTrainer):
         self.optimizer_tgt = None
         # critic:
         self.optimizer_critic = None
+
+    def rebuild_criterions(self, output_name, weights=None):
+        if output_name == "softmaxGenotype":
+            self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
+
 
     def get_test_metric_name(self):
         return "train_encoder_loss"
@@ -103,11 +120,15 @@ class GenotypingADDATrainer(CommonTrainer):
         self.training_performance_estimators = performance_estimators
         return performance_estimators
 
-
+    def reset_before_train_epoch(self):
+        super().reset_before_train_epoch()
+        # Weights have been initialized, we now install the full models in the ADDA model
+        if self.net.target_encoder is None:
+            self.net.install_source_models(self.full_model1,self.full_model2)
 
     def train_adda(self, epoch):
         performance_estimators = self.create_training_performance_estimators()
-
+        self.reset_before_train_epoch()
         print('\nTraining, epoch: %d' % epoch)
 
         for performance_estimator in performance_estimators:
@@ -153,7 +174,7 @@ class GenotypingADDATrainer(CommonTrainer):
     def train_one_batch(self, performance_estimators, batch_idx, input_supervised, input_unlabeled):
         self.critic.train()
         self.tgt_encoder.train()
-        self.src_encoder.train()
+        self.src_encoder.eval()
         ###########################
         # 2.1 train discriminator #
         ###########################
@@ -180,7 +201,7 @@ class GenotypingADDATrainer(CommonTrainer):
         label_concat = torch.cat((label_src, label_tgt), 0)
 
         # compute loss for critic
-        loss_critic = self.criterion_classifier(pred_concat, label_concat)
+        loss_critic = self.criterion_nll(pred_concat, label_concat)
         loss_critic.backward()
 
         # optimize critic
@@ -213,7 +234,7 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def train_encoder_with(self,batch_idx, performance_estimators, features, labels):
         self.tgt_encoder.train()
-        self.critic.train()
+        self.critic.eval()
         # zero gradients for optimizer
         self.optimizer_critic.zero_grad()
         self.optimizer_tgt.zero_grad()
@@ -231,7 +252,7 @@ class GenotypingADDATrainer(CommonTrainer):
 
         accuracy = (pred_cls == label_tgt).float().mean()
         # compute loss for target encoder
-        loss_tgt = self.criterion_classifier(pred_tgt, label_tgt)
+        loss_tgt = self.criterion_nll(pred_tgt, label_tgt)
         loss_tgt.backward()
 
         # Optimize target encoder
@@ -243,38 +264,38 @@ class GenotypingADDATrainer(CommonTrainer):
         self.cm = ConfusionMeter(self.num_classes, normalized=False)
 
     def test_one_batch(self, performance_estimators,
-                       batch_idx, input_supervised, input_unlabeled):
+                       batch_idx, input_supervised, target_s):
         self.src_encoder.eval()
         self.tgt_encoder.eval()
         self.critic.eval()
 
-        #################################
-        #    Evaluate  w/o encoder      #
-        #################################
-        batch_size = input_supervised.size(0)
-        source_is_training_set = torch.ones(batch_size).long()
-        source_is_unlabeled_set = torch.zeros(batch_size).long()
-        features_src=self.src_encoder(input_supervised)
-        loss_critic, real_accuracy=self.evaluate_test_accuracy(features_src,           self.src_encoder(input_unlabeled),
-                                                               source_is_training_set, source_is_unlabeled_set)
+        output_s = self.net.forward_with_src_encoding(input_supervised)
+        output_s_p = self.get_p(output_s)
 
-        #################################
-        #    Evaluate with encoder      #
-        #################################
-        # extract and target features
-        loss_encoded, recoded_accuracy = self.evaluate_test_accuracy(features_src,           self.tgt_encoder(input_unlabeled),
-                                                                     source_is_training_set, source_is_training_set)
+        supervised_loss = self.criterion_classifier(output_s, target_s)
 
-        performance_estimators.set_metric(batch_idx, "test_critic_loss", loss_encoded.data[0])
-        performance_estimators.set_metric(batch_idx, "test_real_accuracy", real_accuracy.data[0])
-        performance_estimators.set_metric(batch_idx, "test_encoded_accuracy", recoded_accuracy.data[0])
-        performance_estimators.set_metric(batch_idx, "progress", abs(0.5-recoded_accuracy.data[0]))
+        _, target_index = torch.max(target_s, dim=1)
+        _, output_index = torch.max(output_s_p, dim=1)
+        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+                                                       output_s_p, targets=target_index)
+        # use target encoding:
+        output_s = self.net(input_supervised)
+        output_s_p = self.get_p(output_s)
+
+        supervised_loss = self.criterion_classifier(output_s, target_s)
+
+        _, target_index = torch.max(target_s, dim=1)
+        _, output_index = torch.max(output_s_p, dim=1)
+        performance_estimators.set_metric(batch_idx, "test_encoded_supervised_loss", supervised_loss.data[0])
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_encoded_accuracy", supervised_loss.data[0],
+                                                       output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_critic_loss", "test_encoder_loss",
-                                                                  "test_real_accuracy","test_encoded_accuracy"]))
+                         performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
+                                                                  "test_accuracy"]))
 
-    def test_adda(self, epoch):
+    def test_adda_ignore(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
         performance_estimators = self.create_test_performance_estimators()
         for performance_estimator in performance_estimators:
@@ -287,16 +308,14 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def create_test_performance_estimators(self):
         performance_estimators = PerformanceList()
-        #performance_estimators += [FloatHelper("test_critic_loss")]
-        #performance_estimators += [FloatHelper("test_real_accuracy")]
-        #performance_estimators += [FloatHelper("test_encoded_accuracy")]
-        #performance_estimators += [FloatHelper("progress")]
-        #performance_estimators += [FloatHelper("ratio")]
-        #performance_estimators += [FloatHelper("train_encoder_loss")]
-        self.test_performance_estimators = performance_estimators
+        performance_estimators += [LossHelper("test_supervised_loss")]
+        performance_estimators += [AccuracyHelper("test_")]
+        performance_estimators += [LossHelper("test_encoded_supervised_loss")]
+        performance_estimators += [AccuracyHelper("test_encoded_")]
+        self.test_performance_estimators=performance_estimators
         return performance_estimators
 
-    def test_adda_ignore(self, epoch):
+    def test_adda(self, epoch):
         print('\nTesting, epoch: %d' % epoch)
         performance_estimators = self.create_test_performance_estimators()
         for performance_estimator in performance_estimators:
@@ -304,22 +323,23 @@ class GenotypingADDATrainer(CommonTrainer):
 
         self.reset_before_test_epoch()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        unlabeled_loader_subset = self.problem.unlabeled_loader()
         data_provider = MultiThreadedCpuGpuDataProvider(
-            iterator=zip(validation_loader_subset, unlabeled_loader_subset),
+            iterator=zip(validation_loader_subset),
             is_cuda=self.use_cuda,
-            batch_names=["validation", "unlabeled"],
-            requires_grad={"validation": ["input"], "unlabeled": ["input"]},
-            volatile={"validation": ["metaData"],"unlabeled": ["metaData"]},
-        )
+            batch_names=["validation"],
+            requires_grad={"validation": []},
+            volatile={
+                "validation": ["input", "softmaxGenotype"]
+            },
 
+        )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 input_s = data_dict["validation"]["input"]
-                input_u = data_dict["unlabeled"]["input"]
+                target_s = data_dict["validation"]["softmaxGenotype"]
                 self.net.eval()
 
-                self.test_one_batch(performance_estimators, batch_idx, input_s, input_u)
+                self.test_one_batch(performance_estimators, batch_idx, input_s, target_s)
 
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                     break
@@ -359,9 +379,13 @@ class GenotypingADDATrainer(CommonTrainer):
         self.critic = Critic(args=args, input_size=feature_input_size)
         self.src_encoder = source_model.features
         self.tgt_encoder=source_model_copy.features
-        model= ADDA_Model(critic=self.critic, full_model1=source_model,full_model2=source_model_copy)
-        # we install the full model, with features and classifier:
-        #model.install_supervised_model()
+        # We cannot store full_models in the ADDA model, because weight initialization would reset the trained weights,
+        # so we store them in this trainer instance, and set them in the ADDA model at the start of training.
+        self.full_model1 = source_model
+        self.full_model2 = source_model_copy
+
+        model= ADDA_Model(critic=self.critic)
+
         beta1 = 0.3
         beta2 = 0.9
         # target encoder:
@@ -369,10 +393,10 @@ class GenotypingADDATrainer(CommonTrainer):
                                               lr=self.args.lr,  # encoder learning rate
                                               betas=(beta1, beta2))
         # critic:
-        self.optimizer_critic = torch.optim.Adam(self.critic.parameters(),
+        self.optimizer_critic = torch.optim.Adam(model.critic.parameters(),
                                                  lr=self.args.lr,  # critic learning rate
                                                  betas=(beta1, beta2))
-
+        self.net=model
         print("model" + str(model))
         return model
 
