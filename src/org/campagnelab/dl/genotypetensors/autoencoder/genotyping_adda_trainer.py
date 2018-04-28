@@ -234,7 +234,7 @@ class GenotypingADDATrainer(CommonTrainer):
 
     def train_encoder_with(self,batch_idx, performance_estimators, features, labels):
         self.tgt_encoder.train()
-        self.critic.eval()
+        self.critic.train()
         # zero gradients for optimizer
         self.optimizer_critic.zero_grad()
         self.optimizer_tgt.zero_grad()
