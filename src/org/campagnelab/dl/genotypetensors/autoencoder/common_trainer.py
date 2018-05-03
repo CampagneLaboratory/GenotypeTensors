@@ -367,8 +367,9 @@ class CommonTrainer:
                         class_frequencies[output_name] = torch.ones(target_s[0].size())
                     cf = class_frequencies[output_name]
                     indices = torch.nonzero(target_s.data)
-                    for example_index in range(len(target_s)):
-                        cf[indices[example_index, 1]] += 1
+                    indices = indices[:, 1]
+                    for index in range(indices.size(0)):
+                        cf[indices[index]] += 1
 
                 progress_bar(batch_idx * self.mini_batch_size,
                              self.max_training_examples,

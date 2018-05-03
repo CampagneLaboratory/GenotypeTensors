@@ -123,15 +123,19 @@ if __name__ == '__main__':
             for output_name in problem.get_output_names():
                 target_s = data_dict["training"][output_name]
                 if output_name not in class_frequencies.keys():
-                    class_frequencies[output_name] = torch.ones(target_s[0].size())
+                    class_frequencies[output_name] = torch.ones(target_s.size(1))
                 cf = class_frequencies[output_name]
                 indices = torch.nonzero(target_s.data)
-                for example_index in range(len(target_s)):
-                    cf[indices[example_index, 1]] += 1
+                indices=indices[:, 1]
+                for index in range(indices.size(0)):
+                    cf[indices[index]]+=1
+                #for class_index in range(target_s.size(1)):
+                #    cf[indices[:,1]] += 1
 
             progress_bar(batch_idx * args.mini_batch_size,
-                         args.num_training,
+                         args.num_estimate_class_frequencies,
                          "Class frequencies")
+    print("class frequencies: "+str(class_frequencies))
     del train_loader_subset
 
     # Initialize the trainers:
