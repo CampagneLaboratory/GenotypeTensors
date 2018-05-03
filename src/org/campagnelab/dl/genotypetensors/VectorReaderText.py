@@ -18,7 +18,12 @@ class VectorReaderText(VectorReaderBase):
         line_example_id = np.uint64(line_split[1])
         line_sample_id = np.uint32(line_split[0])
         line_vector_id = np.uint32(line_split[2])
-        line_vector_elements = np.array(line_split[3:], dtype=np.float32)
+        line_vector_type = self.vector_properties.get_vector_type_from_idx(line_vector_id)
+        if line_vector_type == "byte8":
+            line_vector_dtype = np.int8
+        else:
+            line_vector_dtype = np.float32
+        line_vector_elements = np.array(line_split[3:], dtype=line_vector_dtype)
         line_vector_elements = np.reshape(line_vector_elements,
                                           self.vector_properties.get_vector_dimensions_from_idx(line_vector_id),
                                           "C")

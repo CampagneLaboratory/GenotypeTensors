@@ -9,13 +9,6 @@ import numpy as np
 
 
 class VectorReaderBinary(VectorReaderBase):
-    example_id_size = 8
-    vector_id_size = 4
-    sample_id_size = 4
-    vector_length_size = 4
-    header_size = example_id_size + vector_id_size + sample_id_size + vector_length_size
-    vector_element_size = 4
-
     def __init__(self, path_to_vector, vector_reader_properties):
         """
         :param path_to_vector: Path to the binary vector file
@@ -58,6 +51,10 @@ class VectorReaderBinary(VectorReaderBase):
             dtype = np.uint64 if numpy_convert else int
             fmt_string = ">{}Q".format(num_elements)
             unpacked_value = struct.unpack(fmt_string, bytes(self.vector_fp.read(8 * num_elements)))
+        elif data_type == "byte8":
+            dtype = np.int8 if numpy_convert else int
+            fmt_string = ">{}b".format(num_elements)
+            unpacked_value = struct.unpack(fmt_string, bytes(self.vector_fp.read(num_elements)))
         elif data_type == "float32":
             dtype = np.float32 if numpy_convert else float
             fmt_string = ">{}f".format(num_elements)
