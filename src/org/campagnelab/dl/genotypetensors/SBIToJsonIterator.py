@@ -1,5 +1,5 @@
 import argparse
-import json
+import ujson
 import subprocess
 import sys
 
@@ -13,7 +13,7 @@ def sbi_json_generator(sbi_path, num_records=sys.maxsize, mem="3g", sort=False):
             sbi_json_str = sbi_json_out.decode().strip()
             if not sbi_json_str.startswith("{"):
                 continue
-            yield(json.loads(sbi_json_str))
+            yield(ujson.loads(sbi_json_str,precise_float=True))
 
 
 if __name__ == "__main__":
