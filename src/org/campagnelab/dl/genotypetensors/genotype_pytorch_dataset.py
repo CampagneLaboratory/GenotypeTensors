@@ -157,6 +157,37 @@ class ClippedDataset(Dataset):
                                                                                        self.end_index)
 
 
+class StructuredGenotypeDataset(Dataset):
+    def __init__(self, sbi_basename, vector_names, max_records=sys.maxsize, sample_id=0):
+        super().__init__()
+        basename, file_extension = os.path.splitext(sbi_basename)
+        # load only the labels from the vec file:
+        vector_names=["softmaxGenotype"]
+        self.delegate_labels = GenotypeDataset(basename, vector_names=vector_names,sample_id= sample_id)
+        self.delegate_features=JsonGenotypeDataset() #TODO from Josh, read from the JSON SBI iterator.
+        self.basename = basename
+        self.vector_names = vector_names
+        self.sample_id = sample_id
+        self.max_records = max_records
+
+    def __len__(self):
+        return len(self.delegate_labels)
+
+    def __getitem__(self, idx):
+        return (self.features[idx], self.delegate_labels[idx])
+
+
+
+class JsonGenotypeDataset(Dataset):
+    def __init__(self,length):
+        self.length=length
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        return
+
 class CachedGenotypeDataset(Dataset):
     def __init__(self, vec_basename, vector_names, max_records=sys.maxsize, sample_id=0):
         super().__init__()
