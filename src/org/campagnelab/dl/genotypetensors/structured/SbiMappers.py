@@ -13,7 +13,9 @@ class MapBaseInformation(Module):
         self.num_samples = num_samples
 
     def forward(self, input, cuda=None):
-        cuda = next(self.parameters()).data.is_cuda
+
+        if cuda is None:
+            cuda = next(self.parameters()).data.is_cuda
 
         return self.reduce_samples(
             [self.sample_mapper(sample, cuda) for sample in input['samples'][0:self.num_samples]], cuda)

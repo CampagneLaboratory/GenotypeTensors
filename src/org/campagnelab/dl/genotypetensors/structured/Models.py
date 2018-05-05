@@ -11,7 +11,7 @@ class StructuredEmbedding(Module):
     def define_long_variable(self,values,cuda=None):
         variable = Variable(torch.LongTensor(values), requires_grad=False)
         if self.is_cuda(cuda):
-            variable.cuda(async=True)
+            variable=variable.cuda(async=True)
         return variable
 
     def is_cuda(self,cuda=None):
@@ -29,7 +29,7 @@ class map_Boolean(StructuredEmbedding):
     def __call__(self,predicate,cuda=None):
         variable= Variable(torch.FloatTensor([[1,0]]) if predicate else torch.FloatTensor([[0,1]]))
         if self.is_cuda(cuda):
-            variable.cuda(async=True)
+            variable=variable.cuda(async=True)
         return variable
 
 class IntegerModel(StructuredEmbedding):
@@ -119,11 +119,11 @@ class Dispatcher():
     def __init__(self, functions):
         self.functions=functions
 
-    def dispatch(self, structure):
+    def dispatch(self, structure,cuda=None):
         type_ = structure['type']
         function=self.functions[type_]
 
-        result= function(structure)
+        result= function(structure,cuda)
         assert result is not None, "mapper for type {} returned None.".format(type_)
         return result
 
@@ -138,8 +138,8 @@ class BatchOfInstances(Module):
         self.mappers=Dispatcher(mappers)
         self.all_modules=ModuleList(all_modules)
 
-    def forward(self, instance_list):
-        mapped=[self.mappers.dispatch(instance) for instance in instance_list]
+    def forward(self, instance_list,cuda=None):
+        mapped=[self.mappers.dispatch(instance,cuda) for instance in instance_list]
         return torch.cat(mapped,dim=0)
 
 
