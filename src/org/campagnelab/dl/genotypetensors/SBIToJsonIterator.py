@@ -34,7 +34,7 @@ class SbiToJsonGenerator:
                 continue
             yield (ujson.loads(sbi_json_str, precise_float=True))
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         self.process.kill()
         self.process = None
         self.closed = True
