@@ -1,3 +1,6 @@
+import concurrent
+from concurrent.futures import ThreadPoolExecutor
+
 import torch
 from torch.nn import MultiLabelSoftMarginLoss, Module
 
@@ -32,8 +35,20 @@ class StructGenotypingModel(Module):
                                                    dropout_p=args.dropout_probability, ngpus=1, use_selu=args.use_selu,
                                                    skip_batch_norm=args.skip_batch_norm)
 
-    def map_sbi_messages(self,sbi_records):
-        features = self.sbi_mapper(sbi_records)
+
+
+    def map_sbi_messages(self,sbi_records, thread_executor=None):
+        if thread_executor is None:
+            features = self.sbi_mapper(sbi_records)
+        else:
+            def todo(record):
+                features = self.sbi_mapper(record)
+                return features
+            futures=[]
+            for record in sbi_records:
+                futures += [thread_executor.submit(todo, [record])]
+            concurrent.futures.wait(futures)
+            features = torch.cat([future.result() for future in futures],dim=0)
         return features
 
     def forward(self, mapped_features):
@@ -47,6 +62,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
         self.criterion_classifier = None
+        self.thread_executor=ThreadPoolExecutor(max_workers=args.num_workers) if args.num_workers > 1 \
+            else None
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -79,7 +96,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             volatile={"training": ["metaData"]},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
-                "sbi": lambda messages: self.net.map_sbi_messages(messages)
+                "sbi": lambda messages: self.net.map_sbi_messages(messages,
+                                                                  thread_executor=self.thread_executor)
             }
         )
         try:
@@ -105,6 +123,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         snp_weight = 1.0
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
+
+
         output_s = self.net(input_s)
         output_s_p = self.get_p(output_s)
         _, target_index = torch.max(target_s, dim=1)
@@ -137,7 +157,6 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         print('\nTesting, epoch: %d' % epoch)
         errors = None
         performance_estimators = self.create_test_performance_estimators()
-
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
@@ -150,7 +169,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                 "validation": ["sbi", "softmaxGenotype"]
             },
             recode_functions={
-                "sbi": lambda messages: self.net.map_sbi_messages(messages)
+                "sbi": lambda messages: self.net.map_sbi_messages(messages,
+                                                                  thread_executor=self.thread_executor)
             }
         )
         try:
