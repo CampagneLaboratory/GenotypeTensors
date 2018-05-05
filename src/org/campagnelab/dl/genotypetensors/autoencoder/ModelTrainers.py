@@ -140,7 +140,7 @@ def define_train_auto_encoder_parser():
     parser.add_argument("--adda-pass-through", action="store_true",
                         help="If set, train the ADDA encoder to pass-through examples from the training set as unperturbed as possible.")
     parser.add_argument('--num-estimate-class-frequencies', type=int, help='Number of examples to look at to estimate '
-                                                                           'class frequencies.')
+                                                                           'class frequencies.', default=100000)
 
     return parser
 

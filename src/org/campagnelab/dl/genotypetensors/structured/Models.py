@@ -8,12 +8,29 @@ class StructuredEmbedding(Module):
         super().__init__()
         self.embedding_size = embedding_size
 
+    def define_long_variable(self,values,cuda=None):
+        variable = Variable(torch.LongTensor(values), requires_grad=False)
+        if self.is_cuda(cuda):
+            variable.cuda(async=True)
+        return variable
+
+    def is_cuda(self,cuda=None):
+        """ Return True iff this model is on cuda. """
+        if cuda is not None:
+            return cuda
+        else:
+            cuda =  next(self.parameters()).data.is_cuda
+        return cuda
+
 class map_Boolean(StructuredEmbedding):
     def __init__(self):
         super().__init__(2)
 
-    def __call__(self,predicate):
-        return Variable(torch.FloatTensor([[1,0]]) if predicate else torch.FloatTensor([[0,1]]))
+    def __call__(self,predicate,cuda=None):
+        variable= Variable(torch.FloatTensor([[1,0]]) if predicate else torch.FloatTensor([[0,1]]))
+        if self.is_cuda(cuda):
+            variable.cuda(async=True)
+        return variable
 
 class IntegerModel(StructuredEmbedding):
     def __init__(self, distinct_numbers, embedding_size):
@@ -21,10 +38,11 @@ class IntegerModel(StructuredEmbedding):
         self.embedding = Embedding(distinct_numbers, embedding_size)
         self.embedding.requires_grad=True
 
-    def forward(self, values):
+    def forward(self, values,cuda=None):
         """Accepts a list of integer values and produces a batch of batch x embedded-value. """
         assert isinstance(values,list), "values must be a list of integers."
-        return self.embedding(Variable(torch.LongTensor(values),requires_grad=False))
+
+        return self.embedding(self.define_long_variable(values,cuda))
 
 class MeanOfList(Module):
     def __init__(self):
@@ -44,12 +62,16 @@ class RNNOfList(StructuredEmbedding):
         self.hidden_size=hidden_size
         self.lstm=LSTM(embedding_size, hidden_size, num_layers, batch_first=True)
 
-    def forward(self, list_of_embeddings):
+    def forward(self, list_of_embeddings,cuda=None):
+
         batch_size=list_of_embeddings.size(0)
         num_layers=self.num_layers
         hidden_size=self.hidden_size
         hidden=Variable(torch.zeros(num_layers, batch_size, hidden_size))
         memory=Variable(torch.zeros(num_layers, batch_size, hidden_size))
+        if self.is_cuda(cuda):
+            hidden=hidden.cuda(async=True)
+            memory=memory.cuda(async=True)
         states = (hidden,memory)
         inputs = list_of_embeddings.view(batch_size, 1, -1)
         out, states=self.lstm(inputs, states)
@@ -79,7 +101,7 @@ class Reduce(Module):
         self.linear1=Linear(sum_input_dims, sum_input_dims*2)
         self.linear2=Linear(sum_input_dims*2, encoding_output_dim)
 
-    def forward(self, input_list):
+    def forward(self, input_list,cuda):
         if any([input.dim()!=2 for input in input_list]) or [ input.size(1) for input in input_list] != self.input_dims:
             print("STOP: input dims={} sizes={}".format([input.dim() for input in input_list],
                                                         [input.size() for input in input_list] ))
