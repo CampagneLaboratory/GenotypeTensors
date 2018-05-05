@@ -35,13 +35,15 @@ class map_Boolean(StructuredEmbedding):
 class IntegerModel(StructuredEmbedding):
     def __init__(self, distinct_numbers, embedding_size):
         super().__init__(embedding_size)
+        self.distinct_numbers=distinct_numbers
         self.embedding = Embedding(distinct_numbers, embedding_size)
         self.embedding.requires_grad=True
 
     def forward(self, values,cuda=None):
         """Accepts a list of integer values and produces a batch of batch x embedded-value. """
         assert isinstance(values,list), "values must be a list of integers."
-
+        for value in values:
+            assert value<self.distinct_numbers,"A value is larger than the embedding input allow: "+str(value)
         return self.embedding(self.define_long_variable(values,cuda))
 
 class MeanOfList(Module):
