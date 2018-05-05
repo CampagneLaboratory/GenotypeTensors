@@ -34,10 +34,10 @@ class MapSampleInfo(Module):
 
 
 class MapCountInfo(Module):
-    def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=2):
+    def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=4):
         super().__init__()
         self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=64, num_layers=1)
-        self.map_gobyGenotypeIndex = IntegerModel(distinct_numbers=10, embedding_size=mapped_genotype_index_dim)
+        self.map_gobyGenotypeIndex = IntegerModel(distinct_numbers=100, embedding_size=mapped_genotype_index_dim)
 
         bases = ['A', 'C', 'T', 'G', '-']
         max_base_index = 0
