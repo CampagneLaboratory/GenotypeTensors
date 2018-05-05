@@ -56,12 +56,15 @@ class StructuredSbiGenotypingProblem(SbiProblem):
         return StructuredGenotypeDataset(self.basename + "-test")
 
     def unlabeled_set(self):
-        return StructuredGenotypeDataset(self.basename + "-unlabeled")
+        if self.file_exists(self.basename + "-unlabeled.list"):
+            return StructuredGenotypeDataset(self.basename + "-unlabeled")
+        else:
+            return EmptyDataset()
 
     def loader_for_dataset(self, dataset, shuffle=False):
         return iter(DataLoader(dataset=dataset, shuffle=False, batch_size=self.mini_batch_size(),
                                collate_fn=lambda batch: collate_sbi(batch),
-                               num_workers=self.num_workers, pin_memory=False, drop_last=self.drop_last_batch))
+                               num_workers=0, pin_memory=False, drop_last=self.drop_last_batch))
 
     def get_output_names(self):
         return ["softmaxGenotype"]
