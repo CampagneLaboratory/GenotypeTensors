@@ -57,7 +57,7 @@ class RNNOfList(StructuredEmbedding):
         all_outputs= out.squeeze()
         if (all_outputs.dim()>1):
             # return the last output:
-            return all_outputs[-1,:]
+            return all_outputs[-1,:].view(1,-1)
         else:
             return all_outputs.view(1,-1)
 
@@ -80,6 +80,9 @@ class Reduce(Module):
         self.linear2=Linear(sum_input_dims*2, encoding_output_dim)
 
     def forward(self, input_list):
+        if any([input.dim()!=2 for input in input_list]) or [ input.size(1) for input in input_list] != self.input_dims:
+            print("STOP: input dims={} sizes={}".format([input.dim() for input in input_list],
+                                                        [input.size() for input in input_list] ))
         for index, input in enumerate(input_list):
             assert input.size(1)==self.input_dims[index], "input dimension must match declared for input {} ".format(index)
         x=torch.cat(input_list,dim=1)

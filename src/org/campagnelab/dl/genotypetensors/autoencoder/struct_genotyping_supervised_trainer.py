@@ -90,7 +90,6 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                 metadata = data_dict["training"]["metaData"]
 
                 self.train_one_batch(performance_estimators, batch_idx, input_s, target_s, metadata)
-
                 if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                     break
         finally:

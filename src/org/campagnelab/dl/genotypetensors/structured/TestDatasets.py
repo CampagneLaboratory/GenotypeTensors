@@ -1,5 +1,7 @@
 import unittest
 
+import torch
+from torch.autograd import Variable
 from tqdm import tqdm
 
 from org.campagnelab.dl.genotypetensors.structured.Datasets import StructuredGenotypeDataset
@@ -45,8 +47,10 @@ class StructuredDatasetTestCase(unittest.TestCase):
             volatile={"training": ["metaData"]},
             recode_functions={
 
-                "sbi": lambda messages: print(messages)
+                "sbi": lambda messages:  torch.zeros(1,1)
+
             }
+
         )
         self.assertIsNotNone(data_provider.__next__())
 

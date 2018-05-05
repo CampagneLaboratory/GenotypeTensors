@@ -14,6 +14,19 @@ class DataProvider:
         self.volatile = {} if volatile is None else volatile
         self.requires_grad = {} if requires_grad is None else requires_grad
         self.recode_functions = {} if recode_functions is None else recode_functions
+        self.all_columns_to_keep=[]
+        for batch_name in batch_names:
+            if requires_grad is not None:
+                for key in requires_grad[batch_name]:
+                    self.all_columns_to_keep+=[key]
+            if volatile is not None:
+                for key in volatile[batch_name]:
+                    self.all_columns_to_keep+=[key]
+            if recode_functions is not None:
+                for key in recode_functions:
+                    self.all_columns_to_keep+=[key]
+        self.all_columns_to_keep=set(self.all_columns_to_keep)
+        print(self.all_columns_to_keep)
 
     def __enter__(self):
         return self
@@ -48,13 +61,18 @@ class DataProvider:
             if len(self.volatile) == 0:
                 self.volatile[loader_name] = []
             for var_name in batch_data.keys():
-                if var_name in self.recode_functions.keys():
-                    batch_data[var_name] = self.recode_functions[var_name](batch_data[var_name])
-                var_batch = Variable(batch_data[var_name], requires_grad=(var_name in self.requires_grad[loader_name]),
-                                     volatile=(var_name in self.volatile[loader_name]))
-                if is_cuda:
-                    var_batch = var_batch.cuda(async=False)
-                data_dict[loader_name][var_name] = var_batch
+                if  var_name in self.all_columns_to_keep:
+                    if var_name in self.recode_functions.keys():
+                        batch_data[var_name] = self.recode_functions[var_name](batch_data[var_name])
+                    if isinstance(batch_data[var_name],Variable):
+                        # pass-through any batch data that is already a variable:
+                        var_batch=batch_data[var_name]
+                    else:
+                        var_batch = Variable(batch_data[var_name], requires_grad=(var_name in self.requires_grad[loader_name]),
+                                         volatile=(var_name in self.volatile[loader_name]))
+                    if is_cuda:
+                        var_batch = var_batch.cuda(async=False)
+                    data_dict[loader_name][var_name] = var_batch
             indices_dict[loader_name] = batch_indices
         return indices_dict, data_dict
 

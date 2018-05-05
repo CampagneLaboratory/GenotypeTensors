@@ -50,10 +50,10 @@ def configure_mappers(ploidy, extra_genotypes, num_samples):
     all_modules += [reduce_count]
 
     def map_BaseInformation(m):
-        return reduce_samples([map_SampleInfo(sample) for sample in m['samples']])
+        return reduce_samples([map_SampleInfo(sample) for sample in m['samples'][0:num_samples]])
 
     def map_SampleInfo(s):
-        return reduce_counts([map_CountInfo(count) for count in s['counts']])
+        return reduce_counts([map_CountInfo(count) for count in s['counts'][0:num_counts]])
 
     def map_CountInfo(c):
         mapped_gobyGenotypeIndex = map_gobyGenotypeIndex([c['gobyGenotypeIndex']])
