@@ -22,6 +22,8 @@ from org.campagnelab.dl.genotypetensors.autoencoder.sbi_classifier import create
 from org.campagnelab.dl.genotypetensors.autoencoder.semisup_adversarial_autoencoder import \
     create_semisup_adv_autoencoder_model
 from org.campagnelab.dl.genotypetensors.autoencoder.somatic_trainer import SomaticTrainer
+from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised_trainer import StructGenotypingModel, \
+    StructGenotypingSupervisedTrainer
 
 
 def define_train_auto_encoder_parser():
@@ -76,7 +78,7 @@ def define_train_auto_encoder_parser():
                                  "supervised_genotypes", "semisupervised_autoencoder", "supervised_crossencoder",
                                  "supervised_mixup_genotypes", "semisupervised_mixup_genotypes",
                                  "supervised_funnel_genotypes", "supervised_mixup_funnel_genotypes",
-                                 "semisupervised_mixup_funnel_genotypes", "ADDA"])
+                                 "semisupervised_mixup_funnel_genotypes", "ADDA","struct_genotyping"])
     parser.add_argument('--epoch-min-accuracy', default=0, type=float,
                         help='Stop training early if test accuracy is below this value after an epoch of training.'
                              ' This option helps prune poor hyperparameter values. You could set the value to 10 to '
@@ -141,7 +143,17 @@ def define_train_auto_encoder_parser():
 
 def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequencies=None):
     args=train_args
-    if train_args.mode == "ADDA":
+    if train_args.mode == "struct_genotyping":
+        model_trainer = StructGenotypingSupervisedTrainer(args=train_args, problem=train_problem,
+                                                     use_cuda=train_use_cuda)
+        model_trainer.init_model(create_model_function=(
+            lambda model_name, problem_type: model_trainer.create_struct_model(
+                problem=train_problem, args=train_args)))
+
+        training_loop_method = model_trainer.train_supervised
+        testing_loop_method = model_trainer.test_supervised
+
+    elif train_args.mode == "ADDA":
         model_trainer = GenotypingADDATrainer(args=train_args, problem=train_problem,
                                                      use_cuda=train_use_cuda)
         model_trainer.init_model(create_model_function=(

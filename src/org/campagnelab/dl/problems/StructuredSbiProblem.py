@@ -54,7 +54,7 @@ class StructuredSbiGenotypingProblem(SbiProblem):
         return StructuredGenotypeDataset(self.basename + "-unlabeled")
 
     def loader_for_dataset(self, dataset, shuffle=False):
-        return iter(DataLoader(dataset=dataset, shuffle=shuffle, batch_size=self.mini_batch_size(),collate_fn=lambda batch:collate_sbi(batch),
+        return iter(DataLoader(dataset=dataset, shuffle=False, batch_size=self.mini_batch_size(),collate_fn=lambda batch:collate_sbi(batch),
                                num_workers=self.num_workers, pin_memory=False, drop_last=self.drop_last_batch))
 
 

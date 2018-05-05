@@ -30,6 +30,7 @@ import torch
 from org.campagnelab.dl.genotypetensors.autoencoder.ModelTrainers import configure_model_trainer, \
     define_train_auto_encoder_parser
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
+from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenotypingProblem
 
 if __name__ == '__main__':
 
@@ -51,6 +52,9 @@ if __name__ == '__main__':
     problem = None
     if args.problem.startswith("genotyping:"):
         problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem, num_workers=args.num_workers)
+    elif args.problem.startswith("struct_genotyping:"):
+        # struct_genotyping does not support multiprocessing data loading:
+        problem = StructuredSbiGenotypingProblem(args.mini_batch_size, code=args.problem, num_workers=1)
     elif args.problem.startswith("somatic:"):
         problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem, num_workers=args.num_workers)
     else:

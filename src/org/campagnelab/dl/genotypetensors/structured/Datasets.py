@@ -37,13 +37,15 @@ class JsonGenotypeDataset(Dataset):
         super().__init__()
         self.length=length
         self.basename=basename
+        self.generator=None
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
-        if idx==0:
+        if idx==0 or self.generator is None:
             self.generator=sbi_json_generator(sbi_path=self.basename+".sbi",sort=True)
+            idx=0
         if idx>=self.length:
             del self.generator
             raise StopIteration
