@@ -213,7 +213,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
     def create_struct_model(self, problem, args):
 
         sbi_mappers_configuration = configure_mappers(ploidy=2, extra_genotypes=3, num_samples=1)
-        sbi_mapper = BatchOfInstances(mappers=sbi_mappers_configuration)
+        sbi_mapper = BatchOfInstances(*sbi_mappers_configuration)
         # determine feature size:
 
         json_string = '{"type":"BaseInformation","referenceBase":"A","genomicSequenceContext":"GCAGATATACTTCACAGCCCACGCTGACTCTGCCAAGCACA","samples":[{"type":"SampleInfo","counts":[{"type":"CountInfo","matchesReference":true,"isCalled":true,"isIndel":false,"fromSequence":"A","toSequence":"A","genotypeCountForwardStrand":7,"genotypeCountReverseStrand":32,"gobyGenotypeIndex":0},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"C","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":1,"gobyGenotypeIndex":2},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"T","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":1},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"G","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":3},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"N","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":4}]}]}'
@@ -223,4 +223,6 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         mapped_features_size =sbi_mapper([record]).size(1)
 
         output_size=problem.output_size("softmaxGenotype")
-        return StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size)
+        model= StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size)
+        print(model)
+        return model

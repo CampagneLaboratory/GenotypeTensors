@@ -5,11 +5,16 @@ from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, Integer
 
 
 def configure_mappers(ploidy, extra_genotypes, num_samples):
+    """Return a tuple with two elements:
+    mapper-dictionary: key is name of message type. value is function to map the message.
+    all-modules: list of modules that implement mapping. """
+    all_modules=[]
     sample_dim = 64
     count_dim = 64
     num_counts = ploidy + extra_genotypes
     reduce_samples = Reduce([sample_dim] * num_samples, encoding_output_dim=sample_dim)
     reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=count_dim)
+    all_modules+=[reduce_samples,reduce_counts]
 
     mapped_genotype_index_dim = 2
     mapped_count_dim = 5
@@ -17,6 +22,8 @@ def configure_mappers(ploidy, extra_genotypes, num_samples):
     mapped_base_dim = 2
     map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=64, num_layers=1)
     map_gobyGenotypeIndex = IntegerModel(distinct_numbers=10, embedding_size=mapped_genotype_index_dim)
+    all_modules += [map_sequence, map_gobyGenotypeIndex]
+
     bases = ['A', 'C', 'T', 'G', '-']
     max_base_index = 0
     for base in bases:
@@ -26,6 +33,8 @@ def configure_mappers(ploidy, extra_genotypes, num_samples):
     map_isCalled = map_Boolean()
     map_isIndel = map_Boolean()
     map_matchesReference = map_Boolean()
+    all_modules += [map_bases,map_count,map_isCalled,map_isIndel,map_matchesReference,]
+
     count_mappers = [map_gobyGenotypeIndex,
                      map_isCalled,
                      map_isIndel,
@@ -34,8 +43,11 @@ def configure_mappers(ploidy, extra_genotypes, num_samples):
                      map_sequence,
                      map_count,
                      map_count]
+
+
     # below, [2+2+2] is for the booleans mapped with a function:
     reduce_count = Reduce([mapper.embedding_size for mapper in count_mappers], encoding_output_dim=count_dim)
+    all_modules += [reduce_count]
 
     def map_BaseInformation(m):
         return reduce_samples([map_SampleInfo(sample) for sample in m['samples']])
@@ -68,4 +80,4 @@ def configure_mappers(ploidy, extra_genotypes, num_samples):
                    "SampleInfo": map_SampleInfo,
                    "CountInfo": map_CountInfo
                    }
-    return sbi_mappers
+    return sbi_mappers, all_modules

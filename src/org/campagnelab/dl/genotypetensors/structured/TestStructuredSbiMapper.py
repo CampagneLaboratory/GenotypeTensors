@@ -10,8 +10,8 @@ class StructuredSbiMapperTestCase(unittest.TestCase):
         import ujson
         record = ujson.loads(json_string)
         print(record)
-        mappers=configure_mappers(ploidy=2, extra_genotypes=3, num_samples=1)
-        mapper = BatchOfInstances(mappers=mappers)
+        mappers, all_modules=configure_mappers(ploidy=2, extra_genotypes=3, num_samples=1)
+        mapper = BatchOfInstances(mappers=mappers,all_modules=all_modules)
         out = mapper([record])
         print(out)
 

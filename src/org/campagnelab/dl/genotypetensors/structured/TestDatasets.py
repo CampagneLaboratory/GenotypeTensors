@@ -3,6 +3,7 @@ import unittest
 from tqdm import tqdm
 
 from org.campagnelab.dl.genotypetensors.structured.Datasets import StructuredGenotypeDataset
+from org.campagnelab.dl.multithreading.sequential_implementation import DataProvider
 from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenotypingProblem
 
 
@@ -29,6 +30,25 @@ class StructuredDatasetTestCase(unittest.TestCase):
             iterator=iter(loader)
             for _ in range(3):
                 print(next(iterator))
+
+    def test_dataprovider(self):
+        problem = StructuredSbiGenotypingProblem(
+            code="struct_genotyping:/data/LSTM/NA12878_S1_gatk_realigned_filtered-2017-09-14",
+            mini_batch_size=3)
+
+        train_loader_subset = problem.test_loader()
+        data_provider = DataProvider(
+            iterator=zip(train_loader_subset),
+            is_cuda=False,
+            batch_names=["training"],
+            requires_grad={"training": ["sbi"]},
+            volatile={"training": ["metaData"]},
+            recode_functions={
+
+                "sbi": lambda messages: print(messages)
+            }
+        )
+        self.assertIsNotNone(data_provider.__next__())
 
 if __name__ == '__main__':
     unittest.main()

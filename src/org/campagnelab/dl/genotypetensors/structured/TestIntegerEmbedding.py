@@ -43,7 +43,7 @@ class IntegerEmbeddingTestCase(unittest.TestCase):
         map_b = MeanOfList()
 
         messages = [Message(12, [1, 5, 4]), Message(1, [2, 4, 1])]
-        mapper = BatchOfInstances(mappers=mappers)
+        mapper = BatchOfInstances(mappers=mappers,all_modules=[map_a,map_b])
         out = mapper(messages)
         self.assertEquals(out.size(), (2, 4))
 
@@ -72,7 +72,7 @@ class IntegerEmbeddingTestCase(unittest.TestCase):
             map_b = MeanOfList()
 
             messages = [Message(12, [1, 5, 4]), Message(1, [2, 4, 1])]
-            mapper = BatchOfInstances(mappers=mappers)
+            mapper = BatchOfInstances(mappers=mappers,all_modules=[map_a,map_b])
             out = mapper(messages)
             self.assertEquals(out.size(), (2, 3))
             print(out)

@@ -1,6 +1,6 @@
 import torch
 from torch.autograd import Variable
-from torch.nn import Module, Embedding, LSTM, Linear
+from torch.nn import Module, Embedding, LSTM, Linear, ModuleList
 
 
 class StructuredEmbedding(Module):
@@ -104,13 +104,14 @@ class Dispatcher():
 
 class BatchOfInstances(Module):
     """Takes a list of structure instances and produce a tensor of size batch x embedding dim of each instance."""
-    def __init__(self,mappers):
+    def __init__(self,mappers, all_modules):
         """
 
         :param mappers: a dictionary, mapping message type to its mapper.
         """
         super().__init__()
         self.mappers=Dispatcher(mappers)
+        self.all_modules=ModuleList(all_modules)
 
     def forward(self, instance_list):
         mapped=[self.mappers.dispatch(instance) for instance in instance_list]
