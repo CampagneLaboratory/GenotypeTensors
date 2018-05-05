@@ -3,7 +3,7 @@ import sys
 
 from torchnet.dataset.dataset import Dataset
 
-from org.campagnelab.dl.genotypetensors.SBIToJsonIterator import sbi_json_generator
+from org.campagnelab.dl.genotypetensors.SBIToJsonIterator import sbi_json_generator, SbiToJsonGenerator
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset
 
 
@@ -19,7 +19,7 @@ class StructuredGenotypeDataset(Dataset):
             self.delegate_labels = GenotypeDataset(basename+".vec", vector_names=vector_names,sample_id= sample_id)
         except FileNotFoundError as e:
             raise Exception("Unable to find vec/vecp files with basename "+str(basename))
-        self.delegate_features=JsonGenotypeDataset(len(self.delegate_labels),basename=basename)
+        self.delegate_features=JsonGenotypeDataset(min(max_records,len(self.delegate_labels)),basename=basename)
         self.basename = basename
         self.vector_names = vector_names
         self.sample_id = sample_id
@@ -38,21 +38,26 @@ class JsonGenotypeDataset(Dataset):
         self.length=length
         self.basename=basename
         self.generator=None
+        self.generator_iter=None
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
         if idx==0 or self.generator is None:
-            self.generator=sbi_json_generator(sbi_path=self.basename+".sbi",sort=True)
+            if self.generator is not None:
+                self.generator.close()
+            self.generator = SbiToJsonGenerator(sbi_path=self.basename + ".sbi", sort=True,num_records=self.length)
+            self.generator_iter=iter(self.generator)
             idx=0
         if idx>=self.length:
-            del self.generator
+            self.generator.close()
             raise StopIteration
         else:
-            return next(self.generator)
+            return next(self.generator_iter)
 
     def __del__(self):
         """Destructor for cases when the dataset is used inside an iterator. """
         if self.generator is not None:
+            self.generator.close()
             del self.generator

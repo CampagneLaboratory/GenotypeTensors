@@ -34,7 +34,6 @@ class StructuredSbiGenotypingProblem(SbiProblem):
     """An SBI problem where the tensors are generated from structured messages directly from an SBI, and
     labels are loaded from the vec file. """
 
-    # TODO: overwrite the dataset and loader methods to use StructuredGenotypeDataset
     def name(self):
         return self.basename_prefix() + self.basename
 

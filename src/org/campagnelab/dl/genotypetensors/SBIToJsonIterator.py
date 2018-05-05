@@ -4,6 +4,46 @@ import subprocess
 import sys
 
 
+class SbiToJsonGenerator:
+    def __init__(self, sbi_path, num_records=sys.maxsize, mem="3g", sort=False):
+        self.sbi_path = sbi_path
+        self.num_records = num_records
+        self.mem = mem
+        self.sort = sort
+        self.process = None
+        self.closed = False
+
+    def __enter__(self):
+        print_json_from_sbi_command = ["print-json-from-sbi.sh", self.mem, "-i", self.sbi_path, "-n",
+                                       str(self.num_records)]
+        if self.sort:
+            print_json_from_sbi_command.append("--sort")
+
+        self.process = subprocess.Popen(print_json_from_sbi_command, stdout=subprocess.PIPE)
+
+    def __iter__(self):
+        if self.process is None:
+            self.__enter__()
+
+        for sbi_json_out in self.process.stdout:
+            if self.closed:
+                raise GeneratorExit
+
+            sbi_json_str = sbi_json_out.decode().strip()
+            if not sbi_json_str.startswith("{"):
+                continue
+            yield (ujson.loads(sbi_json_str, precise_float=True))
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.process.kill()
+        self.process = None
+        self.closed = True
+
+    def close(self):
+        if not self.closed:
+            self.__exit__()
+
+
 def sbi_json_generator(sbi_path, num_records=sys.maxsize, mem="3g", sort=False):
     print_json_from_sbi_command = ["print-json-from-sbi.sh", mem, "-i", sbi_path, "-n", str(num_records)]
     if sort:
@@ -13,7 +53,7 @@ def sbi_json_generator(sbi_path, num_records=sys.maxsize, mem="3g", sort=False):
             sbi_json_str = sbi_json_out.decode().strip()
             if not sbi_json_str.startswith("{"):
                 continue
-            yield(ujson.loads(sbi_json_str,precise_float=True))
+            yield (ujson.loads(sbi_json_str, precise_float=True))
 
 
 if __name__ == "__main__":
@@ -27,4 +67,3 @@ if __name__ == "__main__":
     sbi_jsons = sbi_json_generator(args.input_file, args.num_records, args.mem, args.sort)
     for sbi_json in sbi_jsons:
         print(sbi_json)
-

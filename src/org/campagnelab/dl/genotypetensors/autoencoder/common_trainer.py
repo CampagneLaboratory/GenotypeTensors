@@ -350,6 +350,7 @@ class CommonTrainer:
         with weights that correct class imbalances.
         """
         if class_frequencies is None:
+
             train_loader_subset = self.problem.train_loader_subset_range(0, min(self.args.num_estimate_class_frequencies,
                                                                                 min(100000, self.args.num_training)))
             data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset), is_cuda=False,
@@ -357,10 +358,10 @@ class CommonTrainer:
                                                             volatile={"training": self.problem.get_vector_names()},
                                                             )
 
-            class_frequencies = {}  # one frequency vector per output_name
+            class_frequencies = {}
             done = False
             for batch_idx, (_, data_dict) in enumerate(data_provider):
-                if done:
+                if batch_idx*self.mini_batch_size>self.args.num_estimate_class_frequencies:
                     break
                 for output_name in self.problem.get_output_names():
                     target_s = data_dict["training"][output_name]
