@@ -45,7 +45,7 @@ if __name__ == '__main__':
     with open("args-{}".format(args.checkpoint_key), "w") as args_file:
         args_file.write(" ".join(sys.argv + ["--seed ", str(args.seed)]))
 
-    use_cuda = torch.cuda.is_available()
+    use_cuda = torch.cuda.is_available() and not args.no_cuda
     is_parallel = False
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
