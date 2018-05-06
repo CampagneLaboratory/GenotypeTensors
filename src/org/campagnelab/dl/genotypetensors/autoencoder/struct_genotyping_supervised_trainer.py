@@ -2,6 +2,7 @@ import concurrent
 from concurrent.futures import ThreadPoolExecutor
 
 import torch
+from torch.backends import cudnn
 from torch.nn import MultiLabelSoftMarginLoss, Module
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
@@ -94,6 +95,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
             }
         )
+        cudnn.benchmark = False
         try:
 
             for batch_idx, (_, data_dict) in enumerate(data_provider):
