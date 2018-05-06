@@ -2,14 +2,32 @@ import torch
 from torch.autograd import Variable
 from torch.nn import Module
 
-from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, IntegerModel, map_Boolean, RNNOfList
+from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, IntegerModel, map_Boolean, RNNOfList, \
+    StructuredEmbedding
 
+
+class MapSequence(StructuredEmbedding):
+    def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1,bases=('A', 'C', 'T', 'G', '-','N')):
+        super().__init__(embedding_size=hidden_size)
+        self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=hidden_size,
+                                      num_layers=num_layers)
+        max_base_index = 0
+        for base in bases:
+            max_base_index = max(ord(base[0]), max_base_index)
+        self.map_bases = IntegerModel(distinct_numbers=(max_base_index + 1), embedding_size=mapped_base_dim)
+
+    def forward(self, sequence_field,cuda=None):
+        return self.map_sequence(self.map_bases(list([ord(b) for b in sequence_field]), cuda), cuda)
 
 class MapBaseInformation(Module):
     def __init__(self, sample_mapper, sample_dim, num_samples):
         super().__init__()
         self.sample_mapper = sample_mapper
-        self.reduce_samples = Reduce([sample_dim] * num_samples, encoding_output_dim=sample_dim)
+        sequence_output_dim = 64
+        bases = ('A', 'C', 'T', 'G', '-', 'N')
+        self.reduce_samples = Reduce([sequence_output_dim]+[sample_dim] * num_samples, encoding_output_dim=sample_dim)
+
+        self.map_genomic_context = MapSequence(hidden_size=sequence_output_dim,bases=bases)
         self.num_samples = num_samples
 
     def forward(self, input, cuda=None):
@@ -17,7 +35,7 @@ class MapBaseInformation(Module):
         if cuda is None:
             cuda = next(self.parameters()).data.is_cuda
 
-        return self.reduce_samples(
+        return self.reduce_samples([self.map_genomic_context(input['genomicSequenceContext'])]+
             [self.sample_mapper(sample, cuda) for sample in input['samples'][0:self.num_samples]], cuda)
 
 
@@ -36,19 +54,15 @@ class MapSampleInfo(Module):
 class MapCountInfo(Module):
     def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=4):
         super().__init__()
-        self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=64, num_layers=1)
+        self.map_sequence = MapSequence(bases = ['A', 'C', 'T', 'G', '-'],hidden_size=count_dim,
+                                        mapped_base_dim=mapped_base_dim)
         self.map_gobyGenotypeIndex = IntegerModel(distinct_numbers=100, embedding_size=mapped_genotype_index_dim)
 
-        bases = ['A', 'C', 'T', 'G', '-']
-        max_base_index = 0
-        for base in bases:
-            max_base_index = max(ord(base[0]), max_base_index)
-        self.map_bases = IntegerModel(distinct_numbers=(max_base_index + 1), embedding_size=mapped_base_dim)
+
         self.map_count = IntegerModel(distinct_numbers=100000, embedding_size=mapped_count_dim)
         self.map_boolean = map_Boolean()
 
         count_mappers = [self.map_gobyGenotypeIndex,
-                         self.map_boolean,  # isCalled
                          self.map_boolean,  # isIndel
                          self.map_boolean,  # matchesReference
                          self.map_sequence,
@@ -61,17 +75,17 @@ class MapCountInfo(Module):
 
     def forward(self, c, cuda=None):
         mapped_gobyGenotypeIndex = self.map_gobyGenotypeIndex([c['gobyGenotypeIndex']], cuda)
-        mapped_isCalled = self.map_boolean(c['isCalled'], cuda)
+        # Do not map isCalled, it is a field that contains the truth and is used to calculate the label.
+
         mapped_isIndel = self.map_boolean(c['isIndel'], cuda)
         mapped_matchesReference = self.map_boolean(c['matchesReference'], cuda)
 
-        mapped_from = self.map_sequence(self.map_bases(list([ord(b) for b in c['fromSequence']]), cuda), cuda)
-        mapped_to = self.map_sequence(self.map_bases(list([ord(b) for b in c['toSequence']]), cuda), cuda)
+        mapped_from = self.map_sequence(c['fromSequence'])
+        mapped_to = self.map_sequence( c['toSequence'])
         mapped_genotypeCountForwardStrand = self.map_count([c['genotypeCountForwardStrand']], cuda)
         mapped_genotypeCountReverseStrand = self.map_count([c['genotypeCountReverseStrand']], cuda)
 
         return self.reduce_count([mapped_gobyGenotypeIndex,
-                                  mapped_isCalled,
                                   mapped_isIndel,
                                   mapped_matchesReference,
                                   mapped_from,
