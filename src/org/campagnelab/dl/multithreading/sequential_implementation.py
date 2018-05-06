@@ -143,7 +143,8 @@ class CpuGpuDataProvider(DataProvider):
             batch = batch_data[batch_name]
             for var_name in batch.keys():
                 if not self.fake_gpu_on_cpu:
-                    batch[var_name] = batch[var_name].cuda()
+                    if hasattr(batch[var_name],"cuda"):
+                        batch[var_name] = batch[var_name].cuda()
         self.gpu_batches_queue.put((batch_indices, batch_data), block=True)
 
 
