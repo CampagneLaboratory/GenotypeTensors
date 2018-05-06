@@ -15,14 +15,13 @@ class SbiToJsonGenerator:
         self.closed = False
 
     def __enter__(self):
-        print_json_from_sbi_command = ["print-json-from-sbi.sh", self.mem, "-i", self.sbi_path, "-n",
+        print_json_from_sbi_command = ["sbi-to-json.sh", self.mem, "-i", self.sbi_path, "-n",
                                        str(self.num_records)]
         if self.sort:
             print_json_from_sbi_command.append("--sort")
 
         self.process = subprocess.Popen(print_json_from_sbi_command, stdout=subprocess.PIPE,
-                                        bufsize=1000*1024*1024) # Buffer for PIPE.
-
+                                        bufsize=4096*30)
     def __iter__(self):
         if self.process is None:
             self.__enter__()
@@ -49,7 +48,7 @@ class SbiToJsonGenerator:
 
 
 def sbi_json_generator(sbi_path, num_records=sys.maxsize, mem="3g", sort=False):
-    print_json_from_sbi_command = ["print-json-from-sbi.sh", mem, "-i", sbi_path, "-n", str(num_records)]
+    print_json_from_sbi_command = ["sbi-to-json.sh", mem, "-i", sbi_path, "-n", str(num_records)]
     if sort:
         print_json_from_sbi_command.append("--sort")
     with subprocess.Popen(print_json_from_sbi_command, stdout=subprocess.PIPE) as print_json_from_sbi_subprocess:
