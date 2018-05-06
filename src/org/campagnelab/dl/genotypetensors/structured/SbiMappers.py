@@ -21,10 +21,10 @@ class MapSequence(StructuredEmbedding):
 
 
 class MapBaseInformation(Module):
-    def __init__(self, sample_mapper, sample_dim, num_samples,sequence_output_dim=64):
+    def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64):
         super().__init__()
         self.sample_mapper = sample_mapper
-        mapped_base_dim=2
+        mapped_base_dim = 2
         bases = ('A', 'C', 'T', 'G', '-', 'N')
         self.map_sequence = MapSequence(hidden_size=sequence_output_dim, bases=bases,
                                         mapped_base_dim=mapped_base_dim)
@@ -37,7 +37,6 @@ class MapBaseInformation(Module):
         if cuda is None:
             cuda = next(self.parameters()).data.is_cuda
 
-
         return self.reduce_samples([self.map_sequence(input['referenceBase'])] +
                                    [self.map_sequence(input['genomicSequenceContext'])] +
                                    [self.sample_mapper(sample, cuda) for sample in
@@ -45,20 +44,18 @@ class MapBaseInformation(Module):
 
 
 class MapSampleInfo(Module):
-    def __init__(self, count_mapper, count_dim,sample_dim, num_counts):
+    def __init__(self, count_mapper, count_dim, sample_dim, num_counts):
         super().__init__()
         self.count_mapper = count_mapper
         self.num_counts = num_counts
-        self.reduce_counts_rnn=RNNOfList(embedding_size=count_dim,hidden_size=sample_dim,num_layers=1)
-        #self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
+        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
 
     def forward(self, input, cuda=None):
-        #return self.reduce_counts([self.count_mapper(count, cuda) for count in input['counts'][0:self.num_counts]],
-        #                          cuda)
-        observed_counts=[count for count in input['counts'] if
-                         (count['genotypeCountForwardStrand']+count['genotypeCountReverseStrand'])>0]
-        return self.reduce_counts_rnn(torch.cat([self.count_mapper(count, cuda) for count in observed_counts],dim=0),
-                                  cuda)
+        observed_counts = [count for count in input['counts'] if
+                           (count['genotypeCountForwardStrand'] + count['genotypeCountReverseStrand']) > 0]
+        return self.reduce_counts([self.count_mapper(count, cuda) for count in
+                                   observed_counts[0:self.num_counts]],
+                                  pad_missing=True, cuda=cuda)
 
 
 class MapCountInfo(Module):
@@ -104,15 +101,17 @@ class MapCountInfo(Module):
                                   ], cuda)
 
 
-def configure_mappers(ploidy, extra_genotypes, num_samples,sample_dim=64,count_dim=64):
+def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64):
     """Return a tuple with two elements:
     mapper-dictionary: key is name of message type. value is function to map the message.
     all-modules: list of modules that implement mapping. """
 
     num_counts = ploidy + extra_genotypes
 
-    map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=6, mapped_genotype_index_dim=2)
-    map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,sample_dim=sample_dim)
+    map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=6,
+                                 mapped_genotype_index_dim=2)
+    map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,
+                                   sample_dim=sample_dim)
     map_SbiRecords = MapBaseInformation(sample_mapper=map_SampleInfo, num_samples=num_samples, sample_dim=sample_dim,
                                         sequence_output_dim=count_dim)
 
