@@ -7,7 +7,7 @@ from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, Integer
 
 
 class MapSequence(StructuredEmbedding):
-    def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1,bases=('A', 'C', 'T', 'G', '-','N')):
+    def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N')):
         super().__init__(embedding_size=hidden_size)
         self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=hidden_size,
                                       num_layers=num_layers)
@@ -16,27 +16,32 @@ class MapSequence(StructuredEmbedding):
             max_base_index = max(ord(base[0]), max_base_index)
         self.map_bases = IntegerModel(distinct_numbers=(max_base_index + 1), embedding_size=mapped_base_dim)
 
-    def forward(self, sequence_field,cuda=None):
+    def forward(self, sequence_field, cuda=None):
         return self.map_sequence(self.map_bases(list([ord(b) for b in sequence_field]), cuda), cuda)
+
 
 class MapBaseInformation(Module):
     def __init__(self, sample_mapper, sample_dim, num_samples):
         super().__init__()
         self.sample_mapper = sample_mapper
         sequence_output_dim = 64
+        mapped_base_dim=2
         bases = ('A', 'C', 'T', 'G', '-', 'N')
-        self.reduce_samples = Reduce([sequence_output_dim]+[sample_dim] * num_samples, encoding_output_dim=sample_dim)
+        self.reduce_samples = Reduce([mapped_base_dim]+[sequence_output_dim] + [sample_dim] * num_samples, encoding_output_dim=sample_dim)
 
-        self.map_genomic_context = MapSequence(hidden_size=sequence_output_dim,bases=bases)
+        self.map_sequence = MapSequence(hidden_size=sequence_output_dim, bases=bases,
+                                        mapped_base_dim=mapped_base_dim)
         self.num_samples = num_samples
 
     def forward(self, input, cuda=None):
-
         if cuda is None:
             cuda = next(self.parameters()).data.is_cuda
 
-        return self.reduce_samples([self.map_genomic_context(input['genomicSequenceContext'])]+
-            [self.sample_mapper(sample, cuda) for sample in input['samples'][0:self.num_samples]], cuda)
+
+        return self.reduce_samples([self.map_sequence.map_bases(list([ord(b) for b in input['referenceBase']]))] +
+                                   [self.map_sequence(input['genomicSequenceContext'])] +
+                                   [self.sample_mapper(sample, cuda) for sample in
+                                    input['samples'][0:self.num_samples]], cuda)
 
 
 class MapSampleInfo(Module):
@@ -54,10 +59,9 @@ class MapSampleInfo(Module):
 class MapCountInfo(Module):
     def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=4):
         super().__init__()
-        self.map_sequence = MapSequence(bases = ['A', 'C', 'T', 'G', '-'],hidden_size=count_dim,
+        self.map_sequence = MapSequence(bases=['A', 'C', 'T', 'G', '-'], hidden_size=count_dim,
                                         mapped_base_dim=mapped_base_dim)
         self.map_gobyGenotypeIndex = IntegerModel(distinct_numbers=100, embedding_size=mapped_genotype_index_dim)
-
 
         self.map_count = IntegerModel(distinct_numbers=100000, embedding_size=mapped_count_dim)
         self.map_boolean = map_Boolean()
@@ -81,7 +85,7 @@ class MapCountInfo(Module):
         mapped_matchesReference = self.map_boolean(c['matchesReference'], cuda)
 
         mapped_from = self.map_sequence(c['fromSequence'])
-        mapped_to = self.map_sequence( c['toSequence'])
+        mapped_to = self.map_sequence(c['toSequence'])
         mapped_genotypeCountForwardStrand = self.map_count([c['genotypeCountForwardStrand']], cuda)
         mapped_genotypeCountReverseStrand = self.map_count([c['genotypeCountReverseStrand']], cuda)
 
@@ -92,7 +96,7 @@ class MapCountInfo(Module):
                                   mapped_to,
                                   mapped_genotypeCountForwardStrand,
                                   mapped_genotypeCountReverseStrand
-                                  ],cuda)
+                                  ], cuda)
 
 
 def configure_mappers(ploidy, extra_genotypes, num_samples):
@@ -103,7 +107,7 @@ def configure_mappers(ploidy, extra_genotypes, num_samples):
     count_dim = 64
     num_counts = ploidy + extra_genotypes
 
-    map_CountInfo =  MapCountInfo(mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=2)
+    map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=2)
     map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim)
     map_SbiRecords = MapBaseInformation(sample_mapper=map_SampleInfo, num_samples=num_samples, sample_dim=sample_dim)
 
