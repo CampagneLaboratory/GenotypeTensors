@@ -49,10 +49,15 @@ class MapSampleInfo(Module):
         super().__init__()
         self.count_mapper = count_mapper
         self.num_counts = num_counts
-        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
+        self.reduce_counts_rnn=RNNOfList(embedding_size=count_dim,hidden_size=sample_dim,num_layers=1)
+        #self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
 
     def forward(self, input, cuda=None):
-        return self.reduce_counts([self.count_mapper(count, cuda) for count in input['counts'][0:self.num_counts]],
+        #return self.reduce_counts([self.count_mapper(count, cuda) for count in input['counts'][0:self.num_counts]],
+        #                          cuda)
+        observed_counts=[count for count in input['counts'] if
+                         (count['genotypeCountForwardStrand']+count['genotypeCountReverseStrand'])>0]
+        return self.reduce_counts_rnn(torch.cat([self.count_mapper(count, cuda) for count in observed_counts],dim=0),
                                   cuda)
 
 
