@@ -15,6 +15,7 @@ from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
+
 def chunks(l, n):
     """Yield successive n-sized chunks from list l.
     example:
@@ -22,6 +23,7 @@ def chunks(l, n):
     """
     for i in range(0, len(l), n):
         yield l[i:i + n]
+
 
 def to_binary(n, max_value):
     for index in list(range(max_value))[::-1]:
@@ -43,12 +45,10 @@ class StructGenotypingModel(Module):
                                                    skip_batch_norm=args.skip_batch_norm)
 
     def map_sbi_messages(self, sbi_records):
-
         features = self.sbi_mapper(sbi_records)
         return features
 
     def forward(self, mapped_features):
-
         return self.classifier(mapped_features)
 
 
@@ -242,7 +242,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
     def create_struct_model(self, problem, args):
 
-        sbi_mappers_configuration = configure_mappers(ploidy=2, extra_genotypes=3, num_samples=1)
+        sbi_mappers_configuration = configure_mappers(ploidy=2, extra_genotypes=2, num_samples=1,
+                                                      count_dim=args.struct_count_dim,
+                                                      sample_dim=args.struct_sample_dim)
         sbi_mapper = BatchOfInstances(*sbi_mappers_configuration)
         # determine feature size:
 

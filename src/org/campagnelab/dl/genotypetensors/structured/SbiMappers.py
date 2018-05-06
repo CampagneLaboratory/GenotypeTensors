@@ -45,11 +45,11 @@ class MapBaseInformation(Module):
 
 
 class MapSampleInfo(Module):
-    def __init__(self, count_mapper, count_dim, num_counts):
+    def __init__(self, count_mapper, count_dim,sample_dim, num_counts):
         super().__init__()
         self.count_mapper = count_mapper
         self.num_counts = num_counts
-        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=count_dim)
+        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
 
     def forward(self, input, cuda=None):
         return self.reduce_counts([self.count_mapper(count, cuda) for count in input['counts'][0:self.num_counts]],
@@ -99,16 +99,15 @@ class MapCountInfo(Module):
                                   ], cuda)
 
 
-def configure_mappers(ploidy, extra_genotypes, num_samples):
+def configure_mappers(ploidy, extra_genotypes, num_samples,sample_dim=64,count_dim=64):
     """Return a tuple with two elements:
     mapper-dictionary: key is name of message type. value is function to map the message.
     all-modules: list of modules that implement mapping. """
-    sample_dim = 16
-    count_dim = sample_dim
+
     num_counts = ploidy + extra_genotypes
 
     map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=6, mapped_genotype_index_dim=2)
-    map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim)
+    map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,sample_dim=sample_dim)
     map_SbiRecords = MapBaseInformation(sample_mapper=map_SampleInfo, num_samples=num_samples, sample_dim=sample_dim,
                                         sequence_output_dim=count_dim)
 
