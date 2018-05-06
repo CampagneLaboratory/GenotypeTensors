@@ -4,7 +4,8 @@ import sys
 from torchnet.dataset.dataset import Dataset
 
 from org.campagnelab.dl.genotypetensors.SBIToJsonIterator import sbi_json_generator, SbiToJsonGenerator
-from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset
+from org.campagnelab.dl.genotypetensors.VectorCache import VectorCache
+from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, CachedGenotypeDataset
 
 
 class StructuredGenotypeDataset(Dataset):
@@ -16,7 +17,12 @@ class StructuredGenotypeDataset(Dataset):
         if vector_names is None:
             vector_names=["softmaxGenotype","metaData"]
         try:
-            self.delegate_labels = GenotypeDataset(basename+".vec", vector_names=vector_names,sample_id= sample_id)
+            if (not CachedGenotypeDataset.file_exists(basename + "-cached.vec")
+                    or not CachedGenotypeDataset.file_exists(basename + "-cached.vecp")):
+                # Write cache:
+                with VectorCache(basename, max_records=max_records) as vector_cache:
+                    vector_cache.write_lines()
+            self.delegate_labels = GenotypeDataset(basename+"-cached.vec", vector_names=vector_names,sample_id= sample_id)
         except FileNotFoundError as e:
             raise Exception("Unable to find vec/vecp files with basename "+str(basename))
         self.delegate_features=JsonGenotypeDataset(min(max_records,len(self.delegate_labels)),basename=basename)
