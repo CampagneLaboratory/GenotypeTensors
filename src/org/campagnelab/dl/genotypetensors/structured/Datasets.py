@@ -37,6 +37,9 @@ class StructuredGenotypeDataset(Dataset):
     def __getitem__(self, idx):
         return (self.delegate_features[idx], self.delegate_labels[idx])
 
+    def close(self):
+        #self.delegate_labels.close()
+        self.delegate_features.close()
 
 class JsonGenotypeDataset(Dataset):
     def __init__(self, length, basename):
@@ -67,3 +70,8 @@ class JsonGenotypeDataset(Dataset):
         if self.generator is not None:
             self.generator.close()
             del self.generator
+
+    def close(self):
+        """Destructor for cases when the dataset is used inside an iterator. """
+        if self.generator is not None:
+            self.generator.close()

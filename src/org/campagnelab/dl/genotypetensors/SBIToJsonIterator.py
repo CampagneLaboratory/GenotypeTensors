@@ -1,4 +1,5 @@
 import argparse
+import threading
 import ujson
 import subprocess
 import sys
@@ -19,7 +20,8 @@ class SbiToJsonGenerator:
         if self.sort:
             print_json_from_sbi_command.append("--sort")
 
-        self.process = subprocess.Popen(print_json_from_sbi_command, stdout=subprocess.PIPE)
+        self.process = subprocess.Popen(print_json_from_sbi_command, stdout=subprocess.PIPE,
+                                        bufsize=1000*1024*1024) # Buffer for PIPE.
 
     def __iter__(self):
         if self.process is None:
@@ -35,7 +37,9 @@ class SbiToJsonGenerator:
             yield (ujson.loads(sbi_json_str, precise_float=True))
 
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
+        self.process.terminate()
         self.process.kill()
+        print("Killing SbiToJsonGenerator process")
         self.process = None
         self.closed = True
 

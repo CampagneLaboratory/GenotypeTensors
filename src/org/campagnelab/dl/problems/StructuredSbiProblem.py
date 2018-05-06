@@ -1,9 +1,11 @@
+import sys
 from pathlib import Path
 
 import copy
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.utils.data.dataloader import default_collate
+from torchnet.dataset.dataset import Dataset
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset, \
@@ -28,6 +30,27 @@ def collate_sbi(batch):
         return example_indices, data_map
     else:
         return default_collate(batch)
+
+class StructSmallerDataset(Dataset):
+    def __init__(self, delegate, new_size):
+        super().__init__()
+        err = "new size must be smaller than or equal to delegate size."
+        assert new_size <= len(delegate) or new_size == sys.maxsize, err
+        self.length = new_size
+        self.delegate = delegate
+
+    def __len__(self):
+        return min(self.length, len(self.delegate))
+
+    def __getitem__(self, idx):
+        if idx < self.length:
+            value = self.delegate[idx]
+            if idx==self.length-1:
+                print("Closing Struct dataset.")
+                self.delegate.close()
+            return value
+        else:
+            assert False, "index is larger than trimmed length."
 
 
 class StructuredSbiGenotypingProblem(SbiProblem):
@@ -65,6 +88,25 @@ class StructuredSbiGenotypingProblem(SbiProblem):
         return iter(DataLoader(dataset=dataset, shuffle=False, batch_size=self.mini_batch_size(),
                                collate_fn=lambda batch: collate_sbi(batch),
                                num_workers=0, pin_memory=False, drop_last=self.drop_last_batch))
+    def loader_subset_range(self,dataset, start, end):
+        """Returns the torch dataloader over the training set, shuffled,
+        but limited to the example range start-end."""
+        if start==0:
+            return self.loader_for_dataset(StructSmallerDataset(delegate=dataset, new_size=end),shuffle=False)
+        else:
+            return self.train_loader_subset(range(start, end))
+
+    def train_loader_subset_range(self, start, end):
+        return self.loader_subset_range(self.train_set(),start,end)
+
+    def validation_loader_subset_range(self, start, end):
+        return self.loader_subset_range(self.validation_set(),start,end)
+
+    def test_loader_subset_range(self, start, end):
+        return self.loader_subset_range(self.test_set(),start,end)
+
+    def unlabeled_loader_subset_range(self, start, end):
+        return self.loader_subset_range(self.unlabeled_set(),start,end)
 
     def get_output_names(self):
         return ["softmaxGenotype"]
