@@ -2,6 +2,8 @@ from queue import Queue, Empty
 from threading import Thread
 
 import time
+
+import torch
 from torch.autograd import Variable
 
 
@@ -66,13 +68,19 @@ class DataProvider:
                         batch_data[var_name] = self.recode_functions[var_name](batch_data[var_name])
                     if isinstance(batch_data[var_name],Variable):
                         # pass-through any batch data that is already a variable:
-                        var_batch=batch_data[var_name]
+                        data_dict[loader_name][var_name]=batch_data[var_name]
                     else:
-                        var_batch = Variable(batch_data[var_name], requires_grad=(var_name in self.requires_grad[loader_name]),
-                                         volatile=(var_name in self.volatile[loader_name]))
-                    if is_cuda:
-                        var_batch = var_batch.cuda(async=False)
-                    data_dict[loader_name][var_name] = var_batch
+                        # if we have a tensor at this point, make it into a pytorch variable:
+                        if torch.is_tensor (batch_data[var_name]):
+                            var_batch = Variable(batch_data[var_name], requires_grad=(var_name in self.requires_grad[loader_name]),
+                                             volatile=(var_name in self.volatile[loader_name]))
+                            if is_cuda:
+                                var_batch = var_batch.cuda(async=False)
+
+                            data_dict[loader_name][var_name] = var_batch
+                        else:
+                            # just pass-through any other type of object:
+                            data_dict[loader_name][var_name] =batch_data[var_name]
             indices_dict[loader_name] = batch_indices
         return indices_dict, data_dict
 

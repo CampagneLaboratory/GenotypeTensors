@@ -15,6 +15,13 @@ from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
+def chunks(l, n):
+    """Yield successive n-sized chunks from list l.
+    example:
+    list(chunks([1,2,3,4,5,6,7],2)) returns:            [[1, 2], [3, 4], [5, 6], [7]]
+    """
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
 
 def to_binary(n, max_value):
     for index in list(range(max_value))[::-1]:
@@ -35,20 +42,9 @@ class StructGenotypingModel(Module):
                                                    dropout_p=args.dropout_probability, ngpus=1, use_selu=args.use_selu,
                                                    skip_batch_norm=args.skip_batch_norm)
 
+    def map_sbi_messages(self, sbi_records):
 
-
-    def map_sbi_messages(self,sbi_records, thread_executor=None):
-        if thread_executor is None:
-            features = self.sbi_mapper(sbi_records)
-        else:
-            def todo(record):
-                features = self.sbi_mapper(record)
-                return features
-            futures=[]
-            for record in sbi_records:
-                futures += [thread_executor.submit(todo, [record])]
-            concurrent.futures.wait(futures)
-            features = torch.cat([future.result() for future in futures],dim=0)
+        features = self.sbi_mapper(sbi_records)
         return features
 
     def forward(self, mapped_features):
@@ -62,7 +58,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
     def __init__(self, args, problem, use_cuda):
         super().__init__(args, problem, use_cuda)
         self.criterion_classifier = None
-        self.thread_executor=ThreadPoolExecutor(max_workers=args.num_workers) if args.num_workers > 1 \
+        self.thread_executor = ThreadPoolExecutor(max_workers=args.num_workers) if args.num_workers > 1 \
             else None
 
     def rebuild_criterions(self, output_name, weights=None):
@@ -88,7 +84,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = DataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset),
             is_cuda=self.use_cuda,
             batch_names=["training"],
@@ -96,18 +92,16 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             volatile={"training": ["metaData"]},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
-                "sbi": lambda messages: self.net.map_sbi_messages(messages,
-                                                                  thread_executor=self.thread_executor)
             }
         )
         try:
 
             for batch_idx, (_, data_dict) in enumerate(data_provider):
-                input_s = data_dict["training"]["sbi"]
+                sbi = data_dict["training"]["sbi"]
                 target_s = data_dict["training"]["softmaxGenotype"]
                 metadata = data_dict["training"]["metaData"]
 
-                self.train_one_batch(performance_estimators, batch_idx, input_s, target_s, metadata)
+                self.train_one_batch(performance_estimators, batch_idx, sbi, target_s, metadata)
                 if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                     break
         finally:
@@ -115,7 +109,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
         return performance_estimators
 
-    def train_one_batch(self, performance_estimators, batch_idx, input_s, target_s, metadata):
+    def train_one_batch(self, performance_estimators, batch_idx, sbi, target_s, metadata):
         # outputs used to calculate the loss of the supervised model
         # must be done with the model prior to regularization:
         self.net.train()
@@ -124,6 +118,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
 
+        input_s = self.map_sbi(sbi)
 
         output_s = self.net(input_s)
         output_s_p = self.get_p(output_s)
@@ -146,6 +141,24 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                          performance_estimators.progress_message(
                              ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
 
+    def map_sbi(self, sbi):
+        # process mapping of sbi messages in parallel:
+        if self.thread_executor is not None:
+            def todo(net, records):
+                # print("processing batch")
+                features = net.map_sbi_messages(records)
+                return features
+
+            futures = []
+            records_per_worker = self.args.mini_batch_size // self.args.num_workers
+            for record in chunks(sbi, records_per_worker):
+                futures += [self.thread_executor.submit(todo, self.net, record)]
+            concurrent.futures.wait(futures)
+            input_s = torch.cat([future.result() for future in futures], dim=0)
+        else:
+            input_s = self.net.map_sbi_messages(sbi)
+        return input_s
+
     def get_p(self, output_s):
         # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
         # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
@@ -160,7 +173,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = DataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(validation_loader_subset),
             is_cuda=self.use_cuda,
             batch_names=["validation"],
@@ -168,17 +181,14 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             volatile={
                 "validation": ["sbi", "softmaxGenotype"]
             },
-            recode_functions={
-                "sbi": lambda messages: self.net.map_sbi_messages(messages,
-                                                                  thread_executor=self.thread_executor)
-            }
+
         )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
-                input_s = data_dict["validation"]["sbi"]
+                sbi = data_dict["validation"]["sbi"]
                 target_s = data_dict["validation"]["softmaxGenotype"]
                 self.net.eval()
-                self.test_one_batch(performance_estimators, batch_idx, input_s, target_s, errors=errors)
+                self.test_one_batch(performance_estimators, batch_idx, sbi, target_s, errors=errors)
 
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                     break
@@ -210,10 +220,11 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.test_performance_estimators = performance_estimators
         return performance_estimators
 
-    def test_one_batch(self, performance_estimators, batch_idx, input_s, target_s, metadata=None, errors=None):
+    def test_one_batch(self, performance_estimators, batch_idx, sbi, target_s, metadata=None, errors=None):
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 
+        input_s = self.map_sbi(sbi)
         output_s = self.net(input_s)
         output_s_p = self.get_p(output_s)
 
@@ -239,9 +250,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         import ujson
         record = ujson.loads(json_string)
 
-        mapped_features_size =sbi_mapper([record]).size(1)
+        mapped_features_size = sbi_mapper([record]).size(1)
 
-        output_size=problem.output_size("softmaxGenotype")
-        model= StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size)
+        output_size = problem.output_size("softmaxGenotype")
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size)
         print(model)
         return model
