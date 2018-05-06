@@ -142,7 +142,8 @@ def define_train_auto_encoder_parser():
                         help="If set, train the ADDA encoder to pass-through examples from the training set as unperturbed as possible.")
     parser.add_argument('--num-estimate-class-frequencies', type=int, help='Number of examples to look at to estimate '
                                                                            'class frequencies.', default=100000)
-
+    parser.add_argument('--struct-count-dim', type=int, default=64, help="Dimensionality of the reduced count tensor (used with struct_genotyping only).")
+    parser.add_argument('--struct-sample-dim', type=int, default=64, help="Dimensionality of the reduced sample tensor (used with struct_genotyping only).")
     return parser
 
 def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequencies=None):
