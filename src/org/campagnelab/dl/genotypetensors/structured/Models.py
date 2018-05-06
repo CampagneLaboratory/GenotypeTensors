@@ -85,7 +85,7 @@ class RNNOfList(StructuredEmbedding):
         else:
             return all_outputs.view(1,-1)
 
-class Reduce(Module):
+class Reduce(StructuredEmbedding):
     """ Reduce a list of embedded fields or messages using a feed forward. Requires list to be a constant size """
     def __init__(self,input_dims, encoding_output_dim):
         """
@@ -93,7 +93,7 @@ class Reduce(Module):
         :param input_dims: dimensions of the elements to reduce (list of size the number of elements, integer dimension).
         :param encoding_output_dim: dimension of the reduce output.
         """
-        super().__init__()
+        super().__init__(embedding_size=encoding_output_dim)
         self.encoding_dim=encoding_output_dim
         self.input_dims=input_dims
         sum_input_dims=0
@@ -103,7 +103,20 @@ class Reduce(Module):
         self.linear1=Linear(sum_input_dims, sum_input_dims*2)
         self.linear2=Linear(sum_input_dims*2, encoding_output_dim)
 
-    def forward(self, input_list,cuda):
+    def forward(self, input_list,cuda=None,pad_missing=False):
+        if len(input_list)!=len(self.input_dims) and not pad_missing:
+            raise ValueError("The input_list dimension does not match input_dims, and pad_missing is not specified. ")
+        batch_size=input_list[0].size(0)
+        if pad_missing:
+            index=0
+            while len(input_list)<len(self.input_dims):
+                # pad input list with minibatches of zeros:
+                variable = Variable(torch.zeros(batch_size, self.input_dims[index]))
+                if self.is_cuda(cuda):
+                    variable = variable.cuda(async=True)
+                input_list+=[variable]
+                index+=1
+
         if any([input.dim()!=2 for input in input_list]) or [ input.size(1) for input in input_list] != self.input_dims:
             print("STOP: input dims={} sizes={}".format([input.dim() for input in input_list],
                                                         [input.size() for input in input_list] ))

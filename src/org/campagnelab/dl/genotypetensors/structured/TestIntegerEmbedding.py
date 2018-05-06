@@ -77,7 +77,13 @@ class IntegerEmbeddingTestCase(unittest.TestCase):
             self.assertEquals(out.size(), (2, 3))
             print(out)
 
+    def test_reduce_padding(self):
+        reduce=Reduce(input_dims=[2,2,2], encoding_output_dim=4)
+        map_ints = IntegerModel(distinct_numbers=100, embedding_size=2)
 
+
+        reduce([map_ints([1]),map_ints([2]),map_ints([3])])
+        reduce([map_ints([1]),map_ints([2])],pad_missing=True)
 
 if __name__ == '__main__':
     unittest.main()
