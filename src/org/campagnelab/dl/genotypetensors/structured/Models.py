@@ -30,6 +30,7 @@ class map_Boolean(StructuredEmbedding):
         self.false_value = Variable(torch.FloatTensor([[0, 1]]))
 
     def cuda(self, device=None):
+        super().cuda(device)
         self.true_value = self.true_value.cuda(device)
         self.false_value = self.false_value.cuda(device)
 
@@ -51,6 +52,7 @@ class IntegerModel(StructuredEmbedding):
             self.long_values[value] =self.define_long_variable([value])
 
     def cuda(self, device=None):
+        super().cuda(device)
         for value in range(self.distinct_numbers):
             self.long_values[value] = self.long_values[value].cuda(device,async =True)
 
