@@ -8,153 +8,174 @@ class StructuredEmbedding(Module):
         super().__init__()
         self.embedding_size = embedding_size
 
-    def define_long_variable(self,values,cuda=None):
+    def define_long_variable(self, values, cuda=None):
         variable = Variable(torch.LongTensor(values), requires_grad=False)
         if self.is_cuda(cuda):
-            variable=variable.cuda(async=True)
+            variable = variable.cuda(async=True)
         return variable
 
-    def is_cuda(self,cuda=None):
+    def is_cuda(self, cuda=None):
         """ Return True iff this model is on cuda. """
         if cuda is not None:
             return cuda
         else:
-            cuda =  next(self.parameters()).data.is_cuda
+            cuda = next(self.parameters()).data.is_cuda
         return cuda
+
 
 class map_Boolean(StructuredEmbedding):
     def __init__(self):
         super().__init__(2)
+        self.true_value = Variable(torch.FloatTensor([[1, 0]]))
+        self.false_value = Variable(torch.FloatTensor([[0, 1]]))
 
-    def __call__(self,predicate,cuda=None):
-        variable= Variable(torch.FloatTensor([[1,0]]) if predicate else torch.FloatTensor([[0,1]]))
-        if self.is_cuda(cuda):
-            variable=variable.cuda(async=True)
-        return variable
+    def cuda(self, device=None):
+        self.true_value = self.true_value.cuda(device)
+        self.false_value = self.false_value.cuda(device)
+
+    def __call__(self, predicate, cuda=None):
+        return self.true_value if predicate else self.false_value
+
 
 class IntegerModel(StructuredEmbedding):
     def __init__(self, distinct_numbers, embedding_size):
         super().__init__(embedding_size)
-        self.distinct_numbers=distinct_numbers
+        self.distinct_numbers = distinct_numbers
         self.embedding = Embedding(distinct_numbers, embedding_size)
-        self.embedding.requires_grad=True
+        self.embedding.requires_grad = True
+        # cache values:
+        self.values = {}
+        self.long_values = {}
+        for value in range(0,distinct_numbers):
 
-    def forward(self, values,cuda=None):
+            self.long_values[value] =self.define_long_variable([value])
+
+    def cuda(self, device=None):
+        for value in range(self.distinct_numbers):
+            self.long_values[value] = self.long_values[value].cuda(device,async =True)
+
+    def forward(self, values, cuda=None):
         """Accepts a list of integer values and produces a batch of batch x embedded-value. """
-        assert isinstance(values,list), "values must be a list of integers."
+        assert isinstance(values, list), "values must be a list of integers."
         for value in values:
-            assert value<self.distinct_numbers,"A value is larger than the embedding input allow: "+str(value)
-        return self.embedding(self.define_long_variable(values,cuda))
+            assert value < self.distinct_numbers, "A value is larger than the embedding input allow: " + str(value)
+        return  self.embedding(torch.cat([self.long_values[value] for value in values],dim=0))
+
 
 class MeanOfList(Module):
     def __init__(self):
         super().__init__()
 
     def forward(self, list_of_embeddings):
-        assert isinstance(list_of_embeddings,Variable) or isinstance(list_of_embeddings,torch.FloatTensor),"input must be a Variable or Tensor"
-        num_elements=list_of_embeddings.size(0)
-        return (torch.sum(list_of_embeddings,dim=0)/num_elements).view(1,-1)
-
+        assert isinstance(list_of_embeddings, Variable) or isinstance(list_of_embeddings,
+                                                                      torch.FloatTensor), "input must be a Variable or Tensor"
+        num_elements = list_of_embeddings.size(0)
+        return (torch.sum(list_of_embeddings, dim=0) / num_elements).view(1, -1)
 
 
 class RNNOfList(StructuredEmbedding):
-    def __init__(self,embedding_size,hidden_size,num_layers=1):
+    def __init__(self, embedding_size, hidden_size, num_layers=1):
         super().__init__(hidden_size)
-        self.num_layers=num_layers
-        self.hidden_size=hidden_size
-        self.lstm=LSTM(embedding_size, hidden_size, num_layers, batch_first=True)
+        self.num_layers = num_layers
+        self.hidden_size = hidden_size
+        self.lstm = LSTM(embedding_size, hidden_size, num_layers, batch_first=True)
 
-    def forward(self, list_of_embeddings,cuda=None):
+    def forward(self, list_of_embeddings, cuda=None):
 
-        batch_size=list_of_embeddings.size(0)
-        num_layers=self.num_layers
-        hidden_size=self.hidden_size
-        hidden=Variable(torch.zeros(num_layers, batch_size, hidden_size))
-        memory=Variable(torch.zeros(num_layers, batch_size, hidden_size))
+        batch_size = list_of_embeddings.size(0)
+        num_layers = self.num_layers
+        hidden_size = self.hidden_size
+        hidden = Variable(torch.zeros(num_layers, batch_size, hidden_size))
+        memory = Variable(torch.zeros(num_layers, batch_size, hidden_size))
         if self.is_cuda(cuda):
-            hidden=hidden.cuda(async=True)
-            memory=memory.cuda(async=True)
-        states = (hidden,memory)
+            hidden = hidden.cuda(async=True)
+            memory = memory.cuda(async=True)
+        states = (hidden, memory)
         inputs = list_of_embeddings.view(batch_size, 1, -1)
-        out, states=self.lstm(inputs, states)
+        out, states = self.lstm(inputs, states)
         # return the last output:
-        all_outputs= out.squeeze()
-        if (all_outputs.dim()>1):
+        all_outputs = out.squeeze()
+        if (all_outputs.dim() > 1):
             # return the last output:
-            return all_outputs[-1,:].view(1,-1)
+            return all_outputs[-1, :].view(1, -1)
         else:
-            return all_outputs.view(1,-1)
+            return all_outputs.view(1, -1)
+
 
 class Reduce(StructuredEmbedding):
     """ Reduce a list of embedded fields or messages using a feed forward. Requires list to be a constant size """
-    def __init__(self,input_dims, encoding_output_dim):
+
+    def __init__(self, input_dims, encoding_output_dim):
         """
 
         :param input_dims: dimensions of the elements to reduce (list of size the number of elements, integer dimension).
         :param encoding_output_dim: dimension of the reduce output.
         """
         super().__init__(embedding_size=encoding_output_dim)
-        self.encoding_dim=encoding_output_dim
-        self.input_dims=input_dims
-        sum_input_dims=0
+        self.encoding_dim = encoding_output_dim
+        self.input_dims = input_dims
+        sum_input_dims = 0
         for dim in input_dims:
-            sum_input_dims+=dim
+            sum_input_dims += dim
 
-        self.linear1=Linear(sum_input_dims, sum_input_dims*2)
-        self.linear2=Linear(sum_input_dims*2, encoding_output_dim)
+        self.linear1 = Linear(sum_input_dims, sum_input_dims * 2)
+        self.linear2 = Linear(sum_input_dims * 2, encoding_output_dim)
 
-    def forward(self, input_list,cuda=None,pad_missing=False):
-        if len(input_list)!=len(self.input_dims) and not pad_missing:
+    def forward(self, input_list, cuda=None, pad_missing=False):
+        if len(input_list) != len(self.input_dims) and not pad_missing:
             raise ValueError("The input_list dimension does not match input_dims, and pad_missing is not specified. ")
-        batch_size=input_list[0].size(0)
+        batch_size = input_list[0].size(0)
         if pad_missing:
-            index=0
-            while len(input_list)<len(self.input_dims):
+            index = 0
+            while len(input_list) < len(self.input_dims):
                 # pad input list with minibatches of zeros:
                 variable = Variable(torch.zeros(batch_size, self.input_dims[index]))
                 if self.is_cuda(cuda):
                     variable = variable.cuda(async=True)
-                input_list+=[variable]
-                index+=1
+                input_list += [variable]
+                index += 1
 
-        if any([input.dim()!=2 for input in input_list]) or [ input.size(1) for input in input_list] != self.input_dims:
+        if any([input.dim() != 2 for input in input_list]) or [input.size(1) for input in
+                                                               input_list] != self.input_dims:
             print("STOP: input dims={} sizes={}".format([input.dim() for input in input_list],
-                                                        [input.size() for input in input_list] ))
+                                                        [input.size() for input in input_list]))
         for index, input in enumerate(input_list):
-            assert input.size(1)==self.input_dims[index], "input dimension must match declared for input {} ".format(index)
-        x=torch.cat(input_list,dim=1)
-        x=self.linear1(x)
-        x=torch.nn.functional.relu(x)
+            assert input.size(1) == self.input_dims[index], "input dimension must match declared for input {} ".format(
+                index)
+        x = torch.cat(input_list, dim=1)
+        x = self.linear1(x)
+        x = torch.nn.functional.relu(x)
 
         x = self.linear2(x)
         x = torch.nn.functional.relu(x)
-        return x.view(input_list[0].size(0),self.encoding_dim)
+        return x.view(input_list[0].size(0), self.encoding_dim)
+
 
 class Dispatcher():
     def __init__(self, functions):
-        self.functions=functions
+        self.functions = functions
 
-    def dispatch(self, structure,cuda=None):
+    def dispatch(self, structure, cuda=None):
         type_ = structure['type']
-        function=self.functions[type_]
+        function = self.functions[type_]
 
-        result= function(structure,cuda)
+        result = function(structure, cuda)
         assert result is not None, "mapper for type {} returned None.".format(type_)
         return result
 
+
 class BatchOfInstances(Module):
     """Takes a list of structure instances and produce a tensor of size batch x embedding dim of each instance."""
-    def __init__(self,mappers, all_modules):
+
+    def __init__(self, mappers, all_modules):
         """
 
         :param mappers: a dictionary, mapping message type to its mapper.
         """
         super().__init__()
-        self.mappers=Dispatcher(mappers)
-        self.all_modules=ModuleList(all_modules)
+        self.mappers = Dispatcher(mappers)
+        self.all_modules = ModuleList(all_modules)
 
-    def forward(self, instance_list,cuda=None):
-        mapped=[self.mappers.dispatch(instance,cuda) for instance in instance_list]
-        return torch.cat(mapped,dim=0)
-
-
+    def forward(self, instance_list, cuda=None):
+        mapped = [self.mappers.dispatch(instance, cuda) for instance in instance_list]
+        return torch.cat(mapped, dim=0)
