@@ -91,8 +91,17 @@ class IntegerModel(StructuredEmbedding):
         assert isinstance(values, list), "values must be a list of integers."
         for value in values:
             assert value < self.distinct_numbers, "A value is larger than the embedding input allow: " + str(value)
+        if len(values)>4:
 
-        values=tensor_cache.cache(key=values, tensor_creation_lambda=lambda key: self.define_long_variable(key,cuda))
+            # cache individual values for longer lists:
+            cached_values=[]
+            for value in values:
+                cached_values+=[ tensor_cache.cache(key=[value],
+                                            tensor_creation_lambda=lambda key: self.define_long_variable(key, cuda))]
+            values=torch.cat(cached_values,dim=0)
+        else:
+            # cache the whole list for short ones:
+            values=tensor_cache.cache(key=values, tensor_creation_lambda=lambda key: self.define_long_variable(key,cuda))
         return  self.embedding(values)
 
 
