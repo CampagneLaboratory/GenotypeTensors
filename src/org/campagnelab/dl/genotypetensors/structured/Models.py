@@ -1,6 +1,47 @@
+import threading
+
 import torch
 from torch.autograd import Variable
 from torch.nn import Module, Embedding, LSTM, Linear, ModuleList
+
+
+class TensorCache:
+    def __init__(self):
+        self.cached_tensors = {}
+        self.lock=threading.Lock()
+        self.is_cuda=False
+        self.device=-1
+
+    def cuda(self,device=0):
+        for key in self.cached_tensors.keys():
+            tensor = self.cached_tensors[key]
+            if not tensor.is_cuda:
+                self.cached_tensors[key] = tensor.cuda(device)
+        self.is_cuda=True
+        self.device=device
+
+    def cache(self, key, tensor_creation_lambda):
+        if isinstance(key,list):
+            key=tuple(key)
+        with self.lock:
+
+            if key in self.cached_tensors:
+                return self.cached_tensors[key]
+            else:
+                tensor= tensor_creation_lambda(key)
+                if self.is_cuda:
+                    tensor=tensor.cuda(self.device)
+                self.cached_tensors[key] =tensor
+
+                return tensor
+
+
+class NoCache(TensorCache):
+    def __init__(self):
+        pass
+
+    def cache(self, key, tensor_creation_lambda):
+        return tensor_creation_lambda(key)
 
 
 class StructuredEmbedding(Module):
@@ -29,14 +70,13 @@ class map_Boolean(StructuredEmbedding):
         self.true_value = Variable(torch.FloatTensor([[1, 0]]))
         self.false_value = Variable(torch.FloatTensor([[0, 1]]))
 
-    def cuda(self, device=None):
-        super().cuda(device)
-        self.true_value = self.true_value.cuda(device)
-        self.false_value = self.false_value.cuda(device)
 
-    def __call__(self, predicate, cuda=None):
-        return self.true_value if predicate else self.false_value
+    def __call__(self, predicate, tensor_cache, cuda=None):
 
+        return tensor_cache.cache(key=predicate, tensor_creation_lambda=
+        lambda predicate: Variable(torch.FloatTensor([[1, 0]]))  if predicate else  Variable(torch.FloatTensor([[0, 1]])))
+        #return Variable(value.data,requires_grad=True)
+        #return value
 
 class IntegerModel(StructuredEmbedding):
     def __init__(self, distinct_numbers, embedding_size):
@@ -44,24 +84,16 @@ class IntegerModel(StructuredEmbedding):
         self.distinct_numbers = distinct_numbers
         self.embedding = Embedding(distinct_numbers, embedding_size)
         self.embedding.requires_grad = True
-        # cache values:
-        self.values = {}
-        self.long_values = {}
-        for value in range(0,distinct_numbers):
 
-            self.long_values[value] =self.define_long_variable([value])
-
-    def cuda(self, device=None):
-        super().cuda(device)
-        for value in range(self.distinct_numbers):
-            self.long_values[value] = self.long_values[value].cuda(device,async =True)
-
-    def forward(self, values, cuda=None):
+    def forward(self, values,tensor_cache, cuda=None):
         """Accepts a list of integer values and produces a batch of batch x embedded-value. """
+
         assert isinstance(values, list), "values must be a list of integers."
         for value in values:
             assert value < self.distinct_numbers, "A value is larger than the embedding input allow: " + str(value)
-        return  self.embedding(torch.cat([self.long_values[value] for value in values],dim=0))
+
+        values=tensor_cache.cache(key=values, tensor_creation_lambda=lambda key: self.define_long_variable(key,cuda))
+        return  self.embedding(values)
 
 
 class MeanOfList(Module):
@@ -157,11 +189,11 @@ class Dispatcher():
     def __init__(self, functions):
         self.functions = functions
 
-    def dispatch(self, structure, cuda=None):
+    def dispatch(self, structure, tensor_cache, cuda=None):
         type_ = structure['type']
         function = self.functions[type_]
 
-        result = function(structure, cuda)
+        result = function(structure, tensor_cache=tensor_cache, cuda=cuda)
         assert result is not None, "mapper for type {} returned None.".format(type_)
         return result
 
@@ -178,6 +210,6 @@ class BatchOfInstances(Module):
         self.mappers = Dispatcher(mappers)
         self.all_modules = ModuleList(all_modules)
 
-    def forward(self, instance_list, cuda=None):
-        mapped = [self.mappers.dispatch(instance, cuda) for instance in instance_list]
+    def forward(self, instance_list,tensor_cache, cuda=None):
+        mapped = [self.mappers.dispatch(instance, tensor_cache=tensor_cache,cuda=cuda) for instance in instance_list]
         return torch.cat(mapped, dim=0)

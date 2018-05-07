@@ -7,7 +7,7 @@ from torch.nn import MultiLabelSoftMarginLoss, Module
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
-from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances
+from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances, NoCache, TensorCache
 from org.campagnelab.dl.genotypetensors.structured.SbiMappers import configure_mappers
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
@@ -45,8 +45,8 @@ class StructGenotypingModel(Module):
                                                    dropout_p=args.dropout_probability, ngpus=1, use_selu=args.use_selu,
                                                    skip_batch_norm=args.skip_batch_norm)
 
-    def map_sbi_messages(self, sbi_records):
-        features = self.sbi_mapper(sbi_records)
+    def map_sbi_messages(self, sbi_records,tensor_cache):
+        features = self.sbi_mapper(sbi_records,tensor_cache=tensor_cache)
         return features
 
     def forward(self, mapped_features):
@@ -61,6 +61,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.criterion_classifier = None
         self.thread_executor = ThreadPoolExecutor(max_workers=args.num_workers) if args.num_workers > 1 \
             else None
+        self.tensor_cache=TensorCache()
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -76,7 +77,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [AccuracyHelper("train_")]
-
+        if self.use_cuda:
+            self.tensor_cache.cuda()
         print('\nTraining, epoch: %d' % epoch)
 
         for performance_estimator in performance_estimators:
@@ -146,19 +148,19 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
     def map_sbi(self, sbi):
         # process mapping of sbi messages in parallel:
         if self.thread_executor is not None:
-            def todo(net, records):
+            def todo(net, records, tensor_cache):
                 # print("processing batch")
-                features = net.map_sbi_messages(records)
+                features = net.map_sbi_messages(records,tensor_cache=tensor_cache)
                 return features
 
             futures = []
             records_per_worker = self.args.mini_batch_size // self.args.num_workers
             for record in chunks(sbi, records_per_worker):
-                futures += [self.thread_executor.submit(todo, self.net, record)]
+                futures += [self.thread_executor.submit(todo, self.net, record,self.tensor_cache)]
             concurrent.futures.wait(futures)
             input_s = torch.cat([future.result() for future in futures], dim=0)
         else:
-            input_s = self.net.map_sbi_messages(sbi)
+            input_s = self.net.map_sbi_messages(sbi,self.tensor_cache)
         return input_s
 
     def get_p(self, output_s):
@@ -254,7 +256,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         import ujson
         record = ujson.loads(json_string)
 
-        mapped_features_size = sbi_mapper([record]).size(1)
+        mapped_features_size = sbi_mapper([record],tensor_cache=NoCache()).size(1)
 
         output_size = problem.output_size("softmaxGenotype")
         model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size)
