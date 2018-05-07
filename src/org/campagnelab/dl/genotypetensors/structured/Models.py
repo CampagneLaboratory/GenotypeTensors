@@ -26,14 +26,14 @@ class TensorCache:
         with self.lock:
 
             if key in self.cached_tensors:
-                return self.cached_tensors[key]
+                tensor= self.cached_tensors[key]
             else:
                 tensor= tensor_creation_lambda(key)
                 if self.is_cuda:
                     tensor=tensor.cuda(self.device)
                 self.cached_tensors[key] =tensor
-
-                return tensor
+            return Variable(tensor.data,requires_grad=tensor.requires_grad, volatile=tensor.volatile)
+            #return tensor
 
 
 class NoCache(TensorCache):
