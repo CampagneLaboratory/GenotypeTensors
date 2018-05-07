@@ -134,7 +134,7 @@ class MapCountInfo(Module):
                                   tensor_cache=tensor_cache,
                                   cuda=cuda, nf_name=nf_name)]
             else:
-                mapped+=Variable(torch.zeros(1,mapper.embedding_size),requires_grad=True)
+                mapped+=[Variable(torch.zeros(1,mapper.embedding_size),requires_grad=True)]
         return self.reduce_count(mapped, cuda)
 
 
