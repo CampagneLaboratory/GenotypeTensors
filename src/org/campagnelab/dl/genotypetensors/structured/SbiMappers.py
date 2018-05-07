@@ -70,7 +70,12 @@ class MapCountInfo(Module):
         self.map_count = IntegerModel(distinct_numbers=100000, embedding_size=mapped_count_dim)
         self.map_boolean = map_Boolean()
 
-        self.frequency_list_mapper = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_base_qual = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_num_var = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_mapping_qual = MapNumberWithFrequencyList(distinct_numbers=100)
+        self.frequency_list_mapper_distance_to = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_aligned_lengths = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_read_indices = MapNumberWithFrequencyList(distinct_numbers=1000)
 
         count_mappers = [self.map_gobyGenotypeIndex,
                          self.map_boolean,  # isIndel
@@ -78,9 +83,24 @@ class MapCountInfo(Module):
                          self.map_sequence,
                          self.map_sequence,
                          self.map_count,
-                         self.map_count,
-                         self.frequency_list_mapper,
-                         self.frequency_list_mapper]
+                         self.map_count]
+
+        self.nf_names_mappers = [('qualityScoresForwardStrand', self.frequency_list_mapper_base_qual),
+                                 ('qualityScoresReverseStrand', self.frequency_list_mapper_base_qual),
+                                 ('distanceToStartOfRead', self.frequency_list_mapper_distance_to),
+                                 ('distanceToEndOfRead', self.frequency_list_mapper_distance_to),  # OK
+                                 ('readIndicesReverseStrand', self.frequency_list_mapper_read_indices),  # OK
+                                 ('readIndicesForwardStrand', self.frequency_list_mapper_read_indices),  # OK
+                                 # 'distancesToReadVariationsForwardStrand', #Wrong
+                                 # 'distancesToReadVariationsReverseStrand', #Wrong
+                                 ('targetAlignedLengths', self.frequency_list_mapper_aligned_lengths),
+                                 ('queryAlignedLengths', self.frequency_list_mapper_aligned_lengths),  # OK
+                                 ('numVariationsInReads', self.frequency_list_mapper_num_var),  # OK
+                                 ('readMappingQualityForwardStrand', self.frequency_list_mapper_mapping_qual),  # OK
+                                 ('readMappingQualityReverseStrand', self.frequency_list_mapper_mapping_qual)  # OK
+                                 ]
+        for nf_name, mapper in self.nf_names_mappers:
+            count_mappers += [mapper]
 
         # below, [2+2+2] is for the booleans mapped with a function:
         self.reduce_count = Reduce([mapper.embedding_size for mapper in count_mappers], encoding_output_dim=count_dim)
@@ -100,22 +120,20 @@ class MapCountInfo(Module):
         mapped_genotypeCountReverseStrand = self.map_count([c['genotypeCountReverseStrand']], tensor_cache=tensor_cache,
                                                            cuda=cuda)
 
-        mapped_base_quality_forward = self.frequency_list_mapper(c['qualityScoresForwardStrand'],
-                                                                 tensor_cache=tensor_cache,
-                                                                 cuda=cuda)
-        mapped_base_quality_reverse = self.frequency_list_mapper(c['qualityScoresReverseStrand'],
-                                                                 tensor_cache=tensor_cache,
-                                                                 cuda=cuda)
-        return self.reduce_count([mapped_gobyGenotypeIndex,
-                                  mapped_isIndel,
-                                  mapped_matchesReference,
-                                  mapped_from,
-                                  mapped_to,
-                                  mapped_genotypeCountForwardStrand,
-                                  mapped_genotypeCountReverseStrand,
-                                  mapped_base_quality_forward,
-                                  mapped_base_quality_reverse
-                                  ], cuda)
+        mapped = [mapped_gobyGenotypeIndex,
+                  mapped_isIndel,
+                  mapped_matchesReference,
+                  mapped_from,
+                  mapped_to,
+                  mapped_genotypeCountForwardStrand,
+                  mapped_genotypeCountReverseStrand]
+
+        for nf_name, mapper in self.nf_names_mappers:
+            mapped += [mapper(c[nf_name],
+                              tensor_cache=tensor_cache,
+                              cuda=cuda, nf_name=nf_name)]
+
+        return self.reduce_count(mapped, cuda)
 
 
 class MapNumberWithFrequencyList(StructuredEmbedding):
@@ -129,16 +147,16 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
         self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim, hidden_size=output_dim,
                                       num_layers=1)
 
-    def forward(self, nwf_list, tensor_cache, cuda=None):
+    def forward(self, nwf_list, tensor_cache, cuda=None, nf_name="unknown"):
 
         if len(nwf_list) > 0:
             mapped_frequencies = [torch.cat([
                 self.map_number([nwf['number']], tensor_cache, cuda).squeeze(),
                 self.map_frequency([nwf['frequency']], tensor_cache, cuda).squeeze()], dim=0) for nwf in nwf_list]
-            mapped_frequencies=torch.stack(mapped_frequencies,dim=0)
-            return self.map_sequence(mapped_frequencies, cuda= cuda)
+            mapped_frequencies = torch.stack(mapped_frequencies, dim=0)
+            return self.map_sequence(mapped_frequencies, cuda=cuda)
         else:
-            return Variable(torch.zeros(1, self.embedding_size),requires_grad=True)
+            return Variable(torch.zeros(1, self.embedding_size), requires_grad=True)
 
 
 def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64):
