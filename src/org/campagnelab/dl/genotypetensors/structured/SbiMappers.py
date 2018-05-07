@@ -130,11 +130,12 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
                                       num_layers=1)
 
     def forward(self, nwf_list, tensor_cache, cuda=None):
+
         if len(nwf_list) > 0:
             mapped_frequencies = [torch.cat([
                 self.map_number([nwf['number']], tensor_cache, cuda).squeeze(),
                 self.map_frequency([nwf['frequency']], tensor_cache, cuda).squeeze()], dim=0) for nwf in nwf_list]
-            mapped_frequencies=torch.cat(mapped_frequencies,dim=0).view(1,-1)
+            mapped_frequencies=torch.stack(mapped_frequencies,dim=0)
             return self.map_sequence(mapped_frequencies, cuda= cuda)
         else:
             return Variable(torch.zeros(1, self.embedding_size),requires_grad=True)
