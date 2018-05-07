@@ -30,6 +30,8 @@ import torch
 # SOFTWARE.
 from org.campagnelab.dl.genotypetensors.autoencoder.PredictModel import PredictModel
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
+from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenotypingProblem
+
 
 def format_nice(n):
     try:
@@ -86,6 +88,9 @@ if args.problem.startswith("genotyping:"):
 elif args.problem.startswith("somatic:"):
     problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem, drop_last_batch=False,
                                 num_workers=args.num_workers)
+elif args.problem.startswith("struct_genotyping:"):
+    problem = StructuredSbiGenotypingProblem(args.mini_batch_size, code=args.problem, drop_last_batch=False,
+                                             num_workers=args.num_workers)
 else:
     print("Unsupported problem: " + args.problem)
     exit(1)
