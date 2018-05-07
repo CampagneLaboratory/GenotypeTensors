@@ -56,7 +56,8 @@ class JsonGenotypeDataset(Dataset):
         if idx==0 or self.generator is None:
             if self.generator is not None:
                 self.generator.close()
-            self.generator = SbiToJsonGenerator(sbi_path=self.basename + ".sbi", sort=True,num_records=self.length)
+            self.generator = SbiToJsonGenerator(sbi_path=self.basename + ".sbi", sort=True,num_records=self.length,
+                                                include_frequencies=True)
             self.generator_iter=iter(self.generator)
             idx=0
         if idx>=self.length:

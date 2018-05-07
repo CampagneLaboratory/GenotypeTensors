@@ -6,19 +6,22 @@ import sys
 
 
 class SbiToJsonGenerator:
-    def __init__(self, sbi_path, num_records=sys.maxsize, mem="3g", sort=False):
+    def __init__(self, sbi_path, num_records=sys.maxsize, mem="3g", sort=False, include_frequencies=False):
         self.sbi_path = sbi_path
         self.num_records = num_records
         self.mem = mem
         self.sort = sort
         self.process = None
         self.closed = False
+        self.include_frequencies=include_frequencies
 
     def __enter__(self):
         print_json_from_sbi_command = ["sbi-to-json.sh", self.mem, "-i", self.sbi_path, "-n",
                                        str(self.num_records)]
         if self.sort:
             print_json_from_sbi_command.append("--sort")
+        if self.include_frequencies:
+            print_json_from_sbi_command.append("--include-frequency")
 
         self.process = subprocess.Popen(print_json_from_sbi_command, stdout=subprocess.PIPE,
                                         bufsize=4096*30)
