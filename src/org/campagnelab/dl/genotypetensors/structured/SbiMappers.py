@@ -1,3 +1,5 @@
+from math import log2, log10
+
 import torch
 from torch.autograd import Variable
 from torch.nn import Module
@@ -139,22 +141,27 @@ class MapCountInfo(Module):
 
 
 class MapNumberWithFrequencyList(StructuredEmbedding):
-    def __init__(self, distinct_numbers=-1, distinct_frequencies=1000, mapped_number_dim=4, mapped_frequency_dim=4,
-                 output_dim=8):
-        super().__init__(embedding_size=output_dim)
+    def __init__(self, distinct_numbers=-1, mapped_number_dim=4):
+        mapped_frequency_dim = 3
+        super().__init__(embedding_size=mapped_number_dim+mapped_frequency_dim)
 
+        output_dim=mapped_number_dim+mapped_frequency_dim
         self.map_number = IntegerModel(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim)
-        self.map_frequency = IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
+        #self.map_frequency = Variable(torch.FloatTensor([[]]))
+        # IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
 
         self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim, hidden_size=output_dim,
                                       num_layers=1)
+    def map_frequency(self,value):
+        """We use three floats to represent each frequency:"""
+        return Variable(torch.FloatTensor([log10(value)-log10(10),log2(value)-log2(10),value/10]),requires_grad=True)
 
     def forward(self, nwf_list, tensor_cache, cuda=None, nf_name="unknown"):
 
         if len(nwf_list) > 0:
             mapped_frequencies = [torch.cat([
                 self.map_number([nwf['number']], tensor_cache, cuda).squeeze(),
-                self.map_frequency([nwf['frequency']], tensor_cache, cuda).squeeze()], dim=0) for nwf in nwf_list]
+                self.map_frequency(nwf['frequency'])], dim=0) for nwf in nwf_list]
             mapped_frequencies = torch.stack(mapped_frequencies, dim=0)
             return self.map_sequence(mapped_frequencies, cuda=cuda)
         else:
