@@ -22,16 +22,18 @@ class TensorCache:
 
     def cache(self, key, tensor_creation_lambda):
         if isinstance(key,list):
-            key=tuple(key)
+            internal_key=tuple(key)
+        else:
+            internal_key=key
         with self.lock:
 
-            if key in self.cached_tensors:
-                tensor= self.cached_tensors[key]
+            if internal_key in self.cached_tensors:
+                tensor= self.cached_tensors[internal_key]
             else:
                 tensor= tensor_creation_lambda(key)
                 if self.is_cuda:
                     tensor=tensor.cuda(self.device)
-                self.cached_tensors[key] =tensor
+                self.cached_tensors[internal_key] =tensor
             return Variable(tensor.data,requires_grad=tensor.requires_grad, volatile=tensor.volatile)
             #return tensor
 
