@@ -35,9 +35,10 @@ enable_recode = False
 
 
 class StructGenotypingModel(Module):
-    def __init__(self, args, sbi_mapper, mapped_features_size, output_size):
+    def __init__(self, args, sbi_mapper, mapped_features_size, output_size,use_cuda):
         super().__init__()
         self.sbi_mapper = sbi_mapper
+        self.use_cuda=use_cuda
         self.classifier = GenotypeSoftmaxClassifer(num_inputs=mapped_features_size, target_size=output_size[0],
                                                    num_layers=args.num_layers,
                                                    reduction_rate=args.reduction_rate,
@@ -46,7 +47,7 @@ class StructGenotypingModel(Module):
                                                    skip_batch_norm=args.skip_batch_norm)
 
     def map_sbi_messages(self, sbi_records,tensor_cache):
-        features = self.sbi_mapper(sbi_records,tensor_cache=tensor_cache)
+        features = self.sbi_mapper(sbi_records,tensor_cache=tensor_cache,cuda=self.use_cuda)
         return features
 
     def forward(self, mapped_features):
@@ -156,7 +157,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             futures = []
             records_per_worker = self.args.mini_batch_size // self.args.num_workers
             for record in chunks(sbi, records_per_worker):
-                futures += [self.thread_executor.submit(todo, self.net, record,self.tensor_cache)]
+                futures += [self.thread_executor.submit(todo, self.net, record,tensor_cache=self.tensor_cache)]
             concurrent.futures.wait(futures)
             input_s = torch.cat([future.result() for future in futures], dim=0)
         else:
@@ -256,9 +257,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         import ujson
         record = ujson.loads(json_string)
 
-        mapped_features_size = sbi_mapper([record],tensor_cache=NoCache()).size(1)
+        mapped_features_size = sbi_mapper([record],tensor_cache=NoCache(),cuda=self.use_cuda).size(1)
 
         output_size = problem.output_size("softmaxGenotype")
-        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size)
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size,self.use_cuda)
         print(model)
         return model
