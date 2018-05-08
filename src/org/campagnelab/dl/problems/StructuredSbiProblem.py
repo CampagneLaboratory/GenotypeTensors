@@ -70,16 +70,18 @@ class StructuredSbiGenotypingProblem(SbiProblem):
         return ["softmaxGenotype", "metaData"]
 
     def train_set(self):
-        return StructuredGenotypeDataset(self.basename + "-train")
+        return StructuredGenotypeDataset(self.basename + "-train", vector_names=["softmaxGenotype","metaData"])
 
     def validation_set(self):
-        return StructuredGenotypeDataset(self.basename + "-validation")
+        return StructuredGenotypeDataset(self.basename + "-validation",vector_names=["softmaxGenotype","metaData"])
 
     def test_set(self):
-        return StructuredGenotypeDataset(self.basename + "-test")
+        return StructuredGenotypeDataset(self.basename + "-test",vector_names=["softmaxGenotype","metaData"])
 
     def unlabeled_set(self):
-        if self.file_exists(self.basename + "-unlabeled.list"):
+        if self.file_exists(self.basename + "-unlabeled.list") or \
+                (self.file_exists(self.basename + "-unlabeled.sbi") and
+                 self.file_exists(self.basename + "-unlabeled.sbip")):
             return StructuredGenotypeDataset(self.basename + "-unlabeled")
         else:
             return EmptyDataset()

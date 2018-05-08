@@ -13,18 +13,17 @@ class StructuredGenotypeDataset(Dataset):
     def __init__(self, sbi_basename, vector_names=None, max_records=sys.maxsize, sample_id=0):
         super().__init__()
         basename, file_extension = os.path.splitext(sbi_basename)
-        # load only the labels and metaData from the vec file:
-        if vector_names is None:
-            vector_names=["softmaxGenotype","metaData"]
-        try:
-            if (not CachedGenotypeDataset.file_exists(basename + "-cached.vec")
-                    or not CachedGenotypeDataset.file_exists(basename + "-cached.vecp")):
-                # Write cache:
-                with VectorCache(basename, max_records=max_records) as vector_cache:
-                    vector_cache.write_lines()
-            self.delegate_labels = GenotypeDataset(basename+"-cached.vec", vector_names=vector_names,sample_id= sample_id)
-        except FileNotFoundError as e:
-            raise Exception("Unable to find vec/vecp files with basename "+str(basename))
+        # load only the labels and metaData from the vec file if vector_names is not None (not present for unlabeled):
+        if vector_names is not None:
+            try:
+                if (not CachedGenotypeDataset.file_exists(basename + "-cached.vec")
+                        or not CachedGenotypeDataset.file_exists(basename + "-cached.vecp")):
+                    # Write cache:
+                    with VectorCache(basename, max_records=max_records) as vector_cache:
+                        vector_cache.write_lines()
+                self.delegate_labels = GenotypeDataset(basename+"-cached.vec", vector_names=vector_names,sample_id= sample_id)
+            except FileNotFoundError as e:
+                raise Exception("Unable to find vec/vecp files with basename "+str(basename))
         self.delegate_features=JsonGenotypeDataset(min(max_records,len(self.delegate_labels)),basename=basename)
         self.basename = basename
         self.vector_names = vector_names
