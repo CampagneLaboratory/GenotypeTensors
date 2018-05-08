@@ -23,8 +23,7 @@ class SbiToJSONTestCase(unittest.TestCase):
             sbi_path = "data/LSTM/NA12878_S1_gatk_realigned_filtered-2017-09-14-test.sbi"
         generator = SbiToJsonGenerator(sbi_path=sbi_path, sort=True, num_records=324, use_cache=True)
         for index, element in enumerate(generator):
-            pass
-            # print(element)
+            print(element)
         generator.close()
 
 
