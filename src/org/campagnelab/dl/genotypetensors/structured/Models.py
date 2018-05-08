@@ -65,6 +65,11 @@ class StructuredEmbedding(Module):
             cuda = next(self.parameters()).data.is_cuda
         return cuda
 
+    def collect_inputs(self,values,phase=0,cuda=None, batcher=None):
+        pass
+
+    def forward_batch(self,batcher, phase=0):
+        pass
 
 class map_Boolean(StructuredEmbedding):
     def __init__(self):
@@ -106,6 +111,11 @@ class IntegerModel(StructuredEmbedding):
             values=tensor_cache.cache(key=values, tensor_creation_lambda=lambda key: self.define_long_variable(key,cuda))
         return  self.embedding(values)
 
+    def collect_inputs(self,values,cuda=None,phase=0, batcher=None):
+        return self.define_long_variable(values, cuda)
+
+    def forward_batch(self,batcher,phase=0):
+        return self.embedding(batcher.get_batched_input(mapper=self))
 
 class MeanOfList(Module):
     def __init__(self):
@@ -116,7 +126,6 @@ class MeanOfList(Module):
                                                                       torch.FloatTensor), "input must be a Variable or Tensor"
         num_elements = list_of_embeddings.size(0)
         return (torch.sum(list_of_embeddings, dim=0) / num_elements).view(1, -1)
-
 
 class RNNOfList(StructuredEmbedding):
     def __init__(self, embedding_size, hidden_size, num_layers=1):
@@ -197,16 +206,35 @@ class Reduce(StructuredEmbedding):
 
 
 class Dispatcher():
-    def __init__(self, functions):
-        self.functions = functions
+    def __init__(self, mappers):
+        self.mappers = mappers
 
     def dispatch(self, structure, tensor_cache, cuda=None):
         type_ = structure['type']
-        function = self.functions[type_]
+        mapper = self.mappers[type_]
 
-        result = function(structure, tensor_cache=tensor_cache, cuda=cuda)
+        result = mapper(structure, tensor_cache=tensor_cache, cuda=cuda)
         assert result is not None, "mapper for type {} returned None.".format(type_)
         return result
+
+    def collect_inputs(self, structure, tensor_cache, cuda=None):
+        type_ = structure['type']
+        mapper = self.mappers[type_]
+
+        inputs= mapper.collect_inputs(structure, tensor_cache=tensor_cache, cuda=cuda)
+        assert inputs is not None, "collect_inputs for mapper associated with type {} returned None.".format(type_)
+
+        return {type_:inputs}
+
+    def forward_batch(self,batcher):
+        """inputs contains one key per type of structure. """
+        mapped_results={}
+        inputs=batcher.get_batched_input(mapper=self)
+        for type_ in inputs.keys():
+            mapper = self.mappers[type_]
+
+            mapped_results[type_] = mapper.forward_batch(inputs[type_])
+        return mapped_results
 
 
 class BatchOfInstances(Module):
@@ -224,3 +252,13 @@ class BatchOfInstances(Module):
     def forward(self, instance_list,tensor_cache, cuda=None):
         mapped = [self.mappers.dispatch(instance, tensor_cache=tensor_cache,cuda=cuda) for instance in instance_list]
         return torch.cat(mapped, dim=0)
+
+    def collect_inputs(self,instance_list,cuda=None):
+        input_list=[]
+        for instance in instance_list:
+            input_list+=[self.mapers.dispatch.collect_inputs(instance,cuda=cuda)]
+        return input_list
+
+    def forward_batch(self,batcher):
+        inputs=batcher.get_batched_input(mapper=self)
+        return self.mappers.forward_batch(torch.cat(inputs, dim=0))
