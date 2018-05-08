@@ -21,18 +21,16 @@ class SbiToJsonGenerator:
         self.json_path = self.sbi_path + "_json_cache.json"
         self.cache_exists = os.path.isfile(self.json_path)
         self.json_cache = None
-
-    def __enter__(self):
-        print_json_from_sbi_command = ["sbi-to-json.sh", self.mem, "-i", self.sbi_path, "-n",
-                                       str(self.num_records)]
+        self.print_json_from_sbi_command = ["sbi-to-json.sh", self.mem, "-i", self.sbi_path, "-n",
+                                            str(self.num_records)]
         if self.sort:
-            print_json_from_sbi_command.append("--sort")
+            self.print_json_from_sbi_command.append("--sort")
         if self.include_frequencies:
-            print_json_from_sbi_command.append("--include-frequency")
+            self.print_json_from_sbi_command.append("--include-frequency")
         if self.use_cache:
             if not self.cache_exists:
                 try:
-                    subprocess.run(print_json_from_sbi_command + ["-o"])
+                    subprocess.run(self.print_json_from_sbi_command + ["-o"], stdout=subprocess.DEVNULL)
                     self.cache_exists = True
                     generated_cache = True
                 except subprocess.CalledProcessError:
@@ -44,11 +42,12 @@ class SbiToJsonGenerator:
             if generated_cache:
                 self.json_cache = open(self.json_path)
         if not self.use_cache:
-            self.process = subprocess.Popen(print_json_from_sbi_command, stdout=subprocess.PIPE, bufsize=4096*30)
+            self.process = subprocess.Popen(self.print_json_from_sbi_command, stdout=subprocess.PIPE, bufsize=4096*30)
+
+    def __enter__(self):
+        return self
 
     def __iter__(self):
-        if (not self.use_cache and self.process is None) or (self.use_cache and self.json_cache is None):
-            self.__enter__()
         if not self.use_cache:
             for sbi_json_out in self.process.stdout:
                 if self.closed:
@@ -59,14 +58,16 @@ class SbiToJsonGenerator:
                     continue
                 yield (ujson.loads(sbi_json_str, precise_float=True))
         else:
-            yield (ujson.loads(self.json_cache.readline(), precise_float=True))
+            for line in self.json_cache:
+                yield ujson.loads(line.strip(), precise_float=True)
 
     def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
         if not self.use_cache:
+            self.process.wait()
+            self.process.stdout.close()
             self.process.terminate()
             self.process.kill()
             print("Killing SbiToJsonGenerator process")
-            self.process = None
         else:
             self.json_cache.close()
         self.closed = True
