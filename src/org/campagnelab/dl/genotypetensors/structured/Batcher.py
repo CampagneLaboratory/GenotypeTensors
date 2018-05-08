@@ -51,10 +51,14 @@ class Batcher:
         """Get the batched input for a mapper."""
         id_mapper = id(mapper)
         mapper_inputs = self.mapper_inputs[id_mapper]
-        if isinstance(mapper_inputs[0],str):
-            if 'pending' in mapper_inputs :
+        if mapper_inputs is None or \
+                isinstance(mapper_inputs,list) and len(mapper_inputs)==0 or \
+            isinstance(mapper_inputs[0],str) and 'pending' in mapper_inputs :
                 return None
-        return torch.stack(mapper_inputs, dim=0)
+        if len(mapper_inputs)==1:
+            return mapper_inputs[0]
+        else:
+            return torch.stack(mapper_inputs, dim=0)
 
     def forward_batch(self, mapper,phase=0):
         id_mapper = id(mapper)
@@ -69,6 +73,8 @@ class Batcher:
         :return:
         """
         batch = self.get_batched_result(mapper)
+        if isinstance(batch,dict):
+            batch=batch[id(mapper)]
         return batch[example_index:example_index + 1].squeeze(0)
 
     def get_batched_result(self, mapper):

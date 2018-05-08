@@ -65,7 +65,7 @@ class StructuredEmbedding(Module):
             cuda = next(self.parameters()).data.is_cuda
         return cuda
 
-    def collect_inputs(self,values,phase=0,cuda=None, batcher=None):
+    def collect_inputs(self,values,phase=0,tensor_cache=NoCache(),cuda=None, batcher=None):
         pass
 
     def forward_batch(self,batcher, phase=0):
@@ -79,11 +79,26 @@ class map_Boolean(StructuredEmbedding):
 
 
     def __call__(self, predicate, tensor_cache, cuda=None):
-
+        assert isinstance(predicate,bool),"predicate must be a boolean"
         return tensor_cache.cache(key=predicate, tensor_creation_lambda=
         lambda predicate: Variable(torch.FloatTensor([[1, 0]]))  if predicate else  Variable(torch.FloatTensor([[0, 1]])))
         #return Variable(value.data,requires_grad=True)
         #return value
+
+    def collect_inputs(self, values, tensor_cache=NoCache(), phase=0, cuda=None, batcher=None):
+        if isinstance(values,list):
+            return {
+                id(self): torch.cat([self(predicate,tensor_cache,cuda) for predicate in values],dim=1)
+            }
+        else:
+            # only one value:
+            return {
+                id(self): self(values, tensor_cache, cuda)
+            }
+    def forward_batch(self, batcher, phase=0):
+
+        return batcher.get_batched_input(mapper=self)[id(self)]
+
 
 class IntegerModel(StructuredEmbedding):
     def __init__(self, distinct_numbers, embedding_size):

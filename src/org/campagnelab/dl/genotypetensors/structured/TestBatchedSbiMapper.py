@@ -5,7 +5,8 @@ from torch.nn import Module
 
 from org.campagnelab.dl.genotypetensors.structured.Batcher import Batcher
 from org.campagnelab.dl.genotypetensors.structured.Models import IntegerModel, NoCache, MeanOfList, BatchOfInstances, \
-    StructuredEmbedding
+    StructuredEmbedding, map_Boolean
+from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo
 
 
 class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
@@ -28,6 +29,28 @@ class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
         self.assertEqual(str(mapper([12], no_cache).data),str(batcher.get_forward_for_example(mapper, 0).data))
         self.assertEqual(str(mapper([3], no_cache).data),str(batcher.get_forward_for_example(mapper, 1).data))
         self.assertEqual(str(mapper([2], no_cache).data),str(batcher.get_forward_for_example(mapper, 2).data))
+
+
+    def test_boolean_batching(self):
+        mapper = map_Boolean()
+        batcher = Batcher()
+        list_of_bools = [True,True,False]
+        no_cache = NoCache()
+
+        example_indices = []
+
+        for value in list_of_bools:
+            example_indices += [batcher.collect_inputs(mapper, value)]
+
+        print("batched input={}".format(batcher.get_batched_input(mapper)))
+        print(batcher.forward_batch(mapper))
+        for example_index in example_indices:
+            print("example {} = {}".format(example_index,batcher.get_forward_for_example(mapper, example_index)))
+
+        self.assertEqual(str(mapper(True, no_cache).data),str(batcher.get_forward_for_example(mapper, 0).data))
+        self.assertEqual(str(mapper(True, no_cache).data),str(batcher.get_forward_for_example(mapper, 1).data))
+        self.assertEqual(str(mapper(False, no_cache).data),str(batcher.get_forward_for_example(mapper, 2).data))
+
 
 
     def test_message(self):
@@ -96,6 +119,18 @@ class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
         self.assertEqual(str(mapper(messages[0],no_cache).data),str(batcher.get_forward_for_example(mapper, example_index=0).data))
         self.assertEqual(str(mapper(messages[1],no_cache).data),str(batcher.get_forward_for_example(mapper, example_index=1).data))
 
+    def test_count(self):
+        json_string = '{"type":"CountInfo","matchesReference":true,"isCalled":true,"isIndel":false,"fromSequence":"A","toSequence":"A","genotypeCountForwardStrand":7,"genotypeCountReverseStrand":32,"gobyGenotypeIndex":0}'
+        import ujson
+        count = ujson.loads(json_string)
 
+        map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=16, mapped_base_dim=6,
+                                     mapped_genotype_index_dim=2)
+        batcher=Batcher()
+        count['count_index']=batcher.collect_inputs(map_CountInfo,count,phase=0)
+        batcher.forward_batch(mapper=map_CountInfo)
+        batcher.collect_inputs(map_CountInfo, count, phase=1)
+        batcher.forward_batch(mapper=map_CountInfo,phase=1)
+        print(batcher.get_forward_for_example(map_CountInfo,0))
 if __name__ == '__main__':
     unittest.main()

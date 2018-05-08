@@ -106,6 +106,11 @@ class MapCountInfo(Module):
 
         # below, [2+2+2] is for the booleans mapped with a function:
         self.reduce_count = Reduce([mapper.embedding_size for mapper in count_mappers], encoding_output_dim=count_dim)
+        batched_count_mappers=[]
+        self.reduce_batched = Reduce([self.map_gobyGenotypeIndex.embedding_size,
+                                      self.map_count.embedding_size * 2,
+                                      self.map_boolean.embedding_size*2,
+                                      self.map_sequence.embedding_size*2,                                      ], encoding_output_dim=count_dim)
 
     def forward(self, c, tensor_cache, cuda=None):
         mapped_gobyGenotypeIndex = self.map_gobyGenotypeIndex([c['gobyGenotypeIndex']], tensor_cache=tensor_cache,
@@ -136,25 +141,76 @@ class MapCountInfo(Module):
                                   tensor_cache=tensor_cache,
                                   cuda=cuda, nf_name=nf_name)]
             else:
-                mapped+=[Variable(torch.zeros(1,mapper.embedding_size),requires_grad=True)]
+                mapped += [Variable(torch.zeros(1, mapper.embedding_size), requires_grad=True)]
         return self.reduce_count(mapped, cuda)
+
+    def cat_inputs(self, mapper, list_of_values, tensor_cache=NoCache(), phase=0, cuda=False, direct_forward=False):
+        mapper_id = id(mapper)
+        results = {mapper_id: []}
+        for value in list_of_values:
+            if direct_forward:
+                mapped = mapper(value, tensor_cache=tensor_cache, cuda=cuda)
+            else:
+                mapped = mapper.collect_inputs(value, tensor_cache=tensor_cache, phase=phase, cuda=cuda)
+
+            results[mapper_id] += [mapped]
+
+        return torch.cat(results[mapper_id], dim=1)
+
+    def collect_inputs(self, c, phase=0, tensor_cache=NoCache(), cuda=None, batcher=None):
+        if phase == 0:
+            return {
+                id(self.map_gobyGenotypeIndex): self.map_gobyGenotypeIndex.collect_inputs(
+                    values=[c['gobyGenotypeIndex']], phase=phase, cuda=cuda),
+                id(self.map_count): self.map_count.collect_inputs(
+                    values=[c['genotypeCountForwardStrand'], c['genotypeCountReverseStrand']], phase=phase, cuda=cuda),
+                id(self.map_boolean): self.map_boolean.collect_inputs(values=[c['isIndel'], c['matchesReference']],
+                                                                      tensor_cache=tensor_cache, phase=phase,
+                                                                      cuda=cuda),
+                id(self.map_sequence): self.cat_inputs(self.map_sequence, [c['fromSequence'], c['toSequence']],
+                                                       tensor_cache=tensor_cache, phase=phase, cuda=cuda,
+                                                       direct_forward=True)
+            }
+        if phase == 1:
+            count_index = c['count_index']
+            current_results=batcher.get_batched_result(self)
+            mapped_goby_genotype_indices = current_results[id(self.map_gobyGenotypeIndex)]
+            mapped_counts = current_results[id(self.map_count)].view(1,-1)
+            mapped_booleans = current_results[id(self.map_boolean)]
+            mapped_sequences = batcher.get_batched_input(mapper=self.map_sequence)[count_index:count_index+1]
+            all_mapped = [mapped_goby_genotype_indices, mapped_counts, mapped_booleans, mapped_sequences]
+            return self.reduce_batched(all_mapped)
+
+
+    def forward_batch(self, batcher, phase=0):
+        if phase==0:
+            return  {
+                    id(self.map_gobyGenotypeIndex): self.map_gobyGenotypeIndex.forward_batch(batcher),
+                    id(self.map_count): self.map_count.forward_batch(batcher),
+                    id(self.map_boolean): self.map_boolean.forward_batch(batcher),
+                    id(self.map_sequence):batcher.get_batched_input(mapper=self.map_sequence)
+                }
+        if phase==1:
+            return {id(self): batcher.get_batched_input(self)}
 
 
 class MapNumberWithFrequencyList(StructuredEmbedding):
     def __init__(self, distinct_numbers=-1, mapped_number_dim=4):
         mapped_frequency_dim = 3
-        super().__init__(embedding_size=mapped_number_dim+mapped_frequency_dim)
+        super().__init__(embedding_size=mapped_number_dim + mapped_frequency_dim)
 
-        output_dim=mapped_number_dim+mapped_frequency_dim
+        output_dim = mapped_number_dim + mapped_frequency_dim
         self.map_number = IntegerModel(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim)
-        #self.map_frequency = Variable(torch.FloatTensor([[]]))
+        # self.map_frequency = Variable(torch.FloatTensor([[]]))
         # IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
 
         self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim, hidden_size=output_dim,
                                       num_layers=1)
-    def map_frequency(self,value):
+
+    def map_frequency(self, value):
         """We use three floats to represent each frequency:"""
-        return Variable(torch.FloatTensor([log10(value)-log10(10),log2(value)-log2(10),value/10]),requires_grad=True)
+        return Variable(torch.FloatTensor([log10(value) - log10(10), log2(value) - log2(10), value / 10]),
+                        requires_grad=True)
 
     def forward(self, nwf_list, tensor_cache, cuda=None, nf_name="unknown"):
 
