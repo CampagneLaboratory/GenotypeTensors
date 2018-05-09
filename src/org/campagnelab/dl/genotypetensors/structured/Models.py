@@ -210,7 +210,7 @@ class Reduce(StructuredEmbedding):
         sum_input_dims = 0
         for dim in input_dims:
             sum_input_dims += dim
-
+        self.sum_input_dims=sum_input_dims
         self.linear1 = Linear(sum_input_dims, sum_input_dims * 2)
         self.linear2 = Linear(sum_input_dims * 2, encoding_output_dim)
 
@@ -236,12 +236,22 @@ class Reduce(StructuredEmbedding):
             assert input.size(1) == self.input_dims[index], "input dimension must match declared for input {} ".format(
                 index)
         x = torch.cat(input_list, dim=1)
+
+        return self.forward_flat_inputs( x)
+
+    def forward_flat_inputs(self,  x):
         x = self.linear1(x)
         x = torch.nn.functional.relu(x)
-
         x = self.linear2(x)
         x = torch.nn.functional.relu(x)
-        return x.view(input_list[0].size(0), self.encoding_dim)
+        return x.view(-1, self.encoding_dim)
+
+    def collect_inputs(self, x, phase=0, tensor_cache=NoCache(), cuda=None, batcher=None):
+        assert x.size(-1)==self.sum_input_dims,"you must provided a pre-padded input to Reduce in batch mode."
+        return batcher.store_inputs(self,x)
+
+    def forward_batch(self, batcher, phase=0):
+        return self.forward_flat_inputs(batcher.get_batched_input(self))
 
 
 class Dispatcher():
@@ -255,26 +265,63 @@ class Dispatcher():
         result = mapper(structure, tensor_cache=tensor_cache, cuda=cuda)
         assert result is not None, "mapper for type {} returned None.".format(type_)
         return result
+    def mapper_id(self, structure):
+        """
+        Return the id of the mapper that will process this instance.
+        :param structure:
+        :return:
+        """
+        type_ = structure['type']
+        mapper = self.mappers[type_]
+        return id(mapper)
 
-    def collect_inputs(self, structure, tensor_cache, cuda=None):
+    def mapper(self, structure):
+        """
+        Return the mapper that will process this instance.
+        :param structure:
+        :return:
+        """
+        type_ = structure['type']
+        mapper = self.mappers[type_]
+        return mapper
+
+    def mapper_for_type(self, type_):
+        """
+        Return the mapper that will process this instance.
+        :param structure:
+        :return:
+        """
+        mapper = self.mappers[type_]
+        return mapper
+
+    def collect_inputs(self, structure, batcher, tensor_cache=NoCache(),phase=0, cuda=None):
         type_ = structure['type']
         mapper = self.mappers[type_]
 
-        inputs= mapper.collect_inputs(structure, tensor_cache=tensor_cache, cuda=cuda)
-        assert inputs is not None, "collect_inputs for mapper associated with type {} returned None.".format(type_)
+        indices= mapper.collect_inputs(structure, phase,batcher=batcher, tensor_cache=tensor_cache, cuda=cuda)
 
-        return {type_:inputs}
+        return indices
 
-    def forward_batch(self,batcher):
+    def forward_batch(self,batcher,phase=0):
         """inputs contains one key per type of structure. """
         mapped_results={}
         inputs=batcher.get_batched_input(mapper=self)
         for type_ in inputs.keys():
             mapper = self.mappers[type_]
 
-            mapped_results[type_] = mapper.forward_batch(inputs[type_])
+            mapped_results[type_] = mapper.forward_batch(inputs[type_],phase=0)
         return mapped_results
 
+
+def store_indices_in_message(mapper, message, indices):
+    mapper_id = id(mapper)
+    if mapper_id not in message['indices']:
+        message['indices'][mapper_id]= []
+    message['indices'][mapper_id] += indices
+
+
+def get_indices_in_message(mapper, message):
+    return message['indices'][id(mapper)]
 
 class BatchOfInstances(Module):
     """Takes a list of structure instances and produce a tensor of size batch x embedding dim of each instance."""
@@ -292,13 +339,17 @@ class BatchOfInstances(Module):
         mapped = [self.mappers.dispatch(instance, tensor_cache=tensor_cache,cuda=cuda) for instance in instance_list]
         return torch.cat(mapped, dim=0)
 
-    def collect_inputs(self,instance_list,cuda=None):
-        input_list=[]
-        for instance in instance_list:
-            input_list+=[self.mapers.dispatch.collect_inputs(instance,cuda=cuda)]
-        return input_list
+    def collect_inputs(self,instance_list,batcher,phase=0, tensor_cache=NoCache(), cuda=None):
+        if phase==0:
+            for instance in instance_list:
+                if 'indices' not in instance:
+                    instance['indices']={}
+                    store_indices_in_message(mapper=self.mappers.mapper(instance),message=instance, indices=
+                        self.mappers.collect_inputs(structure=instance,phase=phase,cuda=cuda,batcher=batcher,tensor_cache=tensor_cache))
 
-    def forward_batch(self,batcher):
+            return None
+
+    def forward_batch(self,batcher,phase=0):
         inputs=batcher.get_batched_input(mapper=self)
-        return self.mappers.forward_batch(torch.cat(inputs, dim=0))
+        return self.mappers.forward_batch(torch.cat(inputs, dim=0),phase=0)
 

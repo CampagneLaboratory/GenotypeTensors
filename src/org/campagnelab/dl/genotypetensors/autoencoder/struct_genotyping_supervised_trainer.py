@@ -7,6 +7,7 @@ from torch.nn import MultiLabelSoftMarginLoss, Module
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
+from org.campagnelab.dl.genotypetensors.structured.Batcher import Batcher
 from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances, NoCache, TensorCache
 from org.campagnelab.dl.genotypetensors.structured.SbiMappers import configure_mappers
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
@@ -35,10 +36,11 @@ enable_recode = False
 
 
 class StructGenotypingModel(Module):
-    def __init__(self, args, sbi_mapper, mapped_features_size, output_size,use_cuda):
+    def __init__(self, args, sbi_mapper, mapped_features_size, output_size,use_cuda,use_batching=True):
         super().__init__()
         self.sbi_mapper = sbi_mapper
         self.use_cuda=use_cuda
+        self.use_batching=use_batching
         self.classifier = GenotypeSoftmaxClassifer(num_inputs=mapped_features_size, target_size=output_size[0],
                                                    num_layers=args.num_layers,
                                                    reduction_rate=args.reduction_rate,
@@ -46,8 +48,21 @@ class StructGenotypingModel(Module):
                                                    dropout_p=args.dropout_probability, ngpus=1, use_selu=args.use_selu,
                                                    skip_batch_norm=args.skip_batch_norm)
 
-    def map_sbi_messages(self, sbi_records,tensor_cache):
-        features = self.sbi_mapper(sbi_records,tensor_cache=tensor_cache,cuda=self.use_cuda)
+    def map_sbi_messages(self, sbi_records,tensor_cache=NoCache()):
+        batcher=Batcher()
+        mapper=self.sbi_mapper.mappers.mapper_for_type("SampleInfo")
+        if self.use_batching:
+            features=None
+            for phase in [0,1,2]:
+                #print("Mapping phase "+str(phase))
+                for record in sbi_records:
+                    for sample in record['samples']:
+                            batcher.collect_inputs(mapper=mapper, example=sample, phase=phase)
+                features=batcher.forward_batch(mapper=mapper, phase=phase)
+
+
+        else:
+            features = self.sbi_mapper(sbi_records,tensor_cache=tensor_cache,cuda=self.use_cuda)
         return features
 
     def forward(self, mapped_features):
@@ -260,6 +275,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         mapped_features_size = sbi_mapper([record],tensor_cache=NoCache(),cuda=self.use_cuda).size(1)
 
         output_size = problem.output_size("softmaxGenotype")
-        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size,self.use_cuda)
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size,self.use_cuda,
+                                      args.use_batching)
         print(model)
         return model

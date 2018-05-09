@@ -11,7 +11,7 @@ from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, Integer
 def store_indices_in_message(mapper, message, indices):
     mapper_id = id(mapper)
     if mapper_id not in message['indices']:
-        message['indices'][mapper_id]= []
+        message['indices'][mapper_id] = []
     message['indices'][mapper_id] += indices
 
 
@@ -80,7 +80,7 @@ class MapSampleInfo(Module):
         """Collect input data for all counts in this sample. """
         if 'indices' not in sample:
             sample['indices'] = {}
-        observed_counts = self.get_observed_counts(sample)
+        observed_counts = self.get_observed_counts(sample)[0:self.num_counts]
         if phase < 2:
 
             for count in observed_counts:
@@ -91,20 +91,32 @@ class MapSampleInfo(Module):
             return []
 
         if phase == 2:
-            list_mapped_counts=[]
+            list_mapped_counts = []
             for count in observed_counts:
                 mapped_count = batcher.get_forward_for_example(self.count_mapper,
-                                                        example_indices=count['indices'][id(self.count_mapper)])
-                list_mapped_counts+=[mapped_count]
-            return batcher.store_inputs(mapper=self, inputs=list_mapped_counts)
+                                                               example_indices=count['indices'][id(self.count_mapper)])
+                list_mapped_counts += [mapped_count]
+            while len(list_mapped_counts) < self.num_counts:
+                # pad the list with zeros:
+                list_mapped_counts += [Variable(torch.zeros(*list_mapped_counts[0].size()), requires_grad=True)]
+            cat_list_mapped_counts = torch.cat(list_mapped_counts, dim=-1)
+
+            store_indices_in_message(mapper=self.reduce_counts, message=sample,
+                                     indices=self.reduce_counts.collect_inputs(cat_list_mapped_counts,
+                                                                 tensor_cache=tensor_cache,
+                                                                 cuda=cuda,
+                                                                 phase=phase,
+                                                                 batcher=batcher))
+            return []
 
     def forward_batch(self, batcher, phase=0):
         """delegate to counts for phases 0 to 1, then reduce the counts to produce the sample."""
         if phase < 2:
             return self.count_mapper.forward_batch(batcher=batcher, phase=phase)
         if phase == 2:
-            my_counts_as_list = batcher.get_batched_input(self)
-            batched_counts = self.reduce_counts(my_counts_as_list, pad_missing=True)
+            my_counts_as_list = batcher.get_batched_input(self.reduce_counts)
+
+            batched_counts = self.reduce_counts.forward_flat_inputs(my_counts_as_list)
             batcher.store_batched_result(self, batched_counts)
             return batched_counts
 

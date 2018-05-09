@@ -3,10 +3,14 @@ import unittest
 import torch
 from torch.nn import Module
 
+from org.campagnelab.dl.genotypetensors.autoencoder.ModelTrainers import define_train_auto_encoder_parser
+from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised_trainer import \
+    StructGenotypingSupervisedTrainer, StructGenotypingModel
 from org.campagnelab.dl.genotypetensors.structured.Batcher import Batcher
 from org.campagnelab.dl.genotypetensors.structured.Models import IntegerModel, NoCache, MeanOfList, BatchOfInstances, \
     StructuredEmbedding, map_Boolean
-from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo, MapSampleInfo
+from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo, MapSampleInfo, configure_mappers
+from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenotypingProblem
 
 
 class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
@@ -184,7 +188,25 @@ class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
         batcher.forward_batch(mapper=mapper, phase=2)
         print(batcher.get_forward_for_example(mapper, 0))
 
+    def test_map_samples_with_model(self):
+        sbi_mappers_configuration = configure_mappers(ploidy=2, extra_genotypes=2, num_samples=1,
+                                                      count_dim=16,
+                                                      sample_dim=32)
+        sbi_mapper = BatchOfInstances(*sbi_mappers_configuration)
+        json_string = '{"type":"SampleInfo","counts":[{"type":"CountInfo","matchesReference":true,"isCalled":true,"isIndel":false,"fromSequence":"A","toSequence":"A","genotypeCountForwardStrand":7,"genotypeCountReverseStrand":32,"gobyGenotypeIndex":0},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"C","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":1,"gobyGenotypeIndex":2}]}'
 
+        # determine feature size:
+        import ujson
+        record = ujson.loads(json_string)
+
+        mapped_features_size = sbi_mapper([record,record],tensor_cache=NoCache(),cuda=False).size(1)
+        problem=StructuredSbiGenotypingProblem(mini_batch_size=2,code="struct_genotyping:/data/struct/CNG-NA12878-softmax-indels")
+        output_size = problem.output_size("softmaxGenotype")
+        parser = define_train_auto_encoder_parser()
+        args = parser.parse_args()
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size,use_cuda=False,
+                                      use_batching=True)
+        print(model.map_sbi_messages(sbi_records=[record]*2))
 
 if __name__ == '__main__':
     unittest.main()

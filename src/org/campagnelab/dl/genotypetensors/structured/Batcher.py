@@ -1,4 +1,5 @@
 import torch
+from torch.autograd import Variable
 
 
 class Batcher:
@@ -12,10 +13,10 @@ class Batcher:
         # a dictionary from mapper id to list of inputs for this mapper:
         self.mapper_inputs = {}
         # a dictionary from mapper id to results of forward pass on a batch:
-        self.batched_results={}
+        self.batched_results = {}
 
-    def store_batched_result(self,mapper, batched_result):
-        self.batched_results[id(mapper)]=batched_result
+    def store_batched_result(self, mapper, batched_result):
+        self.batched_results[id(mapper)] = batched_result
 
     def store_inputs(self, mapper, inputs):
         """
@@ -25,15 +26,16 @@ class Batcher:
         :return: indices of the stored inputs in the batch under construction. These indices can be used to retrieve the
         slice of batched forward results corresponding to these inputs.
         """
+        assert isinstance(inputs,Variable),"Inputs must be of type"
         id_mapper = id(mapper)
         self.initialize_mapper_variables(id_mapper)
         self.mapper_inputs[id_mapper] += [inputs]
-        input_num_values=1
-        current_index=self.example_counter[id_mapper]
+        input_num_values = 1
+        current_index = self.example_counter[id_mapper]
         self.example_counter[id_mapper] += input_num_values
-        return list(range(current_index,current_index+input_num_values))
+        return list(range(current_index, current_index + input_num_values))
 
-    def collect_inputs(self, mapper, example,phase=0):
+    def collect_inputs(self, mapper, example, phase=0):
         """
         Use the mapper on an example to obtain inputs for a batch.
         :param mapper:
@@ -45,9 +47,8 @@ class Batcher:
 
         # keep track of all mappers used:
         self.all_mappers.update([mapper])
-        input_indices_in_batch=mapper.collect_inputs(example,phase=phase,batcher=self)
+        input_indices_in_batch = mapper.collect_inputs(example, phase=phase, batcher=self)
         return input_indices_in_batch
-
 
     def initialize_mapper_variables(self, id_mapper):
         if id_mapper not in self.mapper_inputs.keys():
@@ -58,21 +59,19 @@ class Batcher:
         """Get the batched input for a mapper."""
         id_mapper = id(mapper)
         mapper_inputs = self.mapper_inputs[id_mapper]
-        if mapper_inputs is None or \
-                isinstance(mapper_inputs,list) and len(mapper_inputs)==0 or \
-            isinstance(mapper_inputs[0],str) and 'pending' in mapper_inputs :
-                return None
-        if len(mapper_inputs)==1:
+        if mapper_inputs is None or isinstance(mapper_inputs, list) and len(mapper_inputs) == 0:
+            return None
+
+        if len(mapper_inputs) == 1:
             return mapper_inputs[0]
-        else:
-            if isinstance(mapper_inputs,dict):
-                print("STOP")
+        #else:
+        #    if isinstance(mapper_inputs, list) and all([isinstance(x,list) for x in mapper_inputs]):
+        #        return mapper_inputs
+        return torch.stack(mapper_inputs, dim=0)
 
-            return torch.stack(mapper_inputs, dim=0)
-
-    def forward_batch(self, mapper,phase=0):
+    def forward_batch(self, mapper, phase=0):
         id_mapper = id(mapper)
-        self.batched_results[id_mapper]= mapper.forward_batch(batcher=self,phase=phase)
+        self.batched_results[id_mapper] = mapper.forward_batch(batcher=self, phase=phase)
         return self.batched_results[id_mapper]
 
     def get_forward_for_example(self, mapper, example_indices=None, message=None):
@@ -83,11 +82,11 @@ class Batcher:
         :return:
         """
         if message is not None and example_indices is None:
-            example_indices=message['indices'][id(mapper)]
+            example_indices = message['indices'][id(mapper)]
         assert example_indices is not None, "example_indices is required when message is None."
         batch = self.get_batched_result(mapper)
-        if isinstance(batch,dict):
-            batch=batch[id(mapper)]
+        if isinstance(batch, dict):
+            batch = batch[id(mapper)]
         return batch[example_indices].squeeze(0)
 
     def get_batched_result(self, mapper):
