@@ -206,7 +206,7 @@ class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
         args = parser.parse_args()
         model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size,use_cuda=False,
                                       use_batching=True)
-        print(model.map_sbi_messages(sbi_records=[record]*2))
+        print(model.map_sbi_messages(sbi_records=[record]*2,cuda=True))
 
 if __name__ == '__main__':
     unittest.main()

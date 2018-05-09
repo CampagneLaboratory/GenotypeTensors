@@ -36,11 +36,11 @@ enable_recode = False
 
 
 class StructGenotypingModel(Module):
-    def __init__(self, args, sbi_mapper, mapped_features_size, output_size,use_cuda,use_batching=True):
+    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, use_cuda, use_batching=True):
         super().__init__()
         self.sbi_mapper = sbi_mapper
-        self.use_cuda=use_cuda
-        self.use_batching=use_batching
+        self.use_cuda = use_cuda
+        self.use_batching = use_batching
         self.classifier = GenotypeSoftmaxClassifer(num_inputs=mapped_features_size, target_size=output_size[0],
                                                    num_layers=args.num_layers,
                                                    reduction_rate=args.reduction_rate,
@@ -48,22 +48,22 @@ class StructGenotypingModel(Module):
                                                    dropout_p=args.dropout_probability, ngpus=1, use_selu=args.use_selu,
                                                    skip_batch_norm=args.skip_batch_norm)
 
-    def map_sbi_messages(self, sbi_records,tensor_cache=NoCache()):
-        batcher=Batcher()
-        mapper=self.sbi_mapper.mappers.mapper_for_type("SampleInfo")
+    def map_sbi_messages(self, sbi_records, tensor_cache=NoCache(), cuda=None):
+        batcher = Batcher()
+        mapper = self.sbi_mapper.mappers.mapper_for_type("SampleInfo")
         if self.use_batching:
-            features=None
-            for phase in [0,1,2]:
-                #print("Mapping phase "+str(phase))
+            features = None
+            for phase in [0, 1, 2]:
+                # print("Mapping phase "+str(phase))
                 for record in sbi_records:
                     for sample in record['samples']:
-                            batcher.collect_inputs(mapper=mapper, example=sample, phase=phase,
-                                                   cuda=self.use_cuda, tensor_cache=tensor_cache)
-                features=batcher.forward_batch(mapper=mapper, phase=phase)
+                        batcher.collect_inputs(mapper=mapper, example=sample, phase=phase,
+                                               cuda=cuda, tensor_cache=tensor_cache)
+                features = batcher.forward_batch(mapper=mapper, phase=phase)
 
 
         else:
-            features = self.sbi_mapper(sbi_records,tensor_cache=tensor_cache,cuda=self.use_cuda)
+            features = self.sbi_mapper(sbi_records, tensor_cache=tensor_cache, cuda=self.use_cuda)
         return features
 
     def forward(self, mapped_features):
@@ -78,7 +78,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.criterion_classifier = None
         self.thread_executor = ThreadPoolExecutor(max_workers=args.num_workers) if args.num_workers > 1 \
             else None
-        self.tensor_cache=TensorCache()
+        self.tensor_cache = TensorCache()
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -165,19 +165,20 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
     def map_sbi(self, sbi):
         # process mapping of sbi messages in parallel:
         if self.thread_executor is not None:
-            def todo(net, records, tensor_cache):
+            def todo(net, records, tensor_cache, cuda):
                 # print("processing batch")
-                features = net.map_sbi_messages(records,tensor_cache=tensor_cache)
+                features = net.map_sbi_messages(records, tensor_cache=tensor_cache, cuda=cuda)
                 return features
 
             futures = []
             records_per_worker = self.args.mini_batch_size // self.args.num_workers
             for record in chunks(sbi, records_per_worker):
-                futures += [self.thread_executor.submit(todo, self.net, record,tensor_cache=self.tensor_cache)]
+                futures += [self.thread_executor.submit(todo, self.net, record,
+                                                        tensor_cache=self.tensor_cache, cuda=self.use_cuda)]
             concurrent.futures.wait(futures)
             input_s = torch.cat([future.result() for future in futures], dim=0)
         else:
-            input_s = self.net.map_sbi_messages(sbi,self.tensor_cache)
+            input_s = self.net.map_sbi_messages(sbi, self.tensor_cache, cuda=self.use_cuda)
         return input_s
 
     def get_p(self, output_s):
@@ -273,10 +274,10 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         import ujson
         record = ujson.loads(json_string)
 
-        mapped_features_size = sbi_mapper([record],tensor_cache=NoCache(),cuda=self.use_cuda).size(1)
+        mapped_features_size = sbi_mapper([record], tensor_cache=NoCache(), cuda=self.use_cuda).size(1)
 
         output_size = problem.output_size("softmaxGenotype")
-        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size,self.use_cuda,
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.use_cuda,
                                       args.use_batching)
         print(model)
         return model
