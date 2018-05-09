@@ -62,7 +62,7 @@ class MapSampleInfo(Module):
                                   pad_missing=True, cuda=cuda)
 
 
-class MapCountInfo(Module):
+class MapCountInfo(StructuredEmbedding):
     def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=4):
         super().__init__()
         self.map_sequence = MapSequence(bases=['A', 'C', 'T', 'G', '-'], hidden_size=count_dim,
@@ -182,7 +182,7 @@ class MapCountInfo(Module):
             mapped_counts = current_results[id(self.map_count)]
             mapped_booleans = current_results[id(self.map_boolean)]
 
-            # mapped_sequences are not currently batchable, so we store the input from the prior phase:
+            # mapped_sequences are not currently batchable, so we get the input from the prior phase:
             mapped_sequences = batcher.get_batched_input(mapper=self.map_sequence)
 
             all_mapped = [mapped_goby_genotype_indices, mapped_counts, mapped_booleans, mapped_sequences]

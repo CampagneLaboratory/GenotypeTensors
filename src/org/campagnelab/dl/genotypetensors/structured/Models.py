@@ -66,9 +66,29 @@ class StructuredEmbedding(Module):
         return cuda
 
     def collect_inputs(self,values,phase=0,tensor_cache=NoCache(),cuda=None, batcher=None):
+        """
+        Obtain inputs from instances (values). The method will be called for values in a set until all inputs are
+        collected for the set. After all inputs are collected, a forward batch call can be made on the mapper to
+        calculate the forward of the batch. If additional mapping needs to be performed from the batched result, a
+        second phase of collect_inputs and forward_batch may be done by calling these methods with phase=1, and so
+        on as needed.
+        :param values: instances to map. Accepts a list of instances for convenience.
+        :param phase: An integer, 0 for first phase, incremental values for additional phases.
+        :param tensor_cache: A cache to obtain new tensors.
+        :param cuda: Whether the tensors must be moved to CUDA (default: no).
+        :param batcher: The batcher can be used to retrieve batched results or inputs produced at an earlier phase.
+        :return: A dict where keys are the id of the mappers that produced the input. Each value in the dict must be
+            a list of inputs (Variables).
+        """
         pass
 
     def forward_batch(self,batcher, phase=0):
+        """
+        Do a forward on batch. Will be called once per mapper per phase.
+        :param batcher: The batcher holds the batches. Use get_batched_input to obtain a particular batch.
+        :param phase: An integer, from 0 to n, indicating the phase of mapping.
+        :return: The batched result of the forward phase, for an entire set of instances.
+        """
         pass
 
 class map_Boolean(StructuredEmbedding):
