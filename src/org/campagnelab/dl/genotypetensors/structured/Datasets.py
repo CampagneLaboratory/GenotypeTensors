@@ -14,6 +14,7 @@ class StructuredGenotypeDataset(Dataset):
         super().__init__()
         basename, file_extension = os.path.splitext(sbi_basename)
         # load only the labels and metaData from the vec file if vector_names is not None (not present for unlabeled):
+        self.delegate_labels = None
         if vector_names is not None:
             try:
                 if (not CachedGenotypeDataset.file_exists(basename + "-cached.vec")
@@ -24,17 +25,20 @@ class StructuredGenotypeDataset(Dataset):
                 self.delegate_labels = GenotypeDataset(basename+"-cached.vec", vector_names=vector_names,sample_id= sample_id)
             except FileNotFoundError as e:
                 raise Exception("Unable to find vec/vecp files with basename "+str(basename))
-        self.delegate_features=JsonGenotypeDataset(min(max_records,len(self.delegate_labels)),basename=basename)
+        # self.delegate_features=JsonGenotypeDataset(min(max_records,len(self.delegate_labels)),basename=basename)
+        self.delegate_features = JsonGenotypeDataset(max_records, basename=basename)
         self.basename = basename
         self.vector_names = vector_names
         self.sample_id = sample_id
         self.max_records = max_records
 
     def __len__(self):
-        return len(self.delegate_labels)
+        return self.max_records
 
     def __getitem__(self, idx):
-        return (self.delegate_features[idx], self.delegate_labels[idx])
+        if self.delegate_labels is not None:
+            return self.delegate_features[idx], self.delegate_labels[idx]
+        return self.delegate_features[idx],
 
     def close(self):
         #self.delegate_labels.close()
@@ -56,7 +60,7 @@ class JsonGenotypeDataset(Dataset):
             if self.generator is not None:
                 self.generator.close()
             self.generator = SbiToJsonGenerator(sbi_path=self.basename + ".sbi", sort=True,num_records=self.length,
-                                                include_frequencies=True)
+                                                include_frequencies=True, use_cache=True)
             self.generator_iter=iter(self.generator)
             idx=0
         if idx>=self.length:

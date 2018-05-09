@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from org.campagnelab.dl.genotypetensors.VectorWriterBinary import VectorWriterBinary
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import DispatchDataset
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
+from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenotypingProblem
 from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
 from multiprocessing import Lock
@@ -31,6 +32,8 @@ class PredictModel:
         self.normalize_function = lambda x: normalize_mean_std(x, problem_mean=problem_mean,
                                                                problem_std=problem_std) if normalize \
             else x
+        self.col = "sbi" if isinstance(self.problem, StructuredSbiGenotypingProblem) else "input"
+        self.recode_fn = {"input": self.normalize_function} if self.col == "input" else None
 
     def predict(self, iterator, output_filename, max_examples=sys.maxsize):
         self.model.eval()
@@ -39,10 +42,8 @@ class PredictModel:
             data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
                                                             is_cuda=self.use_cuda,
                                                             batch_names=["unlabeled"],
-                                                            volatile={"unlabeled": ["input"]},
-                                                            recode_functions={
-                                                                "input": self.normalize_function
-                                                            },
+                                                            volatile={"unlabeled": [self.col]},
+                                                            recode_functions=self.recode_fn,
                                                             fake_gpu_on_cpu=False
                                                             )
 
@@ -50,10 +51,8 @@ class PredictModel:
             data_provider = DataProvider(iterator=zip(iterator),
                                          is_cuda=self.use_cuda,
                                          batch_names=["unlabeled"],
-                                         volatile={"unlabeled": ["input"]},
-                                         recode_functions={
-                                             "input": self.normalize_function
-                                         }
+                                         volatile={"unlabeled": [self.col]},
+                                         recode_functions=self.recode_fn
                                          )
         else:
             raise Exception("Unrecognized processing type {}".format(self.processing_type))
@@ -63,8 +62,9 @@ class PredictModel:
                                 domain_descriptor=self.domain_descriptor, feature_mapper=self.feature_mapper,
                                 samples=self.samples, input_files=self.input_files) as writer:
             for batch_idx, (indices_dict, data_dict) in enumerate(data_provider):
-                input_u = data_dict["unlabeled"]["input"]
+                input_u = data_dict["unlabeled"][self.col]
                 idxs_u = indices_dict["unlabeled"]
+                print(input_u)
                 outputs = self.model(input_u)
                 writer.append(list(idxs_u), outputs, inverse_logit=True)
                 progress_bar(batch_idx * self.mini_batch_size, max_examples)
