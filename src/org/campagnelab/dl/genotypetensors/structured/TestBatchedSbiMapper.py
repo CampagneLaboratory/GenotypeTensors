@@ -132,5 +132,22 @@ class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
         batcher.collect_inputs(map_CountInfo, count, phase=1)
         batcher.forward_batch(mapper=map_CountInfo,phase=1)
         print(batcher.get_forward_for_example(map_CountInfo,0))
+
+    def test_two_count(self):
+        json_string = '{"type":"CountInfo","matchesReference":true,"isCalled":true,"isIndel":false,"fromSequence":"A","toSequence":"A","genotypeCountForwardStrand":7,"genotypeCountReverseStrand":32,"gobyGenotypeIndex":0}'
+        import ujson
+        count = ujson.loads(json_string)
+        counts=[count]*2
+        map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=16, mapped_base_dim=6,
+                                     mapped_genotype_index_dim=2)
+        batcher = Batcher()
+        for count in counts:
+            count['count_index'] = batcher.collect_inputs(map_CountInfo, count, phase=0)
+        batcher.forward_batch(mapper=map_CountInfo)
+        for count in counts:
+            batcher.collect_inputs(map_CountInfo, count, phase=1)
+        batcher.forward_batch(mapper=map_CountInfo, phase=1)
+        print(batcher.get_forward_for_example(map_CountInfo, 0))
+        print(batcher.get_forward_for_example(map_CountInfo, 1))
 if __name__ == '__main__':
     unittest.main()

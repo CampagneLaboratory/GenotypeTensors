@@ -58,6 +58,9 @@ class Batcher:
         if len(mapper_inputs)==1:
             return mapper_inputs[0]
         else:
+            if isinstance(mapper_inputs,dict):
+                print("STOP")
+
             return torch.stack(mapper_inputs, dim=0)
 
     def forward_batch(self, mapper,phase=0):

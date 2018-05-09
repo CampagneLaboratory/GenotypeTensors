@@ -87,18 +87,19 @@ class map_Boolean(StructuredEmbedding):
 
     def collect_inputs(self, values, tensor_cache=NoCache(), phase=0, cuda=None, batcher=None):
         if isinstance(values,list):
-            return {
-                id(self): torch.cat([self(predicate,tensor_cache,cuda) for predicate in values],dim=1)
-            }
+            return torch.cat([self(predicate,tensor_cache,cuda) for predicate in values],dim=1)
+
         else:
             # only one value:
-            return {
-                id(self): self(values, tensor_cache, cuda)
-            }
+            return  self(values, tensor_cache, cuda)
+
     def forward_batch(self, batcher, phase=0):
 
-        return batcher.get_batched_input(mapper=self)[id(self)]
-
+        result= batcher.get_batched_input(mapper=self)
+        if isinstance(result,dict) and id(self) in result.keys():
+            return result[id(self)]
+        else:
+            return result
 
 class IntegerModel(StructuredEmbedding):
     def __init__(self, distinct_numbers, embedding_size):
