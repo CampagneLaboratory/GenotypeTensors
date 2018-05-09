@@ -18,15 +18,14 @@ from org.campagnelab.dl.problems.SbiProblem import SbiProblem
 def collate_sbi(batch):
     """ For each batch, organize sbi messages in a list, returned as first element of the batch tuple"""
     element = batch[0]
-
     if isinstance(element[0], dict) and element[0]['type'] == "BaseInformation":
         # note that batch_element[1][1] drops the index of the example: batch_element[1][0] to
         # keep only softmaxGenotype and metaData.
-        example_indices = default_collate([batch_element[1][0] for batch_element in batch])
         data_map = {"sbi":[batch_element[0] for batch_element in batch]}
-        data_map.update(   default_collate([batch_element[1][1] for batch_element in batch]))
-
-
+        example_indices = None
+        if len(element) > 1:
+            example_indices = default_collate([batch_element[1][0] for batch_element in batch])
+            data_map.update(default_collate([batch_element[1][1] for batch_element in batch]))
         return example_indices, data_map
     else:
         return default_collate(batch)
