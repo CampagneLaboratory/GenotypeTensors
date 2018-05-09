@@ -1,6 +1,8 @@
 import torch
 from torch.autograd import Variable
 
+from org.campagnelab.dl.genotypetensors.structured.Models import NoCache
+
 
 class Batcher:
     def __init__(self):
@@ -35,7 +37,7 @@ class Batcher:
         self.example_counter[id_mapper] += input_num_values
         return list(range(current_index, current_index + input_num_values))
 
-    def collect_inputs(self, mapper, example, phase=0):
+    def collect_inputs(self, mapper, example, phase=0, tensor_cache=NoCache(),cuda=None):
         """
         Use the mapper on an example to obtain inputs for a batch.
         :param mapper:
@@ -47,7 +49,7 @@ class Batcher:
 
         # keep track of all mappers used:
         self.all_mappers.update([mapper])
-        input_indices_in_batch = mapper.collect_inputs(example, phase=phase, batcher=self)
+        input_indices_in_batch = mapper.collect_inputs(example, phase=phase, batcher=self,tensor_cache=tensor_cache,cuda=cuda)
         return input_indices_in_batch
 
     def initialize_mapper_variables(self, id_mapper):

@@ -57,7 +57,8 @@ class StructGenotypingModel(Module):
                 #print("Mapping phase "+str(phase))
                 for record in sbi_records:
                     for sample in record['samples']:
-                            batcher.collect_inputs(mapper=mapper, example=sample, phase=phase)
+                            batcher.collect_inputs(mapper=mapper, example=sample, phase=phase,
+                                                   cuda=self.use_cuda, tensor_cache=tensor_cache)
                 features=batcher.forward_batch(mapper=mapper, phase=phase)
 
 
