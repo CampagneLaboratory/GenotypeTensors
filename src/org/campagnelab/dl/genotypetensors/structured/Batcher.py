@@ -14,6 +14,22 @@ class Batcher:
         # a dictionary from mapper id to results of forward pass on a batch:
         self.batched_results={}
 
+    def store_inputs(self, mapper, inputs):
+        """
+        Store inputs in the batcher.
+        :param mapper: The mapper that produced these inputs.
+        :param inputs: A torch Variable calculated by a mapper.
+        :return: indices of the stored inputs in the batch under construction. These indices can be used to retrieve the
+        slice of batched forward results corresponding to these inputs.
+        """
+        id_mapper = id(mapper)
+        self.initialize_mapper_variables(id_mapper)
+        self.mapper_inputs[id_mapper] += [inputs]
+        input_num_values=inputs.size(0)
+        current_index=self.example_counter[id_mapper]
+        self.example_counter[id_mapper] += input_num_values
+        return list(range(current_index,current_index+input_num_values))
+
     def collect_inputs(self, mapper, example,phase=0):
         """
         Use the mapper on an example to obtain inputs for a batch.
@@ -26,21 +42,9 @@ class Batcher:
 
         # keep track of all mappers used:
         self.all_mappers.update([mapper])
-        input_for_mapper=mapper.collect_inputs(example,phase=phase,batcher=self)
-        if isinstance(input_for_mapper,dict):
-            # append to lists already obtained for the same mapper:
-            for key in input_for_mapper.keys():
-                self.initialize_mapper_variables(key)
+        input_indices_in_batch=mapper.collect_inputs(example,phase=phase,batcher=self)
+        return input_indices_in_batch
 
-                self.mapper_inputs[key]+=[input_for_mapper[key]]
-        elif isinstance(input_for_mapper,list):
-            self.mapper_inputs[id_mapper] += input_for_mapper
-        else:
-            self.mapper_inputs[id_mapper] += [input_for_mapper]
-
-        current_example_index=self.example_counter[id_mapper]
-        self.example_counter[id_mapper] += 1
-        return current_example_index
 
     def initialize_mapper_variables(self, id_mapper):
         if id_mapper not in self.mapper_inputs.keys():
@@ -68,17 +72,17 @@ class Batcher:
         self.batched_results[id_mapper]= mapper.forward_batch(batcher=self,phase=phase)
         return self.batched_results[id_mapper]
 
-    def get_forward_for_example(self,mapper, example_index ):
+    def get_forward_for_example(self, mapper, example_indices):
         """
         Return the slice of the forward result corresponding to a particular example.
         :param mapper: mapper used to do the forward pass.
-        :param example_index: index of the example (returned by collect input)
+        :param example_indices: index of the example (returned by collect input)
         :return:
         """
         batch = self.get_batched_result(mapper)
         if isinstance(batch,dict):
             batch=batch[id(mapper)]
-        return batch[example_index:example_index + 1].squeeze(0)
+        return batch[example_indices].squeeze(0)
 
     def get_batched_result(self, mapper):
         """

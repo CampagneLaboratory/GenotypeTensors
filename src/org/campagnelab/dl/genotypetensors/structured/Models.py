@@ -107,11 +107,11 @@ class map_Boolean(StructuredEmbedding):
 
     def collect_inputs(self, values, tensor_cache=NoCache(), phase=0, cuda=None, batcher=None):
         if isinstance(values,list):
-            return torch.cat([self(predicate,tensor_cache,cuda) for predicate in values],dim=1)
+            return batcher.store_inputs(mapper=self, inputs=torch.cat([self(predicate,tensor_cache,cuda) for predicate in values],dim=1))
 
         else:
             # only one value:
-            return  self(values, tensor_cache, cuda)
+            return batcher.store_inputs(mapper=self, inputs= self(values, tensor_cache, cuda))
 
     def forward_batch(self, batcher, phase=0):
 
@@ -147,8 +147,8 @@ class IntegerModel(StructuredEmbedding):
             values=tensor_cache.cache(key=values, tensor_creation_lambda=lambda key: self.define_long_variable(key,cuda))
         return  self.embedding(values)
 
-    def collect_inputs(self,values,cuda=None,phase=0, batcher=None):
-        return self.define_long_variable(values, cuda)
+    def collect_inputs(self,values,phase=0,tensor_cache=NoCache(),cuda=None, batcher=None):
+        return batcher.store_inputs(mapper=self,inputs=self.define_long_variable(values, cuda))
 
     def forward_batch(self,batcher,phase=0):
         return self.embedding(batcher.get_batched_input(mapper=self))
@@ -298,3 +298,4 @@ class BatchOfInstances(Module):
     def forward_batch(self,batcher):
         inputs=batcher.get_batched_input(mapper=self)
         return self.mappers.forward_batch(torch.cat(inputs, dim=0))
+
