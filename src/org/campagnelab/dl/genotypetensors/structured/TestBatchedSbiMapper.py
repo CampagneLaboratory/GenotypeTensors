@@ -6,7 +6,7 @@ from torch.nn import Module
 from org.campagnelab.dl.genotypetensors.structured.Batcher import Batcher
 from org.campagnelab.dl.genotypetensors.structured.Models import IntegerModel, NoCache, MeanOfList, BatchOfInstances, \
     StructuredEmbedding, map_Boolean
-from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo
+from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo, MapSampleInfo
 
 
 class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
@@ -165,6 +165,25 @@ class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
         batcher.forward_batch(mapper=map_CountInfo, phase=1)
         print(batcher.get_forward_for_example(map_CountInfo, example_indices[0]))
         print(batcher.get_forward_for_example(map_CountInfo, example_indices[1]))
+
+    def test_one_sample_two_counts(self):
+        sample_json_string = '{"type":"SampleInfo","counts":[{"type":"CountInfo","matchesReference":true,"isCalled":true,"isIndel":false,"fromSequence":"A","toSequence":"A","genotypeCountForwardStrand":7,"genotypeCountReverseStrand":32,"gobyGenotypeIndex":0},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"C","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":1,"gobyGenotypeIndex":2}]}'
+        import ujson
+        sample = ujson.loads(sample_json_string)
+
+        map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=16, mapped_base_dim=6,
+                                     mapped_genotype_index_dim=2)
+        map_SampleInfo=MapSampleInfo(count_mapper=map_CountInfo, count_dim=16, sample_dim=32, num_counts=5)
+        batcher = Batcher()
+        mapper=map_SampleInfo
+        batcher.collect_inputs(mapper, sample, phase=0)
+        batcher.forward_batch(mapper=mapper,phase=0)
+        batcher.collect_inputs(mapper, sample, phase=1)
+        batcher.forward_batch(mapper=mapper, phase=1)
+        batcher.collect_inputs(mapper, sample, phase=2)
+        batcher.forward_batch(mapper=mapper, phase=2)
+        print(batcher.get_forward_for_example(mapper, 0))
+
 
 
 if __name__ == '__main__':

@@ -9,7 +9,10 @@ from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, Integer
 
 
 def store_indices_in_message(mapper, message, indices):
-    message['indices'][id(mapper)] = indices
+    mapper_id = id(mapper)
+    if mapper_id not in message['indices']:
+        message['indices'][mapper_id]= []
+    message['indices'][mapper_id] += indices
 
 
 def get_indices_in_message(mapper, message):
@@ -60,14 +63,50 @@ class MapSampleInfo(Module):
         super().__init__()
         self.count_mapper = count_mapper
         self.num_counts = num_counts
+        self.count_dim = count_dim
         self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
 
     def forward(self, input, tensor_cache, cuda=None):
-        observed_counts = [count for count in input['counts'] if
-                           (count['genotypeCountForwardStrand'] + count['genotypeCountReverseStrand']) > 0]
+        observed_counts = self.get_observed_counts(input)
         return self.reduce_counts([self.count_mapper(count, tensor_cache=tensor_cache, cuda=cuda) for count in
                                    observed_counts[0:self.num_counts]],
                                   pad_missing=True, cuda=cuda)
+
+    def get_observed_counts(self, input):
+        return [count for count in input['counts'] if
+                (count['genotypeCountForwardStrand'] + count['genotypeCountReverseStrand']) > 0]
+
+    def collect_inputs(self, sample, phase=0, tensor_cache=NoCache(), cuda=None, batcher=None):
+        """Collect input data for all counts in this sample. """
+        if 'indices' not in sample:
+            sample['indices'] = {}
+        observed_counts = self.get_observed_counts(sample)
+        if phase < 2:
+
+            for count in observed_counts:
+                store_indices_in_message(mapper=self.count_mapper, message=count, indices=
+                self.count_mapper.collect_inputs(count, tensor_cache=tensor_cache,
+                                                 cuda=cuda, phase=phase, batcher=batcher))
+
+            return []
+
+        if phase == 2:
+            list_mapped_counts=[]
+            for count in observed_counts:
+                mapped_count = batcher.get_forward_for_example(self.count_mapper,
+                                                        example_indices=count['indices'][id(self.count_mapper)])
+                list_mapped_counts+=[mapped_count]
+            return batcher.store_inputs(mapper=self, inputs=list_mapped_counts)
+
+    def forward_batch(self, batcher, phase=0):
+        """delegate to counts for phases 0 to 1, then reduce the counts to produce the sample."""
+        if phase < 2:
+            return self.count_mapper.forward_batch(batcher=batcher, phase=phase)
+        if phase == 2:
+            my_counts_as_list = batcher.get_batched_input(self)
+            batched_counts = self.reduce_counts(my_counts_as_list, pad_missing=True)
+            batcher.store_batched_result(self, batched_counts)
+            return batched_counts
 
 
 class MapCountInfo(StructuredEmbedding):
@@ -192,7 +231,6 @@ class MapCountInfo(StructuredEmbedding):
             return []
 
         if phase == 1:
-
             mapped_goby_genotype_indices = batcher.get_forward_for_example(mapper=self.map_gobyGenotypeIndex,
                                                                            message=c).view(1, -1)
 
