@@ -116,6 +116,7 @@ class map_Boolean(StructuredEmbedding):
     def forward_batch(self, batcher, phase=0):
 
         result= batcher.get_batched_input(mapper=self)
+        batcher.store_batched_result(mapper=self,batched_result=result)
         if isinstance(result,dict) and id(self) in result.keys():
             return result[id(self)]
         else:
@@ -151,7 +152,9 @@ class IntegerModel(StructuredEmbedding):
         return batcher.store_inputs(mapper=self,inputs=self.define_long_variable(values, cuda))
 
     def forward_batch(self,batcher,phase=0):
-        return self.embedding(batcher.get_batched_input(mapper=self))
+        batched= self.embedding(batcher.get_batched_input(mapper=self))
+        batcher.store_batched_result(mapper=self,batched_result=batched)
+        return batched
 
 class MeanOfList(Module):
     def __init__(self):

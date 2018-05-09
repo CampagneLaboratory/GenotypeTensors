@@ -14,6 +14,9 @@ class Batcher:
         # a dictionary from mapper id to results of forward pass on a batch:
         self.batched_results={}
 
+    def store_batched_result(self,mapper, batched_result):
+        self.batched_results[id(mapper)]=batched_result
+
     def store_inputs(self, mapper, inputs):
         """
         Store inputs in the batcher.
@@ -25,7 +28,7 @@ class Batcher:
         id_mapper = id(mapper)
         self.initialize_mapper_variables(id_mapper)
         self.mapper_inputs[id_mapper] += [inputs]
-        input_num_values=inputs.size(0)
+        input_num_values=1
         current_index=self.example_counter[id_mapper]
         self.example_counter[id_mapper] += input_num_values
         return list(range(current_index,current_index+input_num_values))
@@ -72,13 +75,16 @@ class Batcher:
         self.batched_results[id_mapper]= mapper.forward_batch(batcher=self,phase=phase)
         return self.batched_results[id_mapper]
 
-    def get_forward_for_example(self, mapper, example_indices):
+    def get_forward_for_example(self, mapper, example_indices=None, message=None):
         """
         Return the slice of the forward result corresponding to a particular example.
         :param mapper: mapper used to do the forward pass.
         :param example_indices: index of the example (returned by collect input)
         :return:
         """
+        if message is not None and example_indices is None:
+            example_indices=message['indices'][id(mapper)]
+        assert example_indices is not None, "example_indices is required when message is None."
         batch = self.get_batched_result(mapper)
         if isinstance(batch,dict):
             batch=batch[id(mapper)]

@@ -8,6 +8,14 @@ from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, Integer
     StructuredEmbedding, NoCache
 
 
+def store_indices_in_message(mapper, message, indices):
+    message['indices'][id(mapper)] = indices
+
+
+def get_indices_in_message(mapper, message):
+    return message['indices'][id(mapper)]
+
+
 class MapSequence(StructuredEmbedding):
     def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N')):
         super().__init__(embedding_size=hidden_size)
@@ -64,7 +72,7 @@ class MapSampleInfo(Module):
 
 class MapCountInfo(StructuredEmbedding):
     def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=4):
-        super().__init__()
+        super().__init__(count_dim)
         self.map_sequence = MapSequence(bases=['A', 'C', 'T', 'G', '-'], hidden_size=count_dim,
                                         mapped_base_dim=mapped_base_dim)
         self.map_gobyGenotypeIndex = IntegerModel(distinct_numbers=100, embedding_size=mapped_genotype_index_dim)
@@ -106,7 +114,7 @@ class MapCountInfo(StructuredEmbedding):
 
         # below, [2+2+2] is for the booleans mapped with a function:
         self.reduce_count = Reduce([mapper.embedding_size for mapper in count_mappers], encoding_output_dim=count_dim)
-        batched_count_mappers=[]
+        batched_count_mappers = []
         self.reduce_batched = Reduce([self.map_gobyGenotypeIndex.embedding_size,
                                       self.map_count.embedding_size * 2,
                                       self.map_boolean.embedding_size * 2,
@@ -159,46 +167,57 @@ class MapCountInfo(StructuredEmbedding):
 
     def collect_inputs(self, c, phase=0, tensor_cache=NoCache(), cuda=None, batcher=None):
         if phase == 0:
-            return {
-                # the following tensors are batched:
-                id(self.map_gobyGenotypeIndex): self.map_gobyGenotypeIndex.collect_inputs(
-                    values=[c['gobyGenotypeIndex']], phase=phase, cuda=cuda),
-                id(self.map_count): self.map_count.collect_inputs(
-                    values=[c['genotypeCountForwardStrand'], c['genotypeCountReverseStrand']], phase=phase, cuda=cuda),
-                id(self.map_boolean): self.map_boolean.collect_inputs(values=[c['isIndel'], c['matchesReference']],
-                                                                      tensor_cache=tensor_cache, phase=phase,
-                                                                      cuda=cuda),
-                # the following tensors are not batched, but computed once per instance, right here with direct_forward=True:
-                id(self.map_sequence): self.cat_inputs(self.map_sequence, [c['fromSequence'], c['toSequence']],
-                                                       tensor_cache=tensor_cache, phase=phase, cuda=cuda,
-                                                       direct_forward=True)
-            }
+            c['indices'] = {}
+            # the following tensors are batched:
+            store_indices_in_message(mapper=self.map_gobyGenotypeIndex, message=c,
+                                     indices=self.map_gobyGenotypeIndex.collect_inputs(
+                                         values=[c['gobyGenotypeIndex']], phase=phase, cuda=cuda, batcher=batcher))
+
+            store_indices_in_message(mapper=self.map_count, message=c, indices=self.map_count.collect_inputs(
+                values=[c['genotypeCountForwardStrand'], c['genotypeCountReverseStrand']], phase=phase, cuda=cuda,
+                batcher=batcher))
+
+            store_indices_in_message(mapper=self.map_boolean, message=c, indices=self.map_boolean.collect_inputs(
+                values=[c['isIndel'], c['matchesReference']],
+                tensor_cache=tensor_cache, phase=phase,
+                cuda=cuda, batcher=batcher))
+
+            c['mapped-not-batched'] = {}
+            # the following tensors are not batched, but computed once per instance, right here with direct_forward=True:
+            c['mapped-not-batched'][id(self.map_sequence)] = self.cat_inputs(self.map_sequence,
+                                                                             [c['fromSequence'], c['toSequence']],
+                                                                             tensor_cache=tensor_cache, phase=phase,
+                                                                             cuda=cuda,
+                                                                             direct_forward=True)
+            return []
+
         if phase == 1:
-            count_index = c['count_index']
-            # TODO: restrict the batched results to the current slice corresponding to this count index.
-            # TODO: the index depends on how many items of each type were mapped for the example.
-            current_results=batcher.get_batched_result(self)
-            mapped_goby_genotype_indices = current_results[id(self.map_gobyGenotypeIndex)]
-            mapped_counts = current_results[id(self.map_count)]
-            mapped_booleans = current_results[id(self.map_boolean)]
+
+            mapped_goby_genotype_indices = batcher.get_forward_for_example(mapper=self.map_gobyGenotypeIndex,
+                                                                           message=c).view(1, -1)
+
+            mapped_counts = batcher.get_forward_for_example(mapper=self.map_count, message=c).view(1, -1)
+
+            mapped_booleans = batcher.get_forward_for_example(mapper=self.map_boolean, message=c).view(1, -1)
 
             # mapped_sequences are not currently batchable, so we get the input from the prior phase:
-            mapped_sequences = batcher.get_batched_input(mapper=self.map_sequence)
+            mapped_sequences = c['mapped-not-batched'][id(self.map_sequence)].view(1, -1)
 
             all_mapped = [mapped_goby_genotype_indices, mapped_counts, mapped_booleans, mapped_sequences]
-            return self.reduce_batched(all_mapped)
 
+            return batcher.store_inputs(mapper=self, inputs=self.reduce_batched(all_mapped))
 
     def forward_batch(self, batcher, phase=0):
-        if phase==0:
-            return  {
-                    id(self.map_gobyGenotypeIndex): self.map_gobyGenotypeIndex.forward_batch(batcher),
-                    id(self.map_count): self.map_count.forward_batch(batcher),
-                    id(self.map_boolean): self.map_boolean.forward_batch(batcher),
-                    id(self.map_sequence):batcher.get_batched_input(mapper=self.map_sequence)
-                }
-        if phase==1:
-            return {id(self): batcher.get_batched_input(self)}
+        if phase == 0:
+            # calculate the forward on the batches:
+            self.map_gobyGenotypeIndex.forward_batch(batcher)
+            self.map_count.forward_batch(batcher)
+            self.map_boolean.forward_batch(batcher)
+            return None
+        if phase == 1:
+            batched_input = batcher.get_batched_input(mapper=self)
+            batcher.store_batched_result(self, batched_result=batched_input)
+            return batched_input
 
 
 class MapNumberWithFrequencyList(StructuredEmbedding):

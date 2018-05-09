@@ -143,7 +143,7 @@ class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
                                      mapped_genotype_index_dim=2)
         batcher = Batcher()
         count['count_index'] = batcher.collect_inputs(map_CountInfo, count, phase=0)
-        batcher.forward_batch(mapper=map_CountInfo)
+        batcher.forward_batch(mapper=map_CountInfo,phase=0)
         batcher.collect_inputs(map_CountInfo, count, phase=1)
         batcher.forward_batch(mapper=map_CountInfo, phase=1)
         print(batcher.get_forward_for_example(map_CountInfo, 0))
@@ -158,12 +158,13 @@ class BatchedStructuredSbiMapperTestCase(unittest.TestCase):
         batcher = Batcher()
         for count in counts:
             count['count_index'] = batcher.collect_inputs(map_CountInfo, count, phase=0)
-        batcher.forward_batch(mapper=map_CountInfo)
+        batcher.forward_batch(mapper=map_CountInfo,phase=0)
+        example_indices=[]
         for count in counts:
-            batcher.collect_inputs(map_CountInfo, count, phase=1)
+            example_indices+=batcher.collect_inputs(map_CountInfo, count, phase=1)
         batcher.forward_batch(mapper=map_CountInfo, phase=1)
-        print(batcher.get_forward_for_example(map_CountInfo, 0))
-        print(batcher.get_forward_for_example(map_CountInfo, 1))
+        print(batcher.get_forward_for_example(map_CountInfo, example_indices[0]))
+        print(batcher.get_forward_for_example(map_CountInfo, example_indices[1]))
 
 
 if __name__ == '__main__':
