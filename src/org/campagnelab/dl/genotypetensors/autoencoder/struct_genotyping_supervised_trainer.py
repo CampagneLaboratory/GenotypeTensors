@@ -66,8 +66,8 @@ class StructGenotypingModel(Module):
             features = self.sbi_mapper(sbi_records, tensor_cache=tensor_cache, cuda=self.use_cuda)
         return features
 
-    def forward(self, mapped_features):
-        return self.classifier(mapped_features)
+    def forward(self, sbi_records):
+        return self.classifier(self.map_sbi_messages(sbi_records))
 
 
 class StructGenotypingSupervisedTrainer(CommonTrainer):
@@ -139,9 +139,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
 
-        input_s = self.map_sbi(sbi)
-
-        output_s = self.net(input_s)
+        output_s = self.net(sbi)
         output_s_p = self.get_p(output_s)
         _, target_index = torch.max(target_s, dim=1)
         supervised_loss = self.criterion_classifier(output_s, target_s)
@@ -246,8 +244,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 
-        input_s = self.map_sbi(sbi)
-        output_s = self.net(input_s)
+        output_s = self.net(sbi)
         output_s_p = self.get_p(output_s)
 
         supervised_loss = self.criterion_classifier(output_s, target_s)
