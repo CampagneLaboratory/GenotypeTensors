@@ -114,3 +114,6 @@ class StructuredSbiGenotypingProblem(SbiProblem):
 
     def get_output_names(self):
         return ["softmaxGenotype"]
+
+    def load_metadata(self):
+        pass

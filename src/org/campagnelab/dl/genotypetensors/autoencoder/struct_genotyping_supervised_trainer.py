@@ -261,8 +261,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
     def create_struct_model(self, problem, args):
 
-        sbi_mappers_configuration = configure_mappers(ploidy=2, extra_genotypes=2, num_samples=1,
-                                                      count_dim=args.struct_count_dim,
+        sbi_mappers_configuration = configure_mappers(ploidy=args.struct_ploidy,
+                                                      extra_genotypes=args.struct_extra_genotypes,
+                                                      num_samples=1, count_dim=args.struct_count_dim,
                                                       sample_dim=args.struct_sample_dim)
         sbi_mapper = BatchOfInstances(*sbi_mappers_configuration)
         # determine feature size:
