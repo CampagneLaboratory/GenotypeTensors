@@ -63,6 +63,7 @@ class StructGenotypingModel(Module):
 
 
         else:
+            tensor_cache=TensorCache()
             features = self.sbi_mapper(sbi_records, tensor_cache=tensor_cache, cuda=self.use_cuda)
         return features
 
