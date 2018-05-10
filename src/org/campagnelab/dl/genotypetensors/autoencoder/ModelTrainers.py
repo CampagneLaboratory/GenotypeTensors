@@ -145,6 +145,8 @@ def define_train_auto_encoder_parser():
                                                                            'class frequencies.', default=100000)
     parser.add_argument('--struct-count-dim', type=int, default=64, help="Dimensionality of the reduced count tensor (used with struct_genotyping only).")
     parser.add_argument('--struct-sample-dim', type=int, default=64, help="Dimensionality of the reduced sample tensor (used with struct_genotyping only).")
+    parser.add_argument("--struct-ploidy", type=int, default=2, help="Ploidy to use for structured mapping")
+    parser.add_argument("--struct-extra-genotypes", type=int, default=2, help="Number of extra genotypes to use for structured mapping")
     return parser
 
 def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequencies=None):

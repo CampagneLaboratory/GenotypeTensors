@@ -35,7 +35,7 @@ class MapSequence(StructuredEmbedding):
 
 
 class MapBaseInformation(Module):
-    def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64):
+    def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2):
         super().__init__()
         self.sample_mapper = sample_mapper
         mapped_base_dim = 2
@@ -46,6 +46,8 @@ class MapBaseInformation(Module):
                                      encoding_output_dim=sample_dim)
 
         self.num_samples = num_samples
+        self.ploidy = ploidy
+        self.extra_genotypes = extra_genotypes
 
     def forward(self, input, tensor_cache, cuda=None):
         if cuda is None:
@@ -324,7 +326,7 @@ def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count
     map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,
                                    sample_dim=sample_dim)
     map_SbiRecords = MapBaseInformation(sample_mapper=map_SampleInfo, num_samples=num_samples, sample_dim=sample_dim,
-                                        sequence_output_dim=count_dim)
+                                        sequence_output_dim=count_dim, ploidy=ploidy, extra_genotypes=extra_genotypes)
 
     sbi_mappers = {"BaseInformation": map_SbiRecords,
                    "SampleInfo": map_SampleInfo,

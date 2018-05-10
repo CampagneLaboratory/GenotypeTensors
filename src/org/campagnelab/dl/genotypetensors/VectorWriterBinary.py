@@ -14,6 +14,8 @@ from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorProp
 import torch
 import numpy as np
 
+from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenotypingProblem
+
 
 class VectorWriterBinary:
     major_version = 0
@@ -27,14 +29,54 @@ class VectorWriterBinary:
     vector_element_size = 4
 
     def __init__(self, path_with_basename, sample_id, tensor_names, input_data_path=None, domain_descriptor=None,
-                 feature_mapper=None, samples=None, input_files=None):
+                 problem=None, feature_mapper=None, samples=None, input_files=None, model=None):
         self.basename = path_with_basename
         self.vec_file = open(self.basename + ".vec", "wb")
         self.sample_id = sample_id
         self.vector_names = tensor_names
         self.output_properties = {}
         self.using_input_data = input_data_path is not None
-        if self.using_input_data:
+        self.problem = problem
+        self.using_structured_problem = isinstance(self.problem, StructuredSbiGenotypingProblem)
+        if self.using_structured_problem:
+            assert model is not None, "Need to have model present for use with structured problem"
+            base_info = model.sbi_mapper.mappers.mappers["BaseInformation"]
+            softmax_genotype_dimension = (2 ** (base_info.ploidy + base_info.extra_genotypes)) + 1
+            num_bytes_per_vector_elements = softmax_genotype_dimension * VectorWriterBinary.vector_element_size
+            num_bytes_per_vector = num_bytes_per_vector_elements + VectorWriterBinary.header_size
+            num_bytes_per_example = num_bytes_per_vector
+            self.output_properties = {
+                "majorVersion": VectorWriterBinary.major_version,
+                "minorVersion": VectorWriterBinary.minor_version,
+                "fileType": "binary",
+                "domainDescriptor":
+                    domain_descriptor if domain_descriptor is not None else "structured_pytorch_model_only",
+                "featureMapper": feature_mapper if feature_mapper is not None else "structured_pytorch_model_only",
+                "headerSize": VectorWriterBinary.header_size,
+                "inputFiles": input_files if input_files is not None else ["structured_pytorch_model_only"],
+                "samples": samples if samples is not None else [
+                    {
+                        "sampleName": "structured_pytorch_model_only",
+                        "sampleType": "structured_pytorch_model_only",
+                    },
+                ],
+                "vectors": [
+                    {
+                        "vectorName": "softmaxGenotype",
+                        "vectorType": "float32",
+                        "vectorElementSize": VectorWriterBinary.vector_element_size,
+                        "vectorDimension": [
+                            softmax_genotype_dimension,
+                        ],
+                        "vectorNumBytesForElements":
+                            VectorWriterBinary.vector_element_size * softmax_genotype_dimension
+                    },
+                ],
+                "numBytesPerExample": num_bytes_per_example
+            }
+            self.num_bytes_per_example = num_bytes_per_example
+            self.vector_props_written = True
+        elif self.using_input_data:
             def _get_vector_length_from_props(vector_name_for_dims):
                 return VectorWriterBinary._get_vector_length(self.input_vector_properties_reader
                                                              .get_vector_dimensions_from_name(vector_name_for_dims))
@@ -68,6 +110,8 @@ class VectorWriterBinary:
             self.output_properties["numBytesPerExample"] = num_bytes_per_example
             self.vector_lengths = {vector_name: _get_vector_length_from_props(vector_name)
                                    for vector_name in tensor_names}
+            self.num_bytes_per_example = num_bytes_per_example
+            self.vector_props_written = True
         else:
             self.output_properties = {
                 "majorVersion": VectorWriterBinary.major_version,

@@ -60,7 +60,8 @@ class PredictModel:
         with VectorWriterBinary(sample_id=0, path_with_basename=output_filename,
                                 tensor_names=self.problem.get_output_names(),
                                 domain_descriptor=self.domain_descriptor, feature_mapper=self.feature_mapper,
-                                samples=self.samples, input_files=self.input_files) as writer:
+                                samples=self.samples, input_files=self.input_files, problem=self.problem,
+                                model=self.model) as writer:
             for batch_idx, (indices_dict, data_dict) in enumerate(data_provider):
                 input_u = data_dict["unlabeled"][self.input_name]
                 idxs_u = indices_dict["unlabeled"]

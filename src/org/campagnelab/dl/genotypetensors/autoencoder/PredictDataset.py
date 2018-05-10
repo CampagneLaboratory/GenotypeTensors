@@ -100,9 +100,9 @@ if problem is None or model is None:
     exit(1)
 
 domain_descriptor = checkpoint["domain_descriptor"] if "domain_descriptor" in checkpoint else None
-feature_mapper = checkpoint["feature_mapper"] if "domain_descriptor" in checkpoint else None
-samples = checkpoint["samples"] if "domain_descriptor" in checkpoint else None
-input_files = checkpoint["input_files"] if "domain_descriptor" in checkpoint else None
+feature_mapper = checkpoint["feature_mapper"] if "feature_mapper" in checkpoint else None
+samples = checkpoint["samples"] if "samples" in checkpoint else None
+input_files = checkpoint["input_files"] if "input_files" in checkpoint else None
 
 
 normalize=hasattr(model,"prenormalized_inputs") and model.prenormalized_inputs

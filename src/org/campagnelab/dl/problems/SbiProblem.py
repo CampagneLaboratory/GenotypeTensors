@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import copy
@@ -67,17 +68,20 @@ class SbiProblem(Problem):
         self.basename = code[len(self.basename_prefix()):]
         self.num_workers = num_workers
         self.drop_last_batch = drop_last_batch
-        reader=None
+        self.reader = None
+        self.meta_data = None
         for dataset in ["train","validation","test","unlabeled"]:
             try:
-                reader = VectorReader(self.basename + "-"+dataset, sample_id=0, return_example_id=False, vector_names=[])
+                self.reader = VectorReader(self.basename + "-"+dataset, sample_id=0, return_example_id=False, vector_names=[])
                 break
             except:
                 pass
-        assert reader is not None, "Unable to load properties from any dataset (tried train, validation,test,unlabeled)"
+        self.load_metadata()
 
-        self.meta_data = reader.vector_reader_properties
-        reader.close()
+    def load_metadata(self):
+        assert self.reader is not None, "Unable to load properties from any dataset (tried train, validation,test,unlabeled)"
+        self.meta_data = self.reader.vector_reader_properties
+        self.reader.close()
 
     def train_loader(self):
         """Returns the torch dataloader over the training set. """
