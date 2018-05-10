@@ -97,17 +97,22 @@ class map_Boolean(StructuredEmbedding):
         self.true_value = Variable(torch.FloatTensor([[1, 0]]))
         self.false_value = Variable(torch.FloatTensor([[0, 1]]))
 
-
     def __call__(self, predicate, tensor_cache, cuda=None):
         assert isinstance(predicate,bool),"predicate must be a boolean"
-        return tensor_cache.cache(key=predicate, tensor_creation_lambda=
+        value= tensor_cache.cache(key=predicate, tensor_creation_lambda=
         lambda predicate: Variable(torch.FloatTensor([[1, 0]]))  if predicate else  Variable(torch.FloatTensor([[0, 1]])))
+        if cuda:
+            value=value.cuda(async=True)
+        return value
         #return Variable(value.data,requires_grad=True)
         #return value
 
     def collect_inputs(self, values, tensor_cache=NoCache(), phase=0, cuda=None, batcher=None):
         if isinstance(values,list):
-            return batcher.store_inputs(mapper=self, inputs=torch.cat([self(predicate,tensor_cache,cuda) for predicate in values],dim=1))
+            cat = torch.cat([self(predicate, tensor_cache, cuda) for predicate in values], dim=1)
+            if cuda:
+                cat=cat.cuda(async=True)
+            return batcher.store_inputs(mapper=self, inputs=cat)
 
         else:
             # only one value:

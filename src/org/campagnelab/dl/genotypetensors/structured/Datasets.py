@@ -38,7 +38,7 @@ class StructuredGenotypeDataset(Dataset):
     def __getitem__(self, idx):
         if self.delegate_labels is not None:
             return self.delegate_features[idx], self.delegate_labels[idx]
-        return self.delegate_features[idx],
+        return self.delegate_features[idx], (idx, None)
 
     def close(self):
         #self.delegate_labels.close()

@@ -32,8 +32,8 @@ class PredictModel:
         self.normalize_function = lambda x: normalize_mean_std(x, problem_mean=problem_mean,
                                                                problem_std=problem_std) if normalize \
             else x
-        self.col = "sbi" if isinstance(self.problem, StructuredSbiGenotypingProblem) else "input"
-        self.recode_fn = {"input": self.normalize_function} if self.col == "input" else None
+        self.input_name = self.problem.get_input_names()[0]
+        self.recode_fn = {"input": self.normalize_function} if self.input_name == "input" else None
 
     def predict(self, iterator, output_filename, max_examples=sys.maxsize):
         self.model.eval()
@@ -42,7 +42,7 @@ class PredictModel:
             data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
                                                             is_cuda=self.use_cuda,
                                                             batch_names=["unlabeled"],
-                                                            volatile={"unlabeled": [self.col]},
+                                                            volatile={"unlabeled": [self.input_name]},
                                                             recode_functions=self.recode_fn,
                                                             fake_gpu_on_cpu=False
                                                             )
@@ -51,7 +51,7 @@ class PredictModel:
             data_provider = DataProvider(iterator=zip(iterator),
                                          is_cuda=self.use_cuda,
                                          batch_names=["unlabeled"],
-                                         volatile={"unlabeled": [self.col]},
+                                         volatile={"unlabeled": [self.input_name]},
                                          recode_functions=self.recode_fn
                                          )
         else:
@@ -62,9 +62,8 @@ class PredictModel:
                                 domain_descriptor=self.domain_descriptor, feature_mapper=self.feature_mapper,
                                 samples=self.samples, input_files=self.input_files) as writer:
             for batch_idx, (indices_dict, data_dict) in enumerate(data_provider):
-                input_u = data_dict["unlabeled"][self.col]
+                input_u = data_dict["unlabeled"][self.input_name]
                 idxs_u = indices_dict["unlabeled"]
-                print(input_u)
                 outputs = self.model(input_u)
                 writer.append(list(idxs_u), outputs, inverse_logit=True)
                 progress_bar(batch_idx * self.mini_batch_size, max_examples)

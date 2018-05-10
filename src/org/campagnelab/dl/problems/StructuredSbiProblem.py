@@ -22,10 +22,13 @@ def collate_sbi(batch):
         # note that batch_element[1][1] drops the index of the example: batch_element[1][0] to
         # keep only softmaxGenotype and metaData.
         data_map = {"sbi":[batch_element[0] for batch_element in batch]}
-        example_indices = None
-        if len(element) > 1:
-            example_indices = default_collate([batch_element[1][0] for batch_element in batch])
-            data_map.update(default_collate([batch_element[1][1] for batch_element in batch]))
+        example_indices = default_collate([batch_element[1][0] for batch_element in batch])
+        elements_to_collate = []
+        for batch_element in batch:
+            if batch_element[1][1] is not None:
+                elements_to_collate.append(batch_element[1][1])
+        if len(elements_to_collate) > 0:
+            data_map.update(default_collate(elements_to_collate))
         return example_indices, data_map
     else:
         return default_collate(batch)
@@ -63,7 +66,7 @@ class StructuredSbiGenotypingProblem(SbiProblem):
         return "struct_genotyping:"
 
     def get_input_names(self):
-        return []
+        return ["sbi"]
 
     def get_vector_names(self):
         return ["softmaxGenotype", "metaData"]
