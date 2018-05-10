@@ -29,7 +29,7 @@ class MapSequence(StructuredEmbedding):
             max_base_index = max(ord(base[0]), max_base_index)
         self.map_bases = IntegerModel(distinct_numbers=(max_base_index + 1), embedding_size=mapped_base_dim)
 
-    def forward(self, sequence_field, tensor_cache, cuda=None):
+    def forward(self, sequence_field, tensor_cache=NoCache(), cuda=None):
         return self.map_sequence(
             self.map_bases(list([ord(b) for b in sequence_field]), tensor_cache=tensor_cache, cuda=cuda), cuda)
 
@@ -49,7 +49,7 @@ class MapBaseInformation(Module):
         self.ploidy = ploidy
         self.extra_genotypes = extra_genotypes
 
-    def forward(self, input, tensor_cache, cuda=None):
+    def forward(self, input, tensor_cache=NoCache(), cuda=None):
         if cuda is None:
             cuda = next(self.parameters()).data.is_cuda
 

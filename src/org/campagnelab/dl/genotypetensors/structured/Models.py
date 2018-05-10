@@ -20,17 +20,14 @@ class TensorCache:
         self.is_cuda=True
         self.device=device
 
-    def cache(self, key, tensor_creation_lambda):
-        if isinstance(key,list):
-            internal_key=tuple(key)
-        else:
+    def cache(self, value, tensor_creation_lambda, key=None):
+            if key is None:
+                key=value
             internal_key=key
-        with self.lock:
-
             if internal_key in self.cached_tensors:
                 tensor= self.cached_tensors[internal_key]
             else:
-                tensor= tensor_creation_lambda(key)
+                tensor= tensor_creation_lambda(value)
                 if self.is_cuda:
                     tensor=tensor.cuda(self.device)
                 self.cached_tensors[internal_key] =tensor
@@ -42,8 +39,10 @@ class NoCache(TensorCache):
     def __init__(self):
         pass
 
-    def cache(self, key, tensor_creation_lambda):
-        return tensor_creation_lambda(key)
+    def cache(self, value, tensor_creation_lambda,key=None ):
+        if key is None:
+            key = value
+        return tensor_creation_lambda(value)
 
 
 class StructuredEmbedding(Module):
@@ -99,7 +98,7 @@ class map_Boolean(StructuredEmbedding):
 
     def __call__(self, predicate, tensor_cache, cuda=None):
         assert isinstance(predicate,bool),"predicate must be a boolean"
-        value= tensor_cache.cache(key=predicate, tensor_creation_lambda=
+        value= tensor_cache.cache(key=predicate,value=predicate, tensor_creation_lambda=
         lambda predicate: Variable(torch.FloatTensor([[1, 0]]))  if predicate else  Variable(torch.FloatTensor([[0, 1]])))
         if cuda:
             value=value.cuda(async=True)
@@ -134,24 +133,22 @@ class IntegerModel(StructuredEmbedding):
         self.embedding = Embedding(distinct_numbers, embedding_size)
         self.embedding.requires_grad = True
 
-    def forward(self, values,tensor_cache, cuda=None):
+    def forward(self, values,tensor_cache=NoCache(), cuda=None):
         """Accepts a list of integer values and produces a batch of batch x embedded-value. """
 
         assert isinstance(values, list), "values must be a list of integers."
         for value in values:
             assert value < self.distinct_numbers, "A value is larger than the embedding input allow: " + str(value)
-        if len(values)>4:
 
-            # cache individual values for longer lists:
-            cached_values=[]
-            for value in values:
-                cached_values+=[ tensor_cache.cache(key=[value],
-                                            tensor_creation_lambda=lambda key: self.define_long_variable(key, cuda))]
-            values=torch.cat(cached_values,dim=0)
-        else:
-            # cache the whole list for short ones:
-            values=tensor_cache.cache(key=values, tensor_creation_lambda=lambda key: self.define_long_variable(key,cuda))
-        return  self.embedding(values)
+        # cache the embedded values:
+        cached_values=[]
+        for value in values:
+            cached_values+=[
+                tensor_cache.cache(key=(id(self),value),value=value, # one embedded value per IntegerModel and base.
+                    tensor_creation_lambda=lambda value: self.embedding(self.define_long_variable([value], cuda)))
+            ]
+        values=torch.cat(cached_values,dim=0)
+        return values
 
     def collect_inputs(self,values,phase=0,tensor_cache=NoCache(),cuda=None, batcher=None):
         return batcher.store_inputs(mapper=self,inputs=self.define_long_variable(values, cuda))
@@ -263,7 +260,7 @@ class Dispatcher():
     def __init__(self, mappers):
         self.mappers = mappers
 
-    def dispatch(self, structure, tensor_cache, cuda=None):
+    def dispatch(self, structure, tensor_cache=NoCache(), cuda=None):
         type_ = structure['type']
         mapper = self.mappers[type_]
 
@@ -340,7 +337,7 @@ class BatchOfInstances(Module):
         self.mappers = Dispatcher(mappers)
         self.all_modules = ModuleList(all_modules)
 
-    def forward(self, instance_list,tensor_cache, cuda=None):
+    def forward(self, instance_list,tensor_cache=NoCache(), cuda=None):
         mapped = [self.mappers.dispatch(instance, tensor_cache=tensor_cache,cuda=cuda) for instance in instance_list]
         return torch.cat(mapped, dim=0)
 
