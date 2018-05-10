@@ -18,6 +18,8 @@ class Batcher:
         self.batched_results = {}
 
     def store_batched_result(self, mapper, batched_result):
+        assert batched_result is not None
+        assert  isinstance(batched_result,Variable),"batched results must be of type Variable."
         self.batched_results[id(mapper)] = batched_result
 
     def store_inputs(self, mapper, inputs):
@@ -28,7 +30,7 @@ class Batcher:
         :return: indices of the stored inputs in the batch under construction. These indices can be used to retrieve the
         slice of batched forward results corresponding to these inputs.
         """
-        assert isinstance(inputs,Variable),"Inputs must be of type"
+        assert isinstance(inputs,Variable),"Inputs must be of type Variable."
         id_mapper = id(mapper)
         self.initialize_mapper_variables(id_mapper)
         self.mapper_inputs[id_mapper] += [inputs]
