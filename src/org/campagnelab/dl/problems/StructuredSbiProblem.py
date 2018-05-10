@@ -116,4 +116,6 @@ class StructuredSbiGenotypingProblem(SbiProblem):
         return ["softmaxGenotype"]
 
     def load_metadata(self):
+        if self.reader is not None:
+            super().load_metadata()
         pass
