@@ -9,7 +9,7 @@ import sys
 
 class SbiToJsonGenerator:
     def __init__(self, sbi_path, num_records=sys.maxsize, mem="3g", sort=False, include_frequencies=False,
-                 use_cache=False):
+                 use_cache=True):
         self.sbi_path = sbi_path
         self.num_records = num_records
         self.mem = mem
@@ -30,7 +30,9 @@ class SbiToJsonGenerator:
         if self.use_cache:
             if not self.cache_exists:
                 try:
+                    print("Caching sbi to json in progress..")
                     subprocess.run(self.print_json_from_sbi_command + ["-o"], stdout=subprocess.DEVNULL)
+                    print("Caching sbi to json done.")
                     self.cache_exists = True
                     generated_cache = True
                 except subprocess.CalledProcessError:
