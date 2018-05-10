@@ -98,7 +98,10 @@ class MapSampleInfo(Module):
                 list_mapped_counts += [mapped_count]
             while len(list_mapped_counts) < self.num_counts:
                 # pad the list with zeros:
-                list_mapped_counts += [Variable(torch.zeros(*list_mapped_counts[0].size()), requires_grad=True)]
+                variable = Variable(torch.zeros(*list_mapped_counts[0].size()), requires_grad=True)
+                if cuda:
+                    variable= variable.cuda(async=True)
+                list_mapped_counts += [variable]
             cat_list_mapped_counts = torch.cat(list_mapped_counts, dim=-1)
 
             store_indices_in_message(mapper=self.reduce_counts, message=sample,

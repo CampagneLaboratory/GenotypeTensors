@@ -67,7 +67,7 @@ class StructGenotypingModel(Module):
         return features
 
     def forward(self, sbi_records):
-        return self.classifier(self.map_sbi_messages(sbi_records))
+        return self.classifier(self.map_sbi_messages(sbi_records,cuda=self.use_cuda))
 
 
 class StructGenotypingSupervisedTrainer(CommonTrainer):

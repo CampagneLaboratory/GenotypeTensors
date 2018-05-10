@@ -109,7 +109,10 @@ class map_Boolean(StructuredEmbedding):
 
     def collect_inputs(self, values, tensor_cache=NoCache(), phase=0, cuda=None, batcher=None):
         if isinstance(values,list):
-            return batcher.store_inputs(mapper=self, inputs=torch.cat([self(predicate,tensor_cache,cuda) for predicate in values],dim=1))
+            cat = torch.cat([self(predicate, tensor_cache, cuda) for predicate in values], dim=1)
+            if cuda:
+                cat=cat.cuda(async=True)
+            return batcher.store_inputs(mapper=self, inputs=cat)
 
         else:
             # only one value:
