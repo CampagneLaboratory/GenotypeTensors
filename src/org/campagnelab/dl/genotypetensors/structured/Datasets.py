@@ -30,7 +30,7 @@ class StructuredGenotypeDataset(Dataset):
         self.basename = basename
         self.vector_names = vector_names
         self.sample_id = sample_id
-        self.max_records = max_records
+        self.max_records = len(self.delegate_labels) if self.delegate_labels else max_records
 
     def __len__(self):
         return self.max_records
