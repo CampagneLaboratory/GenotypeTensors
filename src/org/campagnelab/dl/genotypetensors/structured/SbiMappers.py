@@ -18,22 +18,25 @@ def store_indices_in_message(mapper, message, indices):
 def get_indices_in_message(mapper, message):
     return message['indices'][id(mapper)]
 
-use_mean_to_map_nwf=False
+
+use_mean_to_map_nwf = False
+
 
 class MapSequence(StructuredEmbedding):
     def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N')):
         super().__init__(embedding_size=hidden_size)
         self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=hidden_size,
                                       num_layers=num_layers)
-        self.base_to_index={}
+        self.base_to_index = {}
         for base_index, base in enumerate(bases):
-            self.base_to_index[base[0]]=base_index
+            self.base_to_index[base[0]] = base_index
 
         self.map_bases = IntegerModel(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim)
 
     def forward(self, sequence_field, tensor_cache=NoCache(), cuda=None):
         return self.map_sequence(
-            self.map_bases(list([self.base_to_index[b] for b in sequence_field]), tensor_cache=tensor_cache, cuda=cuda), cuda)
+            self.map_bases(list([self.base_to_index[b] for b in sequence_field]), tensor_cache=tensor_cache, cuda=cuda),
+            cuda)
 
 
 class MapBaseInformation(Module):
@@ -104,16 +107,16 @@ class MapSampleInfo(Module):
                 # pad the list with zeros:
                 variable = Variable(torch.zeros(*list_mapped_counts[0].size()), requires_grad=True)
                 if cuda:
-                    variable= variable.cuda(async=True)
+                    variable = variable.cuda(async=True)
                 list_mapped_counts += [variable]
             cat_list_mapped_counts = torch.cat(list_mapped_counts, dim=-1)
 
             store_indices_in_message(mapper=self.reduce_counts, message=sample,
                                      indices=self.reduce_counts.collect_inputs(cat_list_mapped_counts,
-                                                                 tensor_cache=tensor_cache,
-                                                                 cuda=cuda,
-                                                                 phase=phase,
-                                                                 batcher=batcher))
+                                                                               tensor_cache=tensor_cache,
+                                                                               cuda=cuda,
+                                                                               phase=phase,
+                                                                               batcher=batcher))
             return []
 
     def forward_batch(self, batcher, phase=0):
@@ -155,17 +158,17 @@ class MapCountInfo(StructuredEmbedding):
 
         self.nf_names_mappers = [('qualityScoresForwardStrand', self.frequency_list_mapper_base_qual),
                                  ('qualityScoresReverseStrand', self.frequency_list_mapper_base_qual),
-                                # ('distanceToStartOfRead', self.frequency_list_mapper_distance_to),
-                                # ('distanceToEndOfRead', self.frequency_list_mapper_distance_to),  # OK
-                                # ('readIndicesReverseStrand', self.frequency_list_mapper_read_indices),  # OK
-                                # ('readIndicesForwardStrand', self.frequency_list_mapper_read_indices),  # OK
+                                 ('distanceToStartOfRead', self.frequency_list_mapper_distance_to),
+                                 ('distanceToEndOfRead', self.frequency_list_mapper_distance_to),  # OK
+                                 ('readIndicesReverseStrand', self.frequency_list_mapper_read_indices),  # OK
+                                 ('readIndicesForwardStrand', self.frequency_list_mapper_read_indices),  # OK
                                  # 'distancesToReadVariationsForwardStrand', #Wrong
                                  # 'distancesToReadVariationsReverseStrand', #Wrong
-                                # ('targetAlignedLengths', self.frequency_list_mapper_aligned_lengths),
-                                # ('queryAlignedLengths', self.frequency_list_mapper_aligned_lengths),  # OK
-                                # ('numVariationsInReads', self.frequency_list_mapper_num_var),  # OK
-                                # ('readMappingQualityForwardStrand', self.frequency_list_mapper_mapping_qual),  # OK
-                                # ('readMappingQualityReverseStrand', self.frequency_list_mapper_mapping_qual)  # OK
+                                 ('targetAlignedLengths', self.frequency_list_mapper_aligned_lengths),
+                                 ('queryAlignedLengths', self.frequency_list_mapper_aligned_lengths),  # OK
+                                 ('numVariationsInReads', self.frequency_list_mapper_num_var),  # OK
+                                 ('readMappingQualityForwardStrand', self.frequency_list_mapper_mapping_qual),  # OK
+                                 ('readMappingQualityReverseStrand', self.frequency_list_mapper_mapping_qual)  # OK
                                  ]
         for nf_name, mapper in self.nf_names_mappers:
             count_mappers += [mapper]
@@ -209,7 +212,7 @@ class MapCountInfo(StructuredEmbedding):
             else:
                 variable = Variable(torch.zeros(1, mapper.embedding_size), requires_grad=True)
                 if cuda:
-                    variable=variable.cuda(async=True)
+                    variable = variable.cuda(async=True)
                 mapped += [variable]
         return self.reduce_count(mapped, cuda)
 
@@ -280,6 +283,42 @@ class MapCountInfo(StructuredEmbedding):
             return batched_input
 
 
+class FrequencyMapper(StructuredEmbedding):
+    def __init__(self):
+        super().__init__(3)
+    def convert_list_of_floats(self,values, cuda=False):
+        """This method accepts a list of floats."""
+        x = torch.FloatTensor(values).view(-1, 1)
+        return x
+
+    def forward(self, x, cuda=False):
+        """We use three floats to represent each frequency. The input must be a Float tensor of dimension:
+        (num-elements in list, 1), or a list of float values.
+        """
+        if not torch.is_tensor(x):
+            x=self.convert_list_of_floats(x)
+
+        x = torch.cat([torch.log10(x), torch.log2(x), x / 10.0], dim=1)
+        variable = Variable(x, requires_grad=True)
+        if cuda:
+            variable = variable.cuda(async=True)
+        return variable
+
+    def collect_inputs(self, values, phase=0, tensor_cache=NoCache(), cuda=None, batcher=None):
+        if phase == 0:
+
+            return batcher.store_inputs(mapper=self, inputs=self.convert_list_of_floats(values))
+        else:
+            return []
+
+    def forward_batch(self,batcher,phase=0):
+        if phase==0:
+            batched= self.forward(batcher.get_batched_input(mapper=self))
+            batcher.store_batched_result(mapper=self,batched_result=batched)
+            return batched
+        else:
+            return None
+
 class MapNumberWithFrequencyList(StructuredEmbedding):
     def __init__(self, distinct_numbers=-1, mapped_number_dim=4):
         mapped_frequency_dim = 3
@@ -287,38 +326,45 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
 
         output_dim = mapped_number_dim + mapped_frequency_dim
         self.map_number = IntegerModel(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim)
+        self.map_frequency = FrequencyMapper()
         # self.map_frequency = Variable(torch.FloatTensor([[]]))
         # IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
         if use_mean_to_map_nwf:
-            self.mean_sequence=MeanOfList()
+            self.mean_sequence = MeanOfList()
         else:
-            self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim, hidden_size=output_dim,
+            self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim,
+                                          hidden_size=output_dim,
                                           num_layers=1)
 
-    def map_frequency(self, value,cuda=False):
-        """We use three floats to represent each frequency:"""
-        variable = Variable(torch.FloatTensor([log10(value) - log10(10), log2(value) - log2(10), value / 10]),
-                            requires_grad=True)
-        if cuda:
-            variable=variable.cuda(async=True)
-        return variable
 
-    def forward(self, nwf_list, tensor_cache, cuda=None, nf_name="unknown"):
+    def forward(self, nwf_list, tensor_cache=NoCache(), cuda=None, nf_name="unknown"):
 
         if len(nwf_list) > 0:
-            mapped_frequencies = [torch.cat([
-                self.map_number([nwf['number']], tensor_cache, cuda).squeeze(),
-                self.map_frequency(nwf['frequency'],cuda)], dim=0) for nwf in nwf_list]
-            mapped_frequencies = torch.stack(mapped_frequencies, dim=0)
+            mapped_frequencies = torch.cat([
+                self.map_number([nwf['number'] for nwf in nwf_list], tensor_cache, cuda).squeeze(),
+                self.map_frequency([nwf['frequency'] for nwf in nwf_list], cuda)], dim=1)
+
             if use_mean_to_map_nwf:
-                return self.mean_sequence(mapped_frequencies,cuda=cuda)
+                return self.mean_sequence(mapped_frequencies, cuda=cuda)
             else:
                 return self.map_sequence(mapped_frequencies, cuda=cuda)
         else:
-            variable= Variable(torch.zeros(1, self.embedding_size), requires_grad=True)
+            variable = Variable(torch.zeros(1, self.embedding_size), requires_grad=True)
             if cuda:
-                variable=variable.cuda(async=True)
+                variable = variable.cuda(async=True)
             return variable
+
+    def collect_inputs(self, nwf_list, phase=0, tensor_cache=NoCache(), cuda=None, batcher=None):
+        if phase == 0:
+            # the following tensors are batched:
+            nwf_list['indices'] = {}
+            store_indices_in_message(mapper=self.map_number, message=nwf_list,
+                                     indices=self.map_number.collect_inputs(
+                                         values=nwf_list['number'], phase=phase, cuda=cuda, batcher=batcher))
+
+            store_indices_in_message(mapper=self.map_frequency, message=nwf_list,
+                                     indices=self.map_frequency.collect_inputs(
+                                         values=nwf_list['frequency'], phase=phase, cuda=cuda, batcher=batcher))
 
 
 def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64):
