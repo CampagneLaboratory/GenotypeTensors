@@ -162,7 +162,7 @@ class MeanOfList(Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, list_of_embeddings):
+    def forward(self, list_of_embeddings,cuda=None):
         assert isinstance(list_of_embeddings, Variable) or isinstance(list_of_embeddings,
                                                                       torch.FloatTensor), "input must be a Variable or Tensor"
         num_elements = list_of_embeddings.size(0)
