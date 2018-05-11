@@ -285,7 +285,7 @@ class MapCountInfo(StructuredEmbedding):
 
 class FrequencyMapper(StructuredEmbedding):
     def __init__(self):
-        super().__init__(2)
+        super().__init__(3)
         self.LOG10=log(10)
         self.LOG2=log(2)
 
