@@ -153,17 +153,17 @@ class MapCountInfo(StructuredEmbedding):
 
         self.nf_names_mappers = [('qualityScoresForwardStrand', self.frequency_list_mapper_base_qual),
                                  ('qualityScoresReverseStrand', self.frequency_list_mapper_base_qual),
-                                 ('distanceToStartOfRead', self.frequency_list_mapper_distance_to),
-                                 ('distanceToEndOfRead', self.frequency_list_mapper_distance_to),  # OK
-                                 ('readIndicesReverseStrand', self.frequency_list_mapper_read_indices),  # OK
-                                 ('readIndicesForwardStrand', self.frequency_list_mapper_read_indices),  # OK
+                                # ('distanceToStartOfRead', self.frequency_list_mapper_distance_to),
+                                # ('distanceToEndOfRead', self.frequency_list_mapper_distance_to),  # OK
+                                # ('readIndicesReverseStrand', self.frequency_list_mapper_read_indices),  # OK
+                                # ('readIndicesForwardStrand', self.frequency_list_mapper_read_indices),  # OK
                                  # 'distancesToReadVariationsForwardStrand', #Wrong
                                  # 'distancesToReadVariationsReverseStrand', #Wrong
-                                 ('targetAlignedLengths', self.frequency_list_mapper_aligned_lengths),
-                                 ('queryAlignedLengths', self.frequency_list_mapper_aligned_lengths),  # OK
-                                 ('numVariationsInReads', self.frequency_list_mapper_num_var),  # OK
-                                 ('readMappingQualityForwardStrand', self.frequency_list_mapper_mapping_qual),  # OK
-                                 ('readMappingQualityReverseStrand', self.frequency_list_mapper_mapping_qual)  # OK
+                                # ('targetAlignedLengths', self.frequency_list_mapper_aligned_lengths),
+                                # ('queryAlignedLengths', self.frequency_list_mapper_aligned_lengths),  # OK
+                                # ('numVariationsInReads', self.frequency_list_mapper_num_var),  # OK
+                                # ('readMappingQualityForwardStrand', self.frequency_list_mapper_mapping_qual),  # OK
+                                # ('readMappingQualityReverseStrand', self.frequency_list_mapper_mapping_qual)  # OK
                                  ]
         for nf_name, mapper in self.nf_names_mappers:
             count_mappers += [mapper]
