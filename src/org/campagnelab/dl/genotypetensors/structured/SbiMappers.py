@@ -24,14 +24,15 @@ class MapSequence(StructuredEmbedding):
         super().__init__(embedding_size=hidden_size)
         self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=hidden_size,
                                       num_layers=num_layers)
-        max_base_index = 0
-        for base in bases:
-            max_base_index = max(ord(base[0]), max_base_index)
-        self.map_bases = IntegerModel(distinct_numbers=(max_base_index + 1), embedding_size=mapped_base_dim)
+        self.base_to_index={}
+        for base_index, base in enumerate(bases):
+            self.base_to_index[base[0]]=base_index
+
+        self.map_bases = IntegerModel(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim)
 
     def forward(self, sequence_field, tensor_cache=NoCache(), cuda=None):
         return self.map_sequence(
-            self.map_bases(list([ord(b) for b in sequence_field]), tensor_cache=tensor_cache, cuda=cuda), cuda)
+            self.map_bases(list([self.base_to_index[b] for b in sequence_field]), tensor_cache=tensor_cache, cuda=cuda), cuda)
 
 
 class MapBaseInformation(Module):
@@ -127,7 +128,7 @@ class MapSampleInfo(Module):
 
 
 class MapCountInfo(StructuredEmbedding):
-    def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=6, mapped_genotype_index_dim=4):
+    def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=2, mapped_genotype_index_dim=4):
         super().__init__(count_dim)
         self.map_sequence = MapSequence(bases=['A', 'C', 'T', 'G', '-'], hidden_size=count_dim,
                                         mapped_base_dim=mapped_base_dim)
@@ -321,7 +322,7 @@ def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count
 
     num_counts = ploidy + extra_genotypes
 
-    map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=6,
+    map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=2,
                                  mapped_genotype_index_dim=2)
     map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,
                                    sample_dim=sample_dim)
