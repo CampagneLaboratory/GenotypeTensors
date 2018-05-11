@@ -130,7 +130,7 @@ class MapSampleInfo(Module):
 class MapCountInfo(StructuredEmbedding):
     def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=2, mapped_genotype_index_dim=4):
         super().__init__(count_dim)
-        self.map_sequence = MapSequence(bases=['A', 'C', 'T', 'G', '-'], hidden_size=count_dim,
+        self.map_sequence = MapSequence(hidden_size=count_dim,
                                         mapped_base_dim=mapped_base_dim)
         self.map_gobyGenotypeIndex = IntegerModel(distinct_numbers=100, embedding_size=mapped_genotype_index_dim)
 
