@@ -1,4 +1,4 @@
-from math import log2, log10
+from math import log2, log10, log
 
 import torch
 from torch.autograd import Variable
@@ -285,20 +285,23 @@ class MapCountInfo(StructuredEmbedding):
 
 class FrequencyMapper(StructuredEmbedding):
     def __init__(self):
-        super().__init__(3)
+        super().__init__(2)
+        self.LOG10=log(10)
+        self.LOG2=log(2)
+
     def convert_list_of_floats(self,values, cuda=False):
         """This method accepts a list of floats."""
         x = torch.FloatTensor(values).view(-1, 1)
         return x
 
     def forward(self, x, cuda=False):
-        """We use three floats to represent each frequency. The input must be a Float tensor of dimension:
+        """We use two floats to represent each number (the natural log of the number and the number divided by 10). The input must be a Float tensor of dimension:
         (num-elements in list, 1), or a list of float values.
         """
         if not torch.is_tensor(x):
             x=self.convert_list_of_floats(x)
 
-        x = torch.cat([torch.log10(x), torch.log2(x), x / 10.0], dim=1)
+        x = torch.cat([torch.log(x)/self.LOG10, torch.log(x)/self.LOG2, x / 10.0], dim=1)
         variable = Variable(x, requires_grad=True)
         if cuda:
             variable = variable.cuda(async=True)
