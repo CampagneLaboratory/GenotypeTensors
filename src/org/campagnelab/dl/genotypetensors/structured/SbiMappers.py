@@ -5,7 +5,7 @@ from torch.autograd import Variable
 from torch.nn import Module
 
 from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, IntegerModel, map_Boolean, RNNOfList, \
-    StructuredEmbedding, NoCache
+    StructuredEmbedding, NoCache, MeanOfList
 
 
 def store_indices_in_message(mapper, message, indices):
@@ -18,6 +18,7 @@ def store_indices_in_message(mapper, message, indices):
 def get_indices_in_message(mapper, message):
     return message['indices'][id(mapper)]
 
+use_mean_to_map_nwf=False
 
 class MapSequence(StructuredEmbedding):
     def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N')):
@@ -288,9 +289,11 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
         self.map_number = IntegerModel(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim)
         # self.map_frequency = Variable(torch.FloatTensor([[]]))
         # IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
-
-        self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim, hidden_size=output_dim,
-                                      num_layers=1)
+        if use_mean_to_map_nwf:
+            self.mean_sequence=MeanOfList()
+        else:
+            self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim, hidden_size=output_dim,
+                                          num_layers=1)
 
     def map_frequency(self, value,cuda=False):
         """We use three floats to represent each frequency:"""
@@ -307,7 +310,10 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
                 self.map_number([nwf['number']], tensor_cache, cuda).squeeze(),
                 self.map_frequency(nwf['frequency'],cuda)], dim=0) for nwf in nwf_list]
             mapped_frequencies = torch.stack(mapped_frequencies, dim=0)
-            return self.map_sequence(mapped_frequencies, cuda=cuda)
+            if use_mean_to_map_nwf:
+                return self.mean_sequence(mapped_frequencies,cuda=cuda)
+            else:
+                return self.map_sequence(mapped_frequencies, cuda=cuda)
         else:
             variable= Variable(torch.zeros(1, self.embedding_size), requires_grad=True)
             if cuda:
