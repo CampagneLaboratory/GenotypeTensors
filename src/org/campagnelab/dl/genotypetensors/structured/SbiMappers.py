@@ -344,7 +344,7 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
 
         if len(nwf_list) > 0:
             mapped_frequencies = torch.cat([
-                self.map_number([nwf['number'] for nwf in nwf_list], tensor_cache, cuda).squeeze(),
+                self.map_number([nwf['number'] for nwf in nwf_list], tensor_cache, cuda),
                 self.map_frequency([nwf['frequency'] for nwf in nwf_list], cuda)], dim=1)
 
             if use_mean_to_map_nwf:
