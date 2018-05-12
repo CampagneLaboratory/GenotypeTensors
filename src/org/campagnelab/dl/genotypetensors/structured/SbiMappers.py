@@ -19,7 +19,7 @@ def get_indices_in_message(mapper, message):
     return message['indices'][id(mapper)]
 
 
-use_mean_to_map_nwf = False
+use_mean_to_map_nwf = True
 
 
 class MapSequence(StructuredEmbedding):
