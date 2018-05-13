@@ -338,6 +338,7 @@ class BatchOfInstances(Module):
         self.all_modules = ModuleList(all_modules)
 
     def forward(self, instance_list,tensor_cache=NoCache(), cuda=None):
+        instance_list=list(instance_list)
         mapped = [self.mappers.dispatch(instance, tensor_cache=tensor_cache,cuda=cuda) for instance in instance_list]
         return torch.cat(mapped, dim=0)
 

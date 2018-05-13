@@ -43,12 +43,12 @@ class MapBaseInformation(Module):
     def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2):
         super().__init__()
         self.sample_mapper = sample_mapper
-        mapped_base_dim = 2
-        bases = ('A', 'C', 'T', 'G', '-', 'N')
-        self.map_sequence = MapSequence(hidden_size=sequence_output_dim, bases=bases,
-                                        mapped_base_dim=mapped_base_dim)
-        self.reduce_samples = Reduce([sequence_output_dim] + [sequence_output_dim] + [sample_dim] * num_samples,
-                                     encoding_output_dim=sample_dim)
+
+        # We reuse the same sequence mapper as the one used in MapCountInfo:
+        self.map_sequence = sample_mapper.count_mapper.map_sequence
+        self.reduce_samples = Reduce(
+            [sequence_output_dim] + [sequence_output_dim] + [sample_dim + sequence_output_dim] * num_samples,
+            encoding_output_dim=sample_dim)
 
         self.num_samples = num_samples
         self.ploidy = ploidy
@@ -58,11 +58,16 @@ class MapBaseInformation(Module):
         if cuda is None:
             cuda = next(self.parameters()).data.is_cuda
 
-        return self.reduce_samples([self.map_sequence(input['referenceBase'], tensor_cache=tensor_cache, cuda=cuda)] +
-                                   [self.map_sequence(input['genomicSequenceContext'], tensor_cache=tensor_cache,
-                                                      cuda=cuda)] +
-                                   [self.sample_mapper(sample, tensor_cache=tensor_cache, cuda=cuda) for sample in
-                                    input['samples'][0:self.num_samples]], cuda)
+        return self.reduce_samples(
+            [self.map_sequence(input['referenceBase'], tensor_cache=tensor_cache, cuda=cuda)] +
+            [self.map_sequence(input['genomicSequenceContext'], tensor_cache=tensor_cache,
+                               cuda=cuda)] +
+            # each sample has a unique from (same across all counts), which gets mapped and concatenated
+            # with the sample mapped reduction:
+            [torch.cat([self.sample_mapper(sample, tensor_cache=tensor_cache, cuda=cuda),
+                        self.map_sequence(sample['counts'][0]['fromSequence'], tensor_cache=tensor_cache,
+                                          cuda=cuda)], dim=1)
+             for sample in input['samples'][0:self.num_samples]], cuda)
 
 
 class MapSampleInfo(Module):
@@ -152,7 +157,6 @@ class MapCountInfo(StructuredEmbedding):
                          self.map_boolean,  # isIndel
                          self.map_boolean,  # matchesReference
                          self.map_sequence,
-                         self.map_sequence,
                          self.map_count,
                          self.map_count]
 
@@ -189,7 +193,7 @@ class MapCountInfo(StructuredEmbedding):
         mapped_isIndel = self.map_boolean(c['isIndel'], tensor_cache=tensor_cache, cuda=cuda)
         mapped_matchesReference = self.map_boolean(c['matchesReference'], tensor_cache=tensor_cache, cuda=cuda)
 
-        mapped_from = self.map_sequence(c['fromSequence'], tensor_cache=tensor_cache, cuda=cuda)
+        # NB: fromSequence was mapped at the level of BaseInformation.
         mapped_to = self.map_sequence(c['toSequence'], tensor_cache=tensor_cache, cuda=cuda)
         mapped_genotypeCountForwardStrand = self.map_count([c['genotypeCountForwardStrand']], tensor_cache=tensor_cache,
                                                            cuda=cuda)
@@ -199,7 +203,6 @@ class MapCountInfo(StructuredEmbedding):
         mapped = [mapped_gobyGenotypeIndex,
                   mapped_isIndel,
                   mapped_matchesReference,
-                  mapped_from,
                   mapped_to,
                   mapped_genotypeCountForwardStrand,
                   mapped_genotypeCountReverseStrand]
@@ -286,10 +289,10 @@ class MapCountInfo(StructuredEmbedding):
 class FrequencyMapper(StructuredEmbedding):
     def __init__(self):
         super().__init__(3)
-        self.LOG10=log(10)
-        self.LOG2=log(2)
+        self.LOG10 = log(10)
+        self.LOG2 = log(2)
 
-    def convert_list_of_floats(self,values, cuda=False):
+    def convert_list_of_floats(self, values, cuda=False):
         """This method accepts a list of floats."""
         x = torch.FloatTensor(values).view(-1, 1)
         return x
@@ -299,9 +302,9 @@ class FrequencyMapper(StructuredEmbedding):
         (num-elements in list, 1), or a list of float values.
         """
         if not torch.is_tensor(x):
-            x=self.convert_list_of_floats(x)
+            x = self.convert_list_of_floats(x)
 
-        x = torch.cat([torch.log(x)/self.LOG10, torch.log(x)/self.LOG2, x / 10.0], dim=1)
+        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=1)
         variable = Variable(x, requires_grad=True)
         if cuda:
             variable = variable.cuda(async=True)
@@ -314,13 +317,14 @@ class FrequencyMapper(StructuredEmbedding):
         else:
             return []
 
-    def forward_batch(self,batcher,phase=0):
-        if phase==0:
-            batched= self.forward(batcher.get_batched_input(mapper=self))
-            batcher.store_batched_result(mapper=self,batched_result=batched)
+    def forward_batch(self, batcher, phase=0):
+        if phase == 0:
+            batched = self.forward(batcher.get_batched_input(mapper=self))
+            batcher.store_batched_result(mapper=self, batched_result=batched)
             return batched
         else:
             return None
+
 
 class MapNumberWithFrequencyList(StructuredEmbedding):
     def __init__(self, distinct_numbers=-1, mapped_number_dim=4):
@@ -338,7 +342,6 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
             self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim,
                                           hidden_size=output_dim,
                                           num_layers=1)
-
 
     def forward(self, nwf_list, tensor_cache=NoCache(), cuda=None, nf_name="unknown"):
 
