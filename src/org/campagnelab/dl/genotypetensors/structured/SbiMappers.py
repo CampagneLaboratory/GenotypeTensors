@@ -39,6 +39,7 @@ class MapSequence(StructuredEmbedding):
             cuda)
 
 
+
 class MapBaseInformation(Module):
     def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2):
         super().__init__()
@@ -291,10 +292,12 @@ class FrequencyMapper(StructuredEmbedding):
         super().__init__(3)
         self.LOG10 = log(10)
         self.LOG2 = log(2)
+        self.epsilon = 1E-5
 
-    def convert_list_of_floats(self, values, cuda=False):
+    def convert_list_of_floats(self, values):
         """This method accepts a list of floats."""
         x = torch.FloatTensor(values).view(-1, 1)
+        x = x + self.epsilon
         return x
 
     def forward(self, x, cuda=False):
