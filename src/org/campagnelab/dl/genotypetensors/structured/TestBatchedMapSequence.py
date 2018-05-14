@@ -14,9 +14,9 @@ class MapContainer(BatchedStructuredEmbedding):
         for instance in elements:
             if 'indices' not in instance.keys():
                 instance['indices']={}
-
-        self.map_sequence.collect_tensors([instance['sequence'] for instance in elements], field_prefix, tensors,
-                                          index_maps=[instance['indices'] for instance in elements])
+        for instance in elements:
+            self.map_sequence.collect_tensors(instance['sequence'], field_prefix, tensors,
+                                          index_maps=instance['indices'])
         return tensors
 
     def forward_batch(self, elements, field_prefix, tensors,index_maps={}):

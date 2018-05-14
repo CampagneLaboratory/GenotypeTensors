@@ -11,6 +11,7 @@ class MapContainer(BatchedStructuredEmbedding):
         self.map_nwl = MapNumberWithFrequencyList(distinct_numbers=100, mapped_number_dim=4)
 
     def collect_tensors(self, elements, field_prefix, tensors, index_maps={}):
+        assert isinstance(index_maps,dict),"index_maps must be of type dict"
         field_prefix += "container."
         for instance in elements:
             if 'indices' not in instance.keys():
