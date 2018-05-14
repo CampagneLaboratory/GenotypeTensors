@@ -52,7 +52,7 @@ class BatchedStructuredEmbedding(Module):
     def new_batch(self):
         pass
 
-    def collect_tensors(self, elements, field_prefix, tensors, index_maps={}):
+    def collect_tensors(self, elements, field_prefix, tensors, index_map={}):
         """
 
         :param elements:
@@ -67,7 +67,7 @@ class BatchedStructuredEmbedding(Module):
         print("Not implemented")
 
 
-    def forward_batch(self, elements, field_prefix, tensors):
+    def forward_batch(self, elements, field_prefix, tensors, index_maps={}):
         print("Not implemented")
 
     def get_start_offset(self, list_name):
@@ -92,10 +92,10 @@ class BooleanMapper(BatchedStructuredEmbedding):
     def forward(self, tensors):
         return tensors
 
-    def forward_batch(self, elements, field_prefix, tensors):
+    def forward_batch(self, elements, field_prefix, tensors, index_maps={}):
         return tensors
 
-    def collect_tensors(self, elements, field_prefix, tensors):
+    def collect_tensors(self, elements, field_prefix, tensors, index_map={}):
         if field_prefix not in tensors:
             tensors[field_prefix] = []
         if isinstance(elements,list):
@@ -129,17 +129,17 @@ class IntegerMapper(BatchedStructuredEmbedding):
         values = torch.cat(cached_values, dim=0)
         return values
 
-    def collect_tensors(self, bases, field_name, tensors, index_map):
+    def collect_tensors(self, bases, field_name, tensors, index_maps={}):
         assert isinstance(bases,list) and isinstance(bases[0],int), "bases must contain a list of int."
-        assert isinstance(index_map,dict), "index_map must be of type dict"
+        assert isinstance(index_maps,dict), "index_map must be of type dict"
 
-        field_name += ".ints"
+        # do not modify prefix, since we have no delegage fields.
         index = self.get_start_offset(field_name)
 
-        if field_name not in index_map:
-            index_map[field_name] = []
+        if field_name not in index_maps:
+            index_maps[field_name] = []
         end = index + len(bases)
-        index_map[field_name]+=list(range(index, end))
+        index_maps[field_name]+=list(range(index, end))
 
         if field_name not in tensors:
             tensors[field_name] = []
@@ -147,9 +147,9 @@ class IntegerMapper(BatchedStructuredEmbedding):
         self.set_start_offset(field_name, end)
 
 
-    def forward_batch(self, elements, field_prefix,tensors ):
+    def forward_batch(self, elements, field_prefix,tensors , index_maps={}):
 
-        field_prefix += ".ints"
+
         if isinstance(tensors,dict):
             tensors=tensors[field_prefix]
         return self.embedding(torch.cat(tensors,dim=0))
@@ -195,12 +195,12 @@ class RNNOfList(BatchedStructuredEmbedding):
         else:
             return all_outputs.view(1, -1)
 
-    def collect_tensors(self, elements, field_prefix, tensors):
+    def collect_tensors(self, elements, field_prefix, tensors, index_map={}):
         if field_prefix not in tensors:
             tensors[field_prefix]=[]
         tensors[field_prefix].append(elements)
 
-    def forward_batch(self, elements, field_prefix, tensors):
+    def forward_batch(self, elements, field_prefix, tensors, index_maps={}):
 
         return self.lstm(elements)
 
@@ -279,7 +279,7 @@ class MapSequence(BatchedStructuredEmbedding):
         self.mapped_base_dim=mapped_base_dim
         self.map_bases = IntegerMapper(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim)
 
-    def collect_tensors(self, sequence_fields, field_name, tensors, index_maps=[]):
+    def collect_tensors(self, sequence_fields, field_name, tensors, index_maps={}):
         #two states possible: bases have been collected already, or they have not.
         field_name+=".sequence"
         index=self.get_start_offset(field_name)
@@ -287,7 +287,7 @@ class MapSequence(BatchedStructuredEmbedding):
             if field_name not in index_maps:
                 index_map[field_name]=[]
             index_map[field_name].append(index)
-            self.map_bases.collect_tensors([self.base_to_index[b] for b in sequence],field_name,tensors, index_map)
+            self.map_bases.collect_tensors([self.base_to_index[b] for b in sequence],field_name+".bases",tensors, index_map)
             index=index+1
         self.set_start_offset(field_name,index)
 
@@ -300,13 +300,13 @@ class MapSequence(BatchedStructuredEmbedding):
     def forward_batch(self, elements, field_prefix, tensors,index_maps=[]):
         field_prefix+=".sequence"
         """Do a forward batch on bases. This will calculate embeddings on bases using batched Long tensors:"""
-        batched_bases=self.map_bases.forward_batch(elements, field_prefix, tensors)
+        batched_bases=self.map_bases.forward_batch(elements, field_prefix+".bases", tensors)
         #print(batched_bases)
         sequence_tensors=[]
         max_length=0
         for instance, index_map in zip(elements,index_maps):
             # we get the indices of the base embeddings (stored with .ints prefix)
-            slice_indices=index_map[field_prefix+".ints"]
+            slice_indices=index_map[field_prefix+".bases"]
             individual_sequence = batched_bases[slice_indices].view(1, -1, self.mapped_base_dim)
             max_length=max(max_length,individual_sequence.size(1))
             sequence_tensors.append(individual_sequence)
@@ -425,7 +425,7 @@ class MapCountInfo(BatchedStructuredEmbedding):
         for field_name, mapper in self.all_fields:
             mapper.new_batch()
 
-    def collect_tensors(self,  list_of_counts, field_prefix,tensors):
+    def collect_tensors(self,  list_of_counts, field_prefix,tensors, index_maps={}):
         """Return a dict, where each value is a batched tensor, and the keys are the name of the field that this tensor was
         collected from. The index of each field in the tensor is stored in list_of_counts,
         modifying each field of each count to store index instead of the field. index is the index of the field value inside
@@ -446,7 +446,7 @@ class MapCountInfo(BatchedStructuredEmbedding):
             self.set_start_offset(field_prefix,index+1)
         return tensors
 
-    def forward_batch(self, elements, field_prefix, tensors):
+    def forward_batch(self, elements, field_prefix, tensors, index_maps={}):
         field_prefix+="."
         tensors['toSequence'] = self.map_sequence.forward_batch([count['toSequence'] for count in elements],
                                                                 field_prefix+"toSequence", tensors)
@@ -500,11 +500,20 @@ class FrequencyMapper(BatchedStructuredEmbedding):
         x=x+self.epsilon
         return x
 
-    def collect_tensors(self, elements, field_prefix, tensors):
+    def collect_tensors(self, elements, field_prefix, tensors, index_maps={}):
+        #field_prefix += "."
+        index = self.get_start_offset(field_prefix)
+        if field_prefix not in index_maps:
+            index_maps[field_prefix] = []
+        start=self.get_start_offset(field_prefix)
+        end=start+len(elements)
+        index_maps[field_prefix]+=list(range(start,end))
+        self.set_start_offset(field_prefix,end)
         return tensors[field_prefix].append(self.forward(elements))
 
-    def forward_batch(self, elements, field_prefix,tensors ):
-        return torch.cat(tensors,dim=0)
+    def forward_batch(self, elements, field_prefix,tensors, index_maps={} ):
+
+        return torch.cat(tensors[field_prefix],dim=0)
 
     def forward(self, x):
         """We use two floats to represent each number (the natural log of the number and the number divided by 10). The input must be a Float tensor of dimension:
@@ -538,11 +547,12 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
 
 
 
-    def collect_tensors(self, list_of_nwf, field_prefix, tensors, indices={}):
+    def collect_tensors(self, list_of_nwf, field_prefix, tensors, index_maps={}):
         """Return a dict, where each value is a batched tensor, and the keys are the name of the field that this tensor was
                 collected from. The index of each field in the tensor is stored in list_of_counts,
                 modifying each field of each count to store index instead of the field. index is the index of the field value inside
                 the batched returned tensor."""
+        field_prefix+=".nwf"
         start_offset = self.get_start_offset(field_prefix)
 
         number_field = field_prefix + ".number"
@@ -560,34 +570,37 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
 
             offset = nwf_index + start_offset
             nwf['index'] = offset
-            self.map_number.collect_tensors([nwf['number']],number_field,tensors)
-            self.map_frequency.collect_tensors([nwf['frequency']],frequency_field,tensors)
+            self.map_number.collect_tensors([nwf['number']],field_prefix+'.number',tensors,index_maps)
+            self.map_frequency.collect_tensors([nwf['frequency']],field_prefix+'.frequency',tensors,index_maps)
             self.set_start_offset(field_prefix, offset + 1)
         return tensors
 
-    def forward_batch(self, elements, field_prefix, tensors):
-        field_prefix+="."
-        filtered_list_of_nwf=[]
-        for nwf in elements:
-            if isinstance(nwf,dict):
-                filtered_list_of_nwf.append(nwf)
-        if len(filtered_list_of_nwf)>0:
-            mapped_frequency = self.map_frequency.forward_batch(elements=None, field_prefix=None, tensors=tensors[field_prefix + 'frequency'])
-            mapped_number = self.map_number.forward_batch(elements=None, field_prefix=None, tensors=tensors[field_prefix + 'number'])
-            for nwf in filtered_list_of_nwf:
+    def forward_batch(self, elements, field_prefix, tensors, index_maps={}):
 
-                    slice_index = nwf['index']
+        # map the batched inputs:
+        field_prefix += ".nwf"
+        mapped_frequency = self.map_frequency.forward_batch(elements=None, field_prefix=field_prefix+'.frequency',
+                                                            tensors=tensors,
+                                                            index_maps=index_maps)
+        mapped_number = self.map_number.forward_batch(elements=None, field_prefix=field_prefix+'.number',
+                                                      tensors=tensors, index_maps=index_maps)
+        mapped_tensors=[]
+        # then go through each element and assign the slices:
+        for index_map in index_maps:
+            frequency_indices = index_map[field_prefix+ '.frequency']
+            number_indices = index_map[field_prefix+ '.number']
 
-                    nwf['mapped-tensors'] = torch.cat([mapped_number[slice_index].view(1,-1),
-                                                         mapped_frequency[slice_index].view(1,-1)], dim=1)
+            mapped_tensors.append(torch.cat([mapped_number[frequency_indices].view(1,-1),
+                                                         mapped_frequency[number_indices].view(1,-1)], dim=1))
 
-            return self.mean_sequence(torch.stack([nwf['mapped-tensors'] for nwf in filtered_list_of_nwf]))
-        else:
-            variable = Variable(torch.zeros(1, self.embedding_size), requires_grad=True)
+        if len(mapped_tensors)==0:
+            variable =Variable(torch.zeros(1, self.embedding_size), requires_grad=True)
             if self.use_cuda:
                 variable = variable.cuda()
-            return variable
 
+            tensors[field_prefix].append(variable)
+
+        return self.mean_sequence(torch.stack(mapped_tensors))
 
 
 def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64):
