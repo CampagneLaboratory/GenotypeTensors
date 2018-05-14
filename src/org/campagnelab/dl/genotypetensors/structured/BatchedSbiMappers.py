@@ -1,0 +1,598 @@
+from math import log2, log10, log
+
+import torch
+from torch.autograd import Variable
+from torch.nn import Module, Embedding, LSTM, Linear
+
+from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised_trainer import sbi_json_string
+
+
+def store_indices_in_message(mapper, message, indices):
+    mapper_id = id(mapper)
+    if mapper_id not in message['indices']:
+        message['indices'][mapper_id] = []
+    message['indices'][mapper_id] += indices
+
+
+def get_indices_in_message(mapper, message):
+    return message['indices'][id(mapper)]
+
+
+class BatchedStructuredEmbedding(Module):
+    def __init__(self, embedding_size, use_cuda=False):
+        super().__init__()
+        self.embedding_size = embedding_size
+        self.use_cuda = use_cuda
+        self.start_offsets={}
+
+    def cuda(self,device=0):
+        self.use_cuda=True
+
+    def define_long_variable(self, values, cuda=None):
+        if isinstance(values,list):
+            variable = Variable(torch.LongTensor(values), requires_grad=False)
+        else:
+            variable = Variable(torch.LongTensor([values]), requires_grad=False)
+
+        if self.is_cuda(cuda):
+            variable = variable.cuda(async=True)
+        return variable
+
+    def define_boolean(self, predicate):
+        var = Variable(torch.FloatTensor([[1, 0]])) if predicate else Variable(torch.FloatTensor([[0, 1]]))
+        if self.use_cuda:
+            var = var.cuda()
+        return var
+
+    def is_cuda(self, cuda=None):
+        """ Return True iff this model is on cuda. """
+        return self.use_cuda
+
+    def new_batch(self):
+        pass
+
+    def collect_tensors(self, list, list_name,tensors,index_maps={}):
+        """
+
+        :param list:
+        :param list_name:
+        :param tensors:
+        :return:
+        """
+        """Collect input tensors and store them in the list instances, keyed by the name of the field(s)
+        For instance, counts.isIndel stores a list of Variables. counts.toSequence.bases stores Variables with long
+        
+        """
+        print("Not implemented")
+
+
+    def forward_batch(self, elements, field_prefix, tensors):
+        print("Not implemented")
+
+    def get_start_offset(self, list_name):
+        if list_name not in self.start_offsets:
+            self.start_offsets[list_name] = 0
+            return 0
+        else:
+            index = self.start_offsets[list_name]
+            return index
+
+    def set_start_offset(self, list_name, index):
+        self.start_offsets[list_name] = index
+
+    def new_batch(self):
+        self.start_offsets = {}
+
+
+class BooleanMapper(BatchedStructuredEmbedding):
+    def __init__(self,  ):
+        super().__init__(2)
+
+    def forward(self, tensors):
+        return tensors
+
+    def forward_batch(self, elements, field_prefix, tensors):
+        return tensors
+
+    def collect_tensors(self, elements, list_name, tensors):
+        if list_name not in tensors:
+            tensors[list_name] = []
+        if isinstance(elements,list):
+
+
+            tensor= torch.cat([torch.FloatTensor([1,0]) if value else torch.FloatTensor([1,0]) for value in list])
+            tensor=Variable(tensor,requires_grad=True)
+            tensors[list_name].append(tensor)
+        else:
+            tensor = torch.FloatTensor([1, 0]) if elements else torch.FloatTensor([1, 0])
+            tensors[list_name] .append(Variable(tensor, requires_grad=True))
+
+class IntegerMapper(BatchedStructuredEmbedding):
+    def __init__(self, distinct_numbers, embedding_size):
+        super().__init__(embedding_size)
+        self.distinct_numbers = distinct_numbers
+        self.embedding = Embedding(distinct_numbers, embedding_size)
+        self.embedding.requires_grad = True
+
+    def forward(self, values):
+        """Accepts a list of integer values and produces a batch of batch x embedded-value. """
+
+        assert isinstance(values, list), "values must be a list of integers."
+        for value in values:
+            assert value < self.distinct_numbers, "A value is larger than the embedding input allow: " + str(value)
+
+        # cache the embedded values:
+        cached_values = []
+        for value in values:
+            self.embedding(self.define_long_variable([value]))
+        values = torch.cat(cached_values, dim=0)
+        return values
+
+    def collect_tensors(self, bases, field_name, tensors, index_map):
+        assert isinstance(bases,list) and isinstance(bases[0],int), "bases must contain a list of int."
+        assert isinstance(index_map,dict), "index_map must be of type dict"
+
+        field_name += ".ints"
+        index = self.get_start_offset(field_name)
+
+        if field_name not in index_map:
+            index_map[field_name] = []
+        end = index + len(bases)
+        index_map[field_name]+=list(range(index, end))
+
+        if field_name not in tensors:
+            tensors[field_name] = []
+        tensors[field_name].append(self.define_long_variable(bases))
+        self.set_start_offset(field_name, end)
+
+
+    def forward_batch(self, elements, field_prefix,tensors ):
+        if isinstance(tensors,dict):
+            tensors=tensors[field_prefix]
+        return self.embedding(torch.cat(tensors,dim=0))
+
+
+class MeanOfList(Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, list_of_embeddings, cuda=None):
+        assert isinstance(list_of_embeddings, Variable) or isinstance(list_of_embeddings,
+                                                                      torch.FloatTensor), "input must be a Variable or Tensor"
+        num_elements = list_of_embeddings.size(0)
+        return (torch.sum(list_of_embeddings, dim=0) / num_elements).view(1, -1)
+
+
+class RNNOfList(BatchedStructuredEmbedding):
+    def __init__(self, embedding_size, hidden_size, num_layers=1):
+        super().__init__(hidden_size)
+        self.num_layers = num_layers
+        self.hidden_size = hidden_size
+        self.lstm = LSTM(embedding_size, hidden_size, num_layers, batch_first=True)
+
+    def forward(self, list_of_embeddings):
+
+        batch_size = list_of_embeddings.size(0)
+        num_layers = self.num_layers
+        hidden_size = self.hidden_size
+        hidden = Variable(torch.zeros(num_layers, batch_size, hidden_size))
+        memory = Variable(torch.zeros(num_layers, batch_size, hidden_size))
+        if self.is_cuda():
+            hidden = hidden.cuda(async=True)
+            memory = memory.cuda(async=True)
+        states = (hidden, memory)
+        inputs = list_of_embeddings.view(batch_size, 1, -1)
+        out, states = self.lstm(inputs, states)
+        # return the last output:
+        all_outputs = out.squeeze()
+        if (all_outputs.dim() > 1):
+            # return the last output:
+            return all_outputs[-1, :].view(1, -1)
+        else:
+            return all_outputs.view(1, -1)
+
+    def collect_tensors(self, list, list_name, tensors):
+        if list_name not in tensors:
+            tensors[list_name]=[]
+        tensors[list_name].append(list)
+
+    def forward_batch(self, elements, field_prefix, tensors):
+        #TODO use matchbox here?
+
+        return self.lstm(elements)
+
+
+class Reduce(BatchedStructuredEmbedding):
+    """ Reduce a list of embedded fields or messages using a feed forward. Requires list to be a constant size """
+
+    def __init__(self, input_dims, encoding_output_dim):
+        """
+
+        :param input_dims: dimensions of the elements to reduce (list of size the number of elements, integer dimension).
+        :param encoding_output_dim: dimension of the reduce output.
+        """
+        super().__init__(embedding_size=encoding_output_dim)
+        self.encoding_dim = encoding_output_dim
+        self.input_dims = input_dims
+        sum_input_dims = 0
+        for dim in input_dims:
+            sum_input_dims += dim
+        self.sum_input_dims = sum_input_dims
+        self.linear1 = Linear(sum_input_dims, sum_input_dims * 2)
+        self.linear2 = Linear(sum_input_dims * 2, encoding_output_dim)
+
+    def forward(self, input_list, pad_missing=False):
+        if len(input_list) != len(self.input_dims) and not pad_missing:
+            raise ValueError("The input_list dimension does not match input_dims, and pad_missing is not specified. ")
+        batch_size = input_list[0].size(0)
+        if pad_missing:
+            index = 0
+            while len(input_list) < len(self.input_dims):
+                # pad input list with minibatches of zeros:
+                variable = Variable(torch.zeros(batch_size, self.input_dims[index]))
+                if self.is_cuda():
+                    variable = variable.cuda(async=True)
+                input_list += [variable]
+                index += 1
+
+        if any([input.dim() != 2 for input in input_list]) or [input.size(1) for input in
+                                                               input_list] != self.input_dims:
+            print("STOP: input dims={} sizes={}".format([input.dim() for input in input_list],
+                                                        [input.size() for input in input_list]))
+        for index, input in enumerate(input_list):
+            assert input.size(1) == self.input_dims[index], "input dimension must match declared for input {} ".format(
+                index)
+        x = torch.cat(input_list, dim=1)
+
+        return self.forward_flat_inputs(x)
+
+    def forward_flat_inputs(self, x):
+        x = self.linear1(x)
+        x = torch.nn.functional.relu(x)
+        x = self.linear2(x)
+        x = torch.nn.functional.relu(x)
+        return x.view(-1, self.encoding_dim)
+
+
+def store_indices_in_message(mapper, message, indices):
+    mapper_id = id(mapper)
+    if mapper_id not in message['indices']:
+        message['indices'][mapper_id] = []
+    message['indices'][mapper_id] += indices
+
+
+def get_indices_in_message(mapper, message):
+    return message['indices'][id(mapper)]
+
+
+class MapSequence(BatchedStructuredEmbedding):
+    def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N')):
+        super().__init__(embedding_size=hidden_size)
+        self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=hidden_size,
+                                      num_layers=num_layers)
+        self.base_to_index = {}
+        for base_index, base in enumerate(bases):
+            self.base_to_index[base[0]] = base_index
+
+        self.map_bases = IntegerMapper(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim)
+
+    def collect_tensors(self, sequence_fields, field_name, tensors, index_maps=[]):
+        #two states possible: bases have been collected already, or they have not.
+        field_name+=".sequence"
+        index=self.get_start_offset(field_name)
+        for sequence, index_map in zip(sequence_fields, index_maps):
+            if field_name not in index_maps:
+                index_map[field_name]=[]
+            index_map[field_name].append(index)
+            self.map_bases.collect_tensors([self.base_to_index[b] for b in sequence],field_name,tensors, index_map)
+            index=index+1
+        self.set_start_offset(field_name,index)
+    def forward(self, sequence_field):
+        return self.map_sequence(self.collect_tensors(sequence_field))
+
+    def forward_batch(self, elements, field_prefix, tensors):
+        field_prefix += "."
+        # first, batch the bases:
+        self.map_sequence.forward_batch(elements, field_prefix+"bases", tensors)
+
+
+
+class MapBaseInformation(Module):
+    def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2):
+        super().__init__()
+        self.sample_mapper = sample_mapper
+
+        # We reuse the same sequence mapper as the one used in MapCountInfo:
+        self.map_sequence = sample_mapper.count_mapper.map_sequence
+        self.reduce_samples = Reduce(
+            [sequence_output_dim] + [sequence_output_dim] + [sample_dim + sequence_output_dim] * num_samples,
+            encoding_output_dim=sample_dim)
+
+        self.num_samples = num_samples
+        self.ploidy = ploidy
+        self.extra_genotypes = extra_genotypes
+
+    def forward(self, input):
+        return self.reduce_samples(
+            [self.map_sequence(input['referenceBase'])] +
+            [self.map_sequence(input['genomicSequenceContext'])] +
+            # each sample has a unique from (same across all counts), which gets mapped and concatenated
+            # with the sample mapped reduction:
+            [torch.cat([self.sample_mapper(sample),
+                        self.map_sequence(sample['counts'][0]['fromSequence'])], dim=1)
+             for sample in input['samples'][0:self.num_samples]])
+
+
+class MapSampleInfo(Module):
+    def __init__(self, count_mapper, count_dim, sample_dim, num_counts):
+        super().__init__()
+        self.count_mapper = count_mapper
+        self.num_counts = num_counts
+        self.count_dim = count_dim
+        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
+
+    def forward(self, input, tensor_cache, cuda=None):
+        observed_counts = self.get_observed_counts(input)
+        return self.reduce_counts([self.count_mapper(count) for count in
+                                   observed_counts[0:self.num_counts]],
+                                  pad_missing=True, cuda=cuda)
+
+    def get_observed_counts(self, input):
+        return [count for count in input['counts'] if
+                (count['genotypeCountForwardStrand'] + count['genotypeCountReverseStrand']) > 0]
+
+
+class MapCountInfo(BatchedStructuredEmbedding):
+    def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=2, mapped_genotype_index_dim=4,
+                 use_cuda=False):
+        super().__init__(count_dim,use_cuda=use_cuda)
+
+        self.frequency_list_mapper_base_qual = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_num_var = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_mapping_qual = MapNumberWithFrequencyList(distinct_numbers=100)
+        self.frequency_list_mapper_distance_to = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_aligned_lengths = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_read_indices = MapNumberWithFrequencyList(distinct_numbers=1000)
+
+        self.nf_names_mappers = [('qualityScoresForwardStrand', self.frequency_list_mapper_base_qual),
+                                 ('qualityScoresReverseStrand', self.frequency_list_mapper_base_qual),
+                                #('distanceToStartOfRead', self.frequency_list_mapper_distance_to),
+                                #('distanceToEndOfRead', self.frequency_list_mapper_distance_to),  # OK
+                                #('readIndicesReverseStrand', self.frequency_list_mapper_read_indices),  # OK
+                                # ('readIndicesForwardStrand', self.frequency_list_mapper_read_indices),  # OK
+                                 # 'distancesToReadVariationsForwardStrand', #Wrong
+                                 # 'distancesToReadVariationsReverseStrand', #Wrong
+                                #('targetAlignedLengths', self.frequency_list_mapper_aligned_lengths),
+                                #('queryAlignedLengths', self.frequency_list_mapper_aligned_lengths),  # OK
+                                #('numVariationsInReads', self.frequency_list_mapper_num_var),  # OK
+                                #('readMappingQualityForwardStrand', self.frequency_list_mapper_mapping_qual),  # OK
+                                #('readMappingQualityReverseStrand', self.frequency_list_mapper_mapping_qual)  # OK
+                                 ]
+        self.all_fields = []  # a list of (field_name, field_mapper)
+
+        self.all_fields += self.nf_names_mappers
+
+        self.map_sequence = MapSequence(hidden_size=count_dim,
+                                        mapped_base_dim=mapped_base_dim)
+        self.map_gobyGenotypeIndex = IntegerMapper(distinct_numbers=100, embedding_size=mapped_genotype_index_dim)
+
+        self.map_count = IntegerMapper(distinct_numbers=100000, embedding_size=mapped_count_dim)
+        self.map_boolean = BooleanMapper()
+
+        self.all_fields += [('toSequence', self.map_sequence),
+                            ('gobyGenotypeIndex', self.map_gobyGenotypeIndex),
+                            ('isIndel', self.map_boolean),
+                            ('matchesReference', self.map_boolean),
+                            ('genotypeCountForwardStrand', self.map_count),
+                            ('genotypeCountReverseStrand', self.map_count)]
+
+        # below, [2+2+2] is for the booleans mapped with a function:
+        sum_of_dims=0
+        for _, mapper in self.all_fields:
+            sum_of_dims+=      mapper.embedding_size
+        self.reduce_count = Reduce([sum_of_dims],
+                                   encoding_output_dim=count_dim)
+
+    def new_batch(self):
+        super().new_batch()
+        for field_name, mapper in self.all_fields:
+            mapper.new_batch()
+
+    def collect_tensors(self,  list_of_counts, field_prefix,tensors):
+        """Return a dict, where each value is a batched tensor, and the keys are the name of the field that this tensor was
+        collected from. The index of each field in the tensor is stored in list_of_counts,
+        modifying each field of each count to store index instead of the field. index is the index of the field value inside
+        the batched returned tensor."""
+        field_prefix+="."
+        tensors = {}
+        for field_name, _ in self.all_fields:
+            if field_name not in tensors:
+                tensors[field_prefix+field_name] = []
+        offset=self.get_start_offset(field_prefix)
+        for count_index, count in enumerate(list_of_counts):
+            assert count['type']=="CountInfo", "This mapper only accepts type==CountInfo"
+            index = count_index + offset
+            count['index'] = {'main':index}
+            for field_name, mapper in self.all_fields:
+                print("Collecting {}".format(field_name),flush=True)
+                mapper.collect_tensors(count[field_name],field_prefix+field_name,tensors, count['index'])
+            self.set_start_offset(field_prefix,index+1)
+        return tensors
+
+    def forward_batch(self, elements, field_prefix, tensors):
+        field_prefix+="."
+        tensors['toSequence'] = self.map_sequence.forward_batch([count['toSequence'] for count in elements],
+                                                                field_prefix+"toSequence", tensors)
+
+        for nf_name, nf_mapper in self.nf_names_mappers:
+            all_nwfs=[]
+            for count in elements:
+                for element in count[nf_name]:
+                    all_nwfs.append(element)
+
+            tensors[nf_name] = nf_mapper.forward_batch(all_nwfs,
+                                                       field_prefix+nf_name, tensors)
+
+        for field_name, mapper in self.all_fields:
+            tensors[field_name] = mapper.forward_batch(elements=[count[field_name] for count in elements],
+                                                       field_prefix= field_prefix+field_name,
+                                                       tensors=tensors)
+        # remove inputs to the nf mappers
+        for nf_name, _ in self.nf_names_mappers:
+            tensors[field_prefix+nf_name]=None
+
+        # slice batched tensors into the instances of counts:
+        for count in elements:
+            slice_index = count['index']
+
+            to_concat = []
+            for field_name, _ in self.all_fields:
+
+                tensor = tensors[field_prefix + field_name]
+                if tensor is not None:
+                    print("processing {} field"+field_name)
+                    to_concat.append(tensor[slice_index])
+            if len(to_concat)>1:
+                count['mapped-tensors'] = torch.cat(to_concat,   dim=1)
+            if len(to_concat)==1:
+                count['mapped-tensors'] = to_concat
+
+        return self.reduce_count(torch.cat([count['mapped-tensors'] for count in elements],dim=1))
+
+
+class FrequencyMapper(BatchedStructuredEmbedding):
+    def __init__(self):
+        super().__init__(3)
+        self.LOG10 = log(10)
+        self.LOG2 = log(2)
+        self.epsilon=1E-5
+
+    def convert_list_of_floats(self, values):
+        """This method accepts a list of floats."""
+        x = torch.FloatTensor(values).view(-1, 1)
+        x=x+self.epsilon
+        return x
+
+    def collect_tensors(self, list, list_name,tensors):
+        return tensors[list_name].append(self.forward(list))
+
+    def forward_batch(self, elements, field_prefix,tensors ):
+        return torch.cat(tensors,dim=0)
+
+    def forward(self, x):
+        """We use two floats to represent each number (the natural log of the number and the number divided by 10). The input must be a Float tensor of dimension:
+        (num-elements in list, 1), or a list of float values.
+        """
+        if not torch.is_tensor(x):
+            x = self.convert_list_of_floats(x)
+
+        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=1)
+        variable = Variable(x, requires_grad=True)
+        if self.use_cuda:
+            variable = variable.cuda(async=True)
+        return variable
+
+
+class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
+    def __init__(self, distinct_numbers=-1, mapped_number_dim=4):
+        mapped_frequency_dim = 3
+        super().__init__(embedding_size=mapped_number_dim + mapped_frequency_dim)
+
+        output_dim = mapped_number_dim + mapped_frequency_dim
+        self.map_number = IntegerMapper(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim)
+        self.map_frequency = FrequencyMapper()
+        # stores offsets across a batch key is list name, value is offset to use when generating new indices.
+        self.start_offsets = {}
+        # self.map_frequency = Variable(torch.FloatTensor([[]]))
+        # IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
+
+        self.mean_sequence = MeanOfList()
+
+
+
+
+    def collect_tensors(self, list_of_nwf, list_name,tensors,indices={}):
+        """Return a dict, where each value is a batched tensor, and the keys are the name of the field that this tensor was
+                collected from. The index of each field in the tensor is stored in list_of_counts,
+                modifying each field of each count to store index instead of the field. index is the index of the field value inside
+                the batched returned tensor."""
+        start_offset = self.get_start_offset(list_name)
+
+        number_field = list_name + ".number"
+        frequency_field = list_name + ".frequency"
+        if number_field not in tensors:
+            tensors[number_field]=[]
+            tensors[frequency_field]=[]
+
+        for nwf_index, nwf in enumerate(list_of_nwf):
+            assert nwf['type'] == "NumberWithFrequency", "This mapper only accepts type==NumberWithFrequency, got "+str(nwf)
+            # nwf_index here starts at zero, but this list of nwf may be collected as part of other lists.
+            # we add the start offset to account for nw previously mapped in the same batch. start offset is reset
+            # when calling new_batch()
+
+
+            offset = nwf_index + start_offset
+            nwf['index'] = offset
+            self.map_number.collect_tensors([nwf['number']],number_field,tensors)
+            self.map_frequency.collect_tensors([nwf['frequency']],frequency_field,tensors)
+            self.set_start_offset(list_name, offset+1)
+        return tensors
+
+    def forward_batch(self, elements, field_prefix, tensors):
+        field_prefix+="."
+        filtered_list_of_nwf=[]
+        for nwf in elements:
+            if isinstance(nwf,dict):
+                filtered_list_of_nwf.append(nwf)
+        if len(filtered_list_of_nwf)>0:
+            mapped_frequency = self.map_frequency.forward_batch(elements=None, field_prefix=None, tensors=tensors[field_prefix + 'frequency'])
+            mapped_number = self.map_number.forward_batch(elements=None, field_prefix=None, tensors=tensors[field_prefix + 'number'])
+            for nwf in filtered_list_of_nwf:
+
+                    slice_index = nwf['index']
+
+                    nwf['mapped-tensors'] = torch.cat([mapped_number[slice_index].view(1,-1),
+                                                         mapped_frequency[slice_index].view(1,-1)], dim=1)
+
+            return self.mean_sequence(torch.stack([nwf['mapped-tensors'] for nwf in filtered_list_of_nwf]))
+        else:
+            variable = Variable(torch.zeros(1, self.embedding_size), requires_grad=True)
+            if self.use_cuda:
+                variable = variable.cuda()
+            return variable
+
+
+
+def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64):
+    """Return a tuple with two elements:
+    mapper-dictionary: key is name of message type. value is function to map the message.
+    all-modules: list of modules that implement mapping. """
+
+    num_counts = ploidy + extra_genotypes
+
+    map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=2,
+                                 mapped_genotype_index_dim=2)
+    map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,
+                                   sample_dim=sample_dim)
+    map_SbiRecords = MapBaseInformation(sample_mapper=map_SampleInfo, num_samples=num_samples, sample_dim=sample_dim,
+                                        sequence_output_dim=count_dim, ploidy=ploidy, extra_genotypes=extra_genotypes)
+
+    sbi_mappers = {"BaseInformation": map_SbiRecords,
+                   "SampleInfo": map_SampleInfo,
+                   "CountInfo": map_CountInfo
+                   }
+    return sbi_mappers, [map_SbiRecords, map_SampleInfo, map_CountInfo]
+
+
+def map_count(list_of_counts, count_dim=64):
+    map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=2,
+                                 mapped_genotype_index_dim=2)
+    tensors = map_CountInfo.collect_tensors(list_of_counts,'counts',{})
+
+    map_CountInfo.forward_batch(list_of_counts,"counts", tensors)
+
+if __name__ == '__main__':
+    import ujson
+
+    record = ujson.loads(sbi_json_string)
+    map_count(record['samples'][0]['counts'])
