@@ -297,7 +297,8 @@ class FrequencyMapper(StructuredEmbedding):
     def convert_list_of_floats(self, values):
         """This method accepts a list of floats."""
         x = torch.FloatTensor(values).view(-1, 1)
-        x = x + self.epsilon
+        if hasattr(self,'epsilon'):
+            x = x + self.epsilon
         return x
 
     def forward(self, x, cuda=False):
