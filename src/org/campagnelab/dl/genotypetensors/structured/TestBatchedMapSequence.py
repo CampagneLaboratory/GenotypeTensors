@@ -19,7 +19,8 @@ class MapContainer(BatchedStructuredEmbedding):
                                           index_maps=instance['indices'])
         return tensors
 
-    def forward_batch(self, elements, field_prefix, tensors,index_maps={}):
+    def forward_batch(self, elements, field_prefix, tensors,index_maps=[]):
+        super().forward_batch(elements,field_prefix,tensors,index_maps)
         field_prefix += "container"
         # do forward on sequences:
         return self.map_sequence.forward_batch([instance['sequence'] for instance in elements ],field_prefix,tensors,
@@ -43,6 +44,9 @@ class BatchedMappersTestCase(unittest.TestCase):
 
         # test forward batch:
 
-        self.assertIsNotNone(map_container.forward_batch(containers,"",tensors))
+        batch = map_container.forward_batch(containers, "", tensors)
+        print(batch)
+        self.assertIsNotNone(batch)
+        self.assertEqual(batch.size(0),2)
 if __name__ == '__main__':
     unittest.main()

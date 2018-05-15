@@ -36,7 +36,9 @@ class BatchedMappersTestCase(unittest.TestCase):
                                          {'type':"NumberWithFrequency",'number': 10, 'frequency': 2}]},
 
                       {'qualityScores': [{'type':"NumberWithFrequency",'number': 2,  'frequency': 12},
-                                         {'type':"NumberWithFrequency",'number': 12, 'frequency': 3}]}]
+                                         {'type':"NumberWithFrequency",'number': 12, 'frequency': 3}]},
+                      {'qualityScores': []},
+                      ]
 
         tensors = map_container.collect_tensors(containers, "", {})
         self.assertIsNotNone(tensors)

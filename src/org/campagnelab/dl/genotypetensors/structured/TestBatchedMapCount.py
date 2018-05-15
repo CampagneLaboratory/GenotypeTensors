@@ -24,6 +24,8 @@ class BatchedMappersTestCase(unittest.TestCase):
 
         # test forward batch:
 
-        self.assertIsNotNone(map_container.forward_batch(containers,"",tensors))
+        mapped = map_container.forward_batch(containers, "", tensors)
+        print(mapped)
+        self.assertIsNotNone(mapped)
 if __name__ == '__main__':
     unittest.main()
