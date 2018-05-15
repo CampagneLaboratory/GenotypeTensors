@@ -4,8 +4,8 @@ import torch
 from torch.autograd import Variable
 from torch.nn import Module, Embedding, LSTM, Linear
 
-from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised_trainer import sbi_json_string
 
+sbi_json_string = '{"type":"BaseInformation","referenceBase":"A","genomicSequenceContext":"GCAGATATACTTCACAGCCCACGCTGACTCTGCCAAGCACA","samples":[{"type":"SampleInfo","counts":[{"type":"CountInfo","matchesReference":true,"isCalled":true,"isIndel":false,"fromSequence":"A","toSequence":"A","genotypeCountForwardStrand":7,"genotypeCountReverseStrand":32,"gobyGenotypeIndex":0,"qualityScoresForwardStrand":[{"type":"NumberWithFrequency","frequency":7,"number":40}],"qualityScoresReverseStrand":[{"type":"NumberWithFrequency","frequency":32,"number":40}],"readIndicesForwardStrand":[{"type":"NumberWithFrequency","frequency":1,"number":23},{"type":"NumberWithFrequency","frequency":1,"number":30},{"type":"NumberWithFrequency","frequency":5,"number":34}],"readIndicesReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":6},{"type":"NumberWithFrequency","frequency":1,"number":22},{"type":"NumberWithFrequency","frequency":1,"number":28},{"type":"NumberWithFrequency","frequency":1,"number":31},{"type":"NumberWithFrequency","frequency":1,"number":34},{"type":"NumberWithFrequency","frequency":1,"number":35},{"type":"NumberWithFrequency","frequency":1,"number":44},{"type":"NumberWithFrequency","frequency":1,"number":50},{"type":"NumberWithFrequency","frequency":1,"number":62},{"type":"NumberWithFrequency","frequency":1,"number":63},{"type":"NumberWithFrequency","frequency":1,"number":68},{"type":"NumberWithFrequency","frequency":2,"number":75},{"type":"NumberWithFrequency","frequency":2,"number":76},{"type":"NumberWithFrequency","frequency":1,"number":81},{"type":"NumberWithFrequency","frequency":1,"number":83},{"type":"NumberWithFrequency","frequency":1,"number":88},{"type":"NumberWithFrequency","frequency":1,"number":89},{"type":"NumberWithFrequency","frequency":1,"number":100},{"type":"NumberWithFrequency","frequency":1,"number":104},{"type":"NumberWithFrequency","frequency":1,"number":109},{"type":"NumberWithFrequency","frequency":1,"number":117},{"type":"NumberWithFrequency","frequency":1,"number":118},{"type":"NumberWithFrequency","frequency":1,"number":125},{"type":"NumberWithFrequency","frequency":1,"number":133},{"type":"NumberWithFrequency","frequency":2,"number":138},{"type":"NumberWithFrequency","frequency":4,"number":139}],"readMappingQualityForwardStrand":[{"type":"NumberWithFrequency","frequency":7,"number":60}],"readMappingQualityReverseStrand":[{"type":"NumberWithFrequency","frequency":32,"number":60}],"numVariationsInReads":[{"type":"NumberWithFrequency","frequency":15,"number":0},{"type":"NumberWithFrequency","frequency":12,"number":1},{"type":"NumberWithFrequency","frequency":8,"number":2},{"type":"NumberWithFrequency","frequency":4,"number":3}],"insertSizes":[{"type":"NumberWithFrequency","frequency":1,"number":-520},{"type":"NumberWithFrequency","frequency":1,"number":-488},{"type":"NumberWithFrequency","frequency":1,"number":-481},{"type":"NumberWithFrequency","frequency":1,"number":-469},{"type":"NumberWithFrequency","frequency":1,"number":-467},{"type":"NumberWithFrequency","frequency":1,"number":-450},{"type":"NumberWithFrequency","frequency":1,"number":-441},{"type":"NumberWithFrequency","frequency":1,"number":-429},{"type":"NumberWithFrequency","frequency":1,"number":-427},{"type":"NumberWithFrequency","frequency":1,"number":-412},{"type":"NumberWithFrequency","frequency":1,"number":-411},{"type":"NumberWithFrequency","frequency":1,"number":-382},{"type":"NumberWithFrequency","frequency":1,"number":-375},{"type":"NumberWithFrequency","frequency":1,"number":-367},{"type":"NumberWithFrequency","frequency":1,"number":-361},{"type":"NumberWithFrequency","frequency":1,"number":-356},{"type":"NumberWithFrequency","frequency":1,"number":-349},{"type":"NumberWithFrequency","frequency":1,"number":-342},{"type":"NumberWithFrequency","frequency":1,"number":-339},{"type":"NumberWithFrequency","frequency":2,"number":-337},{"type":"NumberWithFrequency","frequency":1,"number":-310},{"type":"NumberWithFrequency","frequency":1,"number":-301},{"type":"NumberWithFrequency","frequency":1,"number":-294},{"type":"NumberWithFrequency","frequency":1,"number":-292},{"type":"NumberWithFrequency","frequency":1,"number":-274},{"type":"NumberWithFrequency","frequency":6,"number":0},{"type":"NumberWithFrequency","frequency":1,"number":318},{"type":"NumberWithFrequency","frequency":1,"number":339},{"type":"NumberWithFrequency","frequency":1,"number":397},{"type":"NumberWithFrequency","frequency":1,"number":398},{"type":"NumberWithFrequency","frequency":1,"number":410},{"type":"NumberWithFrequency","frequency":1,"number":426},{"type":"NumberWithFrequency","frequency":1,"number":511}],"targetAlignedLengths":[{"type":"NumberWithFrequency","frequency":2,"number":39},{"type":"NumberWithFrequency","frequency":2,"number":55},{"type":"NumberWithFrequency","frequency":2,"number":61},{"type":"NumberWithFrequency","frequency":2,"number":64},{"type":"NumberWithFrequency","frequency":2,"number":67},{"type":"NumberWithFrequency","frequency":2,"number":68},{"type":"NumberWithFrequency","frequency":2,"number":69},{"type":"NumberWithFrequency","frequency":2,"number":77},{"type":"NumberWithFrequency","frequency":2,"number":82},{"type":"NumberWithFrequency","frequency":4,"number":83},{"type":"NumberWithFrequency","frequency":2,"number":86},{"type":"NumberWithFrequency","frequency":2,"number":95},{"type":"NumberWithFrequency","frequency":2,"number":96},{"type":"NumberWithFrequency","frequency":2,"number":101},{"type":"NumberWithFrequency","frequency":4,"number":108},{"type":"NumberWithFrequency","frequency":4,"number":109},{"type":"NumberWithFrequency","frequency":2,"number":114},{"type":"NumberWithFrequency","frequency":2,"number":116},{"type":"NumberWithFrequency","frequency":4,"number":121},{"type":"NumberWithFrequency","frequency":2,"number":132},{"type":"NumberWithFrequency","frequency":2,"number":136},{"type":"NumberWithFrequency","frequency":2,"number":142},{"type":"NumberWithFrequency","frequency":2,"number":144},{"type":"NumberWithFrequency","frequency":8,"number":150},{"type":"NumberWithFrequency","frequency":4,"number":151},{"type":"NumberWithFrequency","frequency":12,"number":171}],"queryAlignedLengths":[{"type":"NumberWithFrequency","frequency":1,"number":39},{"type":"NumberWithFrequency","frequency":1,"number":55},{"type":"NumberWithFrequency","frequency":1,"number":61},{"type":"NumberWithFrequency","frequency":1,"number":64},{"type":"NumberWithFrequency","frequency":1,"number":67},{"type":"NumberWithFrequency","frequency":1,"number":68},{"type":"NumberWithFrequency","frequency":1,"number":69},{"type":"NumberWithFrequency","frequency":1,"number":77},{"type":"NumberWithFrequency","frequency":1,"number":82},{"type":"NumberWithFrequency","frequency":2,"number":83},{"type":"NumberWithFrequency","frequency":1,"number":86},{"type":"NumberWithFrequency","frequency":1,"number":95},{"type":"NumberWithFrequency","frequency":1,"number":96},{"type":"NumberWithFrequency","frequency":1,"number":101},{"type":"NumberWithFrequency","frequency":2,"number":108},{"type":"NumberWithFrequency","frequency":2,"number":109},{"type":"NumberWithFrequency","frequency":1,"number":114},{"type":"NumberWithFrequency","frequency":1,"number":116},{"type":"NumberWithFrequency","frequency":1,"number":121},{"type":"NumberWithFrequency","frequency":1,"number":122},{"type":"NumberWithFrequency","frequency":1,"number":133},{"type":"NumberWithFrequency","frequency":1,"number":137},{"type":"NumberWithFrequency","frequency":1,"number":142},{"type":"NumberWithFrequency","frequency":1,"number":145},{"type":"NumberWithFrequency","frequency":1,"number":150},{"type":"NumberWithFrequency","frequency":5,"number":151},{"type":"NumberWithFrequency","frequency":2,"number":171},{"type":"NumberWithFrequency","frequency":4,"number":172}],"queryPositions":[{"type":"NumberWithFrequency","frequency":39,"number":0}],"pairFlags":[{"type":"NumberWithFrequency","frequency":6,"number":16},{"type":"NumberWithFrequency","frequency":14,"number":83},{"type":"NumberWithFrequency","frequency":6,"number":99},{"type":"NumberWithFrequency","frequency":12,"number":147},{"type":"NumberWithFrequency","frequency":1,"number":163}],"distancesToReadVariationsForwardStrand":[{"type":"NumberWithFrequency","frequency":2,"number":-70},{"type":"NumberWithFrequency","frequency":4,"number":-29}],"distancesToReadVariationsReverseStrand":[{"type":"NumberWithFrequency","frequency":2,"number":-24},{"type":"NumberWithFrequency","frequency":1,"number":-15},{"type":"NumberWithFrequency","frequency":1,"number":-2},{"type":"NumberWithFrequency","frequency":1,"number":12},{"type":"NumberWithFrequency","frequency":1,"number":13},{"type":"NumberWithFrequency","frequency":1,"number":15},{"type":"NumberWithFrequency","frequency":13,"number":29},{"type":"NumberWithFrequency","frequency":1,"number":49},{"type":"NumberWithFrequency","frequency":3,"number":62},{"type":"NumberWithFrequency","frequency":9,"number":70},{"type":"NumberWithFrequency","frequency":1,"number":73}],"distanceToStartOfRead":[{"type":"NumberWithFrequency","frequency":1,"number":18},{"type":"NumberWithFrequency","frequency":1,"number":23},{"type":"NumberWithFrequency","frequency":1,"number":26},{"type":"NumberWithFrequency","frequency":1,"number":30},{"type":"NumberWithFrequency","frequency":30,"number":33},{"type":"NumberWithFrequency","frequency":5,"number":34}],"distanceToEndOfRead":[{"type":"NumberWithFrequency","frequency":1,"number":6},{"type":"NumberWithFrequency","frequency":1,"number":22},{"type":"NumberWithFrequency","frequency":1,"number":28},{"type":"NumberWithFrequency","frequency":1,"number":31},{"type":"NumberWithFrequency","frequency":1,"number":34},{"type":"NumberWithFrequency","frequency":2,"number":35},{"type":"NumberWithFrequency","frequency":1,"number":44},{"type":"NumberWithFrequency","frequency":1,"number":48},{"type":"NumberWithFrequency","frequency":1,"number":49},{"type":"NumberWithFrequency","frequency":1,"number":50},{"type":"NumberWithFrequency","frequency":1,"number":52},{"type":"NumberWithFrequency","frequency":1,"number":62},{"type":"NumberWithFrequency","frequency":1,"number":63},{"type":"NumberWithFrequency","frequency":1,"number":68},{"type":"NumberWithFrequency","frequency":2,"number":75},{"type":"NumberWithFrequency","frequency":2,"number":76},{"type":"NumberWithFrequency","frequency":1,"number":81},{"type":"NumberWithFrequency","frequency":1,"number":83},{"type":"NumberWithFrequency","frequency":1,"number":88},{"type":"NumberWithFrequency","frequency":1,"number":89},{"type":"NumberWithFrequency","frequency":1,"number":100},{"type":"NumberWithFrequency","frequency":1,"number":104},{"type":"NumberWithFrequency","frequency":1,"number":109},{"type":"NumberWithFrequency","frequency":1,"number":111},{"type":"NumberWithFrequency","frequency":1,"number":117},{"type":"NumberWithFrequency","frequency":1,"number":118},{"type":"NumberWithFrequency","frequency":1,"number":121},{"type":"NumberWithFrequency","frequency":1,"number":125},{"type":"NumberWithFrequency","frequency":1,"number":128},{"type":"NumberWithFrequency","frequency":1,"number":133},{"type":"NumberWithFrequency","frequency":2,"number":138},{"type":"NumberWithFrequency","frequency":4,"number":139}]},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"C","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":1,"gobyGenotypeIndex":2,"qualityScoresForwardStrand":[],"qualityScoresReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":7}],"readIndicesForwardStrand":[],"readIndicesReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":115}],"readMappingQualityForwardStrand":[],"readMappingQualityReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":60}],"numVariationsInReads":[{"type":"NumberWithFrequency","frequency":1,"number":2}],"insertSizes":[{"type":"NumberWithFrequency","frequency":1,"number":-301}],"targetAlignedLengths":[{"type":"NumberWithFrequency","frequency":2,"number":148}],"queryAlignedLengths":[{"type":"NumberWithFrequency","frequency":1,"number":148}],"queryPositions":[{"type":"NumberWithFrequency","frequency":1,"number":0}],"pairFlags":[{"type":"NumberWithFrequency","frequency":1,"number":147}],"distancesToReadVariationsForwardStrand":[],"distancesToReadVariationsReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":-29},{"type":"NumberWithFrequency","frequency":1,"number":0}],"distanceToStartOfRead":[{"type":"NumberWithFrequency","frequency":1,"number":33}],"distanceToEndOfRead":[{"type":"NumberWithFrequency","frequency":1,"number":115}]},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"T","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":1,"qualityScoresForwardStrand":[],"qualityScoresReverseStrand":[],"readIndicesForwardStrand":[],"readIndicesReverseStrand":[],"readMappingQualityForwardStrand":[],"readMappingQualityReverseStrand":[],"numVariationsInReads":[],"insertSizes":[],"targetAlignedLengths":[],"queryAlignedLengths":[],"queryPositions":[],"pairFlags":[],"distancesToReadVariationsForwardStrand":[],"distancesToReadVariationsReverseStrand":[],"distanceToStartOfRead":[],"distanceToEndOfRead":[]},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"G","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":3,"qualityScoresForwardStrand":[],"qualityScoresReverseStrand":[],"readIndicesForwardStrand":[],"readIndicesReverseStrand":[],"readMappingQualityForwardStrand":[],"readMappingQualityReverseStrand":[],"numVariationsInReads":[],"insertSizes":[],"targetAlignedLengths":[],"queryAlignedLengths":[],"queryPositions":[],"pairFlags":[],"distancesToReadVariationsForwardStrand":[],"distancesToReadVariationsReverseStrand":[],"distanceToStartOfRead":[],"distanceToEndOfRead":[]},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"N","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":4,"qualityScoresForwardStrand":[],"qualityScoresReverseStrand":[],"readIndicesForwardStrand":[],"readIndicesReverseStrand":[],"readMappingQualityForwardStrand":[],"readMappingQualityReverseStrand":[],"numVariationsInReads":[],"insertSizes":[],"targetAlignedLengths":[],"queryAlignedLengths":[],"queryPositions":[],"pairFlags":[],"distancesToReadVariationsForwardStrand":[],"distancesToReadVariationsReverseStrand":[],"distanceToStartOfRead":[],"distanceToEndOfRead":[]}]}]}'
 
 def store_indices_in_message(mapper, message, indices):
     mapper_id = id(mapper)
@@ -156,7 +156,9 @@ class IntegerMapper(BatchedStructuredEmbedding):
         # cache the embedded values:
         cached_values = []
         for value in values:
-            self.embedding(self.define_long_variable([value]))
+            cached_values.append(self.embedding(self.define_long_variable([value])))
+        if len(values)==0:
+            return self.create_empty()
         values = torch.cat(cached_values, dim=0)
         return values
 
@@ -209,7 +211,8 @@ class RNNOfList(BatchedStructuredEmbedding):
         self.lstm = LSTM(embedding_size, hidden_size, num_layers, batch_first=True)
 
     def forward(self, list_of_embeddings):
-
+        if list_of_embeddings.dim()==2:
+            list_of_embeddings=list_of_embeddings.view(1,*list_of_embeddings.size())
         batch_size = list_of_embeddings.size(0)
         num_layers = self.num_layers
         hidden_size = self.hidden_size
@@ -333,7 +336,8 @@ class MapSequence(BatchedStructuredEmbedding):
         self.set_start_offset(field_name, index)
 
     def forward(self, sequence_field):
-        return self.map_sequence(self.collect_tensors(sequence_field))
+        return self.map_sequence(
+            self.map_bases(list([self.base_to_index[b] for b in sequence_field])))
 
     def forward_batch(self, elements, field_prefix, tensors, index_maps=[]):
         # this method ignores index_maps and retrieves the map from the element passed in.
@@ -370,7 +374,7 @@ class MapSequence(BatchedStructuredEmbedding):
         mapped_sequences = self.map_sequence(batched_paddded)
 
         tensors[field_prefix] = mapped_sequences
-        print("sequence mapped to size {}".format(mapped_sequences.size()))
+        #print("sequence mapped to size {}".format(mapped_sequences.size()))
         return mapped_sequences
 
 
@@ -482,6 +486,12 @@ class MapSampleInfo(BatchedStructuredEmbedding):
         self.count_dim = count_dim
         self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
 
+    def forward(self, input):
+        observed_counts = self.get_observed_counts(input)
+        return self.reduce_counts([self.count_mapper(count) for count in
+                                   observed_counts[0:self.num_counts]],
+                                  pad_missing=True)
+
     def collect_tensors(self, elements, field_prefix, tensors, index_map={}):
         #        super().collect_tensors(elements, field_prefix, tensors, index_map)
         field_prefix += ".sample"
@@ -502,7 +512,7 @@ class MapSampleInfo(BatchedStructuredEmbedding):
             all_counts = []
             for count_list in (sample['counts'] for sample in elements):
                 for count in count_list:
-                    print(count)
+                    #print(count)
                     all_counts.append(count)
             self.count_mapper.collect_tensors(sample['counts'], field_prefix + ".counts", tensors, None)
             index += 1
@@ -517,7 +527,7 @@ class MapSampleInfo(BatchedStructuredEmbedding):
         all_counts = []
         for count_list in (self.get_observed_counts(sample) for sample in elements):
             for count in count_list[0:self.num_counts]:
-                print(count)
+                #print(count)
                 all_counts.append(count)
         batched_mapped_counts = self.count_mapper.forward_batch(elements=all_counts,
                                                                 field_prefix=field_prefix + ".counts", tensors=tensors,
@@ -537,11 +547,6 @@ class MapSampleInfo(BatchedStructuredEmbedding):
         tensors["mapped$" + field_prefix] = result
         return result
 
-    def forward(self, input, tensor_cache, cuda=None):
-        observed_counts = self.get_observed_counts(input)
-        return self.reduce_counts([self.count_mapper(count) for count in
-                                   observed_counts[0:self.num_counts]],
-                                  pad_missing=True, cuda=cuda)
 
     def get_observed_counts(self, input):
         return [count for count in input['counts'] if
@@ -596,7 +601,7 @@ class MapCountInfo(BatchedStructuredEmbedding):
         sum_of_dims = 0
         for _, mapper in self.all_fields:
             sum_of_dims += mapper.embedding_size
-        print("sum_of_dims {}".format(sum_of_dims))
+        #print("sum_of_dims {}".format(sum_of_dims))
         self.reduce_count = Reduce([sum_of_dims],
                                    encoding_output_dim=count_dim)
 
@@ -605,6 +610,35 @@ class MapCountInfo(BatchedStructuredEmbedding):
         for field_name, mapper in self.all_fields:
             mapper.new_batch()
 
+    def forward(self, c):
+        mapped_gobyGenotypeIndex = self.map_gobyGenotypeIndex([c['gobyGenotypeIndex']])
+        # Do not map isCalled, it is a field that contains the truth and is used to calculate the label.
+
+        mapped_isIndel = self.map_boolean(c['isIndel'])
+        mapped_matchesReference = self.map_boolean(c['matchesReference'])
+
+        # NB: fromSequence was mapped at the level of BaseInformation.
+        mapped_to = self.map_sequence(c['toSequence'])
+        mapped_genotypeCountForwardStrand = self.map_count([c['genotypeCountForwardStrand']])
+        mapped_genotypeCountReverseStrand = self.map_count([c['genotypeCountReverseStrand']])
+
+        mapped = [mapped_gobyGenotypeIndex,
+                  mapped_isIndel,
+                  mapped_matchesReference,
+                  mapped_to,
+                  mapped_genotypeCountForwardStrand,
+                  mapped_genotypeCountReverseStrand]
+
+        for nf_name, mapper in self.nf_names_mappers:
+            if nf_name in c.keys():
+                mapped += [mapper(c[nf_name], nf_name=nf_name)]
+            else:
+                variable = Variable(torch.zeros(1, mapper.embedding_size), requires_grad=True)
+                if self.use_cuda:
+                    variable = variable.cuda(async=True)
+                mapped += [variable]
+        return self.reduce_count(mapped)
+    
     def collect_tensors(self, list_of_counts, field_prefix, tensors={}, index_maps={}):
         """Return a dict, where each value is a batched tensor, and the keys are the name of the field that this tensor was
         collected from. The index of each field in the tensor is stored in list_of_counts,
@@ -625,7 +659,7 @@ class MapCountInfo(BatchedStructuredEmbedding):
 
             index = count_index + offset
             for field_name, mapper in self.all_fields:
-                print("Collecting {}".format(field_name), flush=True)
+                #print("Collecting {}".format(field_name), flush=True)
                 mapper.collect_tensors(count[field_name], field_prefix + "." + field_name, tensors, count['indices'])
             self.set_start_offset(field_prefix, index + 1)
         return tensors
@@ -651,7 +685,7 @@ class MapCountInfo(BatchedStructuredEmbedding):
                                                                                                     in elements])
 
         for field_name, mapper in self.all_fields:
-            print("Mapping " + field_name, flush=True)
+            #print("Mapping " + field_name, flush=True)
             if not isinstance(mapper, MapNumberWithFrequencyList):
                 tensors["mapped$" + field_prefix + "." + field_name] = mapper.forward_batch(elements=elements,
                                                                                             field_prefix=field_prefix + "." + field_name,
@@ -667,7 +701,7 @@ class MapCountInfo(BatchedStructuredEmbedding):
         # slice batched tensors into the instances of counts:
 
         for count in elements:
-            print("count -----")
+            #print("count -----")
             slice_index = count['indices'][field_prefix + '.isIndel'][
                 0]  # used a field of cardinality 1 to retrieve this count index
 
@@ -679,13 +713,15 @@ class MapCountInfo(BatchedStructuredEmbedding):
                     tensor = batched_mapped_tensor[slice_index]
                     if tensor is not None:
 
-                        print("processing {} field of size {}".format(field_name, tensor.view(1, -1).size()),
-                              flush=True)
+                        #print("processing {} field of size {}".format(field_name, tensor.view(1, -1).size()),
+                        #      flush=True)
                         count_components.append(tensor.view(1, -1))
                     else:
-                        print("Could not find tensor for field " + field_name)
+                        pass
+                        #print("Could not find tensor for field " + field_name)
                 else:
-                    print("Not enough elements for field " + field_prefix + "." + field_name)
+                    pass
+                   # print("Not enough elements for field " + field_prefix + "." + field_name)
             tensors_for_individual_counts.append(torch.cat(count_components, dim=1))
 
         batched_count_tensors = torch.cat(tensors_for_individual_counts, dim=0)
@@ -814,7 +850,7 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
                                    mapped_frequency[number_index].view(1, -1)],
                                   dim=1))
             else:
-                print("Appending empty for " + field_prefix)
+                #print("Appending empty for " + field_prefix)
                 index_map["mean-input$" + field_prefix].append(torch.cat(
                     [self.map_number.create_empty().view(1, -1),
                      self.map_frequency.create_empty().view(1, -1)], dim=1))
