@@ -68,5 +68,19 @@ class BatchedMappersTestCase(unittest.TestCase):
         mapped = map_container.forward_batch(container, "records", tensors,index_maps=[record['indices'] for record in container])
         print(mapped)
         self.assertIsNotNone(mapped)
+
+    def test_forward_baseinfo(self):
+
+
+        count_mapper =MapCountInfo()
+        sample_mapper =MapSampleInfo(count_mapper=count_mapper,count_dim=64, sample_dim=66, num_counts=2)
+        map_container =MapBaseInformation(sample_mapper=sample_mapper,sample_dim=sample_mapper.embedding_size,  num_samples=1, sequence_output_dim=64, ploidy=2, extra_genotypes=2)
+        import ujson
+        record = ujson.loads(sbi_json_string)
+        container=[record,record ]
+
+        mapped=map_container.forward(record)
+        self.assertIsNotNone(mapped)
+
 if __name__ == '__main__':
     unittest.main()

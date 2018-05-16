@@ -101,8 +101,12 @@ class BooleanMapper(BatchedStructuredEmbedding):
     def __init__(self, ):
         super().__init__(2)
 
-    def forward(self, tensors):
-        return tensors
+    def forward(self, predicate):
+        assert isinstance(predicate,bool),"predicate must be a boolean"
+        value= Variable(torch.FloatTensor([[1, 0]])) if predicate else  Variable(torch.FloatTensor([[0, 1]]))
+        if self.use_cuda:
+            value=value.cuda(async=True)
+        return value
 
     def forward_batch(self, elements, field_prefix, tensors, index_maps=[]):
         super().forward_batch(elements, field_prefix, tensors, index_maps)
@@ -394,14 +398,15 @@ class MapBaseInformation(BatchedStructuredEmbedding):
         self.extra_genotypes = extra_genotypes
 
     def forward(self, input):
-        return self.reduce_samples(
-            [self.map_sequence(input['referenceBase'])] +
-            [self.map_sequence(input['genomicSequenceContext'])] +
-            # each sample has a unique from (same across all counts), which gets mapped and concatenated
-            # with the sample mapped reduction:
-            [torch.cat([self.sample_mapper(sample),
-                        self.map_sequence(sample['counts'][0]['fromSequence'])], dim=1)
-             for sample in input['samples'][0:self.num_samples]])
+        mapped=[]
+        mapped.append(self.map_sequence(input['referenceBase']))
+        mapped.append(self.map_sequence(input['genomicSequenceContext'])[-1,:])
+        for sample in input['samples'][0:self.num_samples]:
+            mapped.append(self.sample_mapper(sample).view(self.sample_mapper.embedding_size))
+            mapped.append(self.map_sequence(sample['counts'][0]['fromSequence']))
+
+        mapped_concat=torch.cat(mapped,dim=0).view(1,-1)
+        return self.reduce_samples.forward_flat_inputs(mapped_concat)
 
     def collect_tensors(self, elements, field_prefix, tensors, index_map={}):
         super().collect_tensors(elements, field_prefix, tensors, index_map)
@@ -618,7 +623,7 @@ class MapCountInfo(BatchedStructuredEmbedding):
         mapped_matchesReference = self.map_boolean(c['matchesReference'])
 
         # NB: fromSequence was mapped at the level of BaseInformation.
-        mapped_to = self.map_sequence(c['toSequence'])
+        mapped_to = self.map_sequence(c['toSequence']).view(1,self.map_sequence.embedding_size)
         mapped_genotypeCountForwardStrand = self.map_count([c['genotypeCountForwardStrand']])
         mapped_genotypeCountReverseStrand = self.map_count([c['genotypeCountReverseStrand']])
 
@@ -631,13 +636,13 @@ class MapCountInfo(BatchedStructuredEmbedding):
 
         for nf_name, mapper in self.nf_names_mappers:
             if nf_name in c.keys():
-                mapped += [mapper(c[nf_name], nf_name=nf_name)]
+                mapped += [mapper(c[nf_name],nf_name)]
             else:
                 variable = Variable(torch.zeros(1, mapper.embedding_size), requires_grad=True)
                 if self.use_cuda:
                     variable = variable.cuda(async=True)
                 mapped += [variable]
-        return self.reduce_count(mapped)
+        return self.reduce_count.forward_flat_inputs(torch.cat(mapped,dim=1))
     
     def collect_tensors(self, list_of_counts, field_prefix, tensors={}, index_maps={}):
         """Return a dict, where each value is a batched tensor, and the keys are the name of the field that this tensor was
@@ -790,6 +795,21 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
         # IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
 
         self.mean_sequence = MeanOfList()
+
+    def forward(self, nwf_list, nf_name="unknown"):
+
+        if len(nwf_list) > 0:
+            mapped_frequencies = torch.cat([
+                self.map_number([nwf['number'] for nwf in nwf_list]),
+                self.map_frequency([nwf['frequency'] for nwf in nwf_list])], dim=1)
+
+            return self.mean_sequence(mapped_frequencies)
+
+        else:
+            variable = Variable(torch.zeros(1, self.embedding_size), requires_grad=True)
+            if self.use_cuda:
+                variable = variable.cuda(async=True)
+            return variable
 
     def collect_tensors(self, list_of_nwf, field_prefix, tensors, index_maps={}):
         """Return a dict, where each value is a batched tensor, and the keys are the name of the field that this tensor was
