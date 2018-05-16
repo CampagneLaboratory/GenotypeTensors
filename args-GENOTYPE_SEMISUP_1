@@ -1,0 +1,1 @@
+C:/Users/Fabien/PycharmProjects/genotypetensors/src/org/campagnelab/dl/genotypetensors/autoencoder/TrainAutoEncoder.py --mode semisupervised_genotypes --problem genotyping:../gen/CNG-NA12878-realigned-2018-01-30 --lr 0.01 --L2 1E-6 --mini-batch-size 100 --checkpoint-key GENOTYPE_SEMISUP_1 --max-epochs 200 -n 500 -x 10000

@@ -1,0 +1,1 @@
+C:/Users/Fabien/PycharmProjects/genotypetensors/src/org/campagnelab/dl/genotypetensors/autoencoder/TrainAutoEncoder.py --problem genotyping:C:\Users\Fabien\Desktop\vec\-2018-01-16 --mode autoencoder --lr 0.01 --L2 1E-6 --mini-batch-size 128 --checkpoint-key GENOTYPE_AUTOENCODER_1

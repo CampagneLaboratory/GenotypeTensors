@@ -210,6 +210,8 @@ class IntegerMapper(BatchedStructuredEmbedding):
         self.create_tensor_holder(tensors, field_prefix)
 
         tensor_list = tensors[field_prefix]
+        if len(tensor_list)==0:
+            return self.create_empty()
         result = self.embedding(torch.cat(tensor_list, dim=0))
         tensors[field_prefix] = result
         return result
@@ -431,6 +433,8 @@ class MapBaseInformation(BatchedStructuredEmbedding):
 
     def collect_tensors(self, elements, field_prefix, tensors, index_map={}):
         super().collect_tensors(elements, field_prefix, tensors, index_map)
+        print(elements)
+        print('=====================')
         field_prefix += ".record"
         offset = self.get_start_offset(field_prefix + ".list")
         for record in elements:
@@ -523,6 +527,7 @@ class MapSampleInfo(BatchedStructuredEmbedding):
     def collect_tensors(self, elements, field_prefix, tensors, index_map={}):
         #        super().collect_tensors(elements, field_prefix, tensors, index_map)
         field_prefix += ".sample"
+        #print(elements)
         offset = self.get_start_offset(field_prefix + ".list")
         for sample in elements:
             if 'indices' not in sample.keys():
@@ -754,6 +759,8 @@ class MapCountInfo(BatchedStructuredEmbedding):
                 else:
                     pass
                 # print("Not enough elements for field " + field_prefix + "." + field_name)
+            if len(count_components)==0:
+                return self.create_empty()
             tensors_for_individual_counts.append(torch.cat(count_components, dim=1))
 
         batched_count_tensors = torch.cat(tensors_for_individual_counts, dim=0)
@@ -792,6 +799,8 @@ class FrequencyMapper(BatchedStructuredEmbedding):
         super().forward_batch(elements, field_prefix, tensors, index_maps)
 
         self.create_tensor_holder(tensors, field_prefix)
+        if len(tensors[field_prefix])==0:
+            return self.create_empty()
         result = torch.cat(tensors[field_prefix], dim=0)
         tensors[field_prefix] = result
         return result
@@ -876,7 +885,7 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
 
     def forward_batch(self, elements, field_prefix, tensors, index_maps=[]):
         super().forward_batch(elements, field_prefix, tensors, index_maps)
-        print(elements)
+
         # map the batched inputs:
         field_prefix += ".nwf"
         self.create_tensor_holder(tensors, field_prefix)

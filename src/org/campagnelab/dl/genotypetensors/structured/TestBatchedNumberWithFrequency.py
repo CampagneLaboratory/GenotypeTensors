@@ -54,6 +54,20 @@ class BatchedMappersTestCase(unittest.TestCase):
         print(batch)
         self.assertIsNotNone(batch)
 
+    def test_bug_1(self):
+        failed_sbi='[{"type": "NumberWithFrequency", "frequency": 7, "number": 40, "indices": {}, "index": 0}, {"type": "NumberWithFrequency", "frequency": 4, "number": 40, "indices": {}, "index": 0}, {"type": "NumberWithFrequency", "frequency": 1, "number": 32, "indices": {}, "index": 0}, {"type": "NumberWithFrequency", "frequency": 6, "number": 42, "indices": {}, "index": 1}, {"type": "NumberWithFrequency", "frequency": 2, "number": 40, "indices": {}, "index": 0}]'
+
+        import ujson
+        container = ujson.loads(failed_sbi)
+
+        map_container = MapNumberWithFrequencyList(distinct_numbers=100,
+                                           use_cuda=False)
+        tensors = map_container.collect_tensors(container, "", {})
+        batch = map_container.forward_batch(container, "", tensors, [container['indices'] for container in container])
+        print(batch)
+        self.assertIsNotNone(batch)
+
+
 
 if __name__ == '__main__':
     unittest.main()
