@@ -111,8 +111,8 @@ class BatchedStructuredEmbedding(Module):
 
 
 class BooleanMapper(BatchedStructuredEmbedding):
-    def __init__(self, ):
-        super().__init__(2)
+    def __init__(self, use_cuda):
+        super().__init__(2,use_cuda=use_cuda)
 
     def forward(self, predicate):
         assert isinstance(predicate, bool), "predicate must be a boolean"
@@ -147,21 +147,27 @@ class BooleanMapper(BatchedStructuredEmbedding):
             tensor = torch.cat(
                 [torch.FloatTensor([[1, 0]]) if value else torch.FloatTensor([[1, 0]]) for value in list])
             tensor = Variable(tensor, requires_grad=True)
+            if self.use_cuda:
+                tensor=tensor.cuda()
             tensors[field_prefix].append(tensor)
         else:
             index_maps[field_prefix].append(start_index)
             end = start_index + 1
             tensor = torch.FloatTensor([[1, 0]]) if elements else torch.FloatTensor([[1, 0]])
+            if self.use_cuda:
+                tensor=tensor.cuda()
             tensors[field_prefix].append(Variable(tensor, requires_grad=True))
         self.set_start_offset(field_prefix, end)
 
 
 class IntegerMapper(BatchedStructuredEmbedding):
-    def __init__(self, distinct_numbers, embedding_size):
-        super().__init__(embedding_size)
+    def __init__(self, distinct_numbers, embedding_size,use_cuda):
+        super().__init__(embedding_size,use_cuda=use_cuda)
         self.distinct_numbers = distinct_numbers
         self.embedding = Embedding(distinct_numbers, embedding_size)
         self.embedding.requires_grad = True
+        if use_cuda:
+            self.embedding=self.embedding.cuda()
 
     def forward(self, values):
         """Accepts a list of integer values and produces a batch of batch x embedded-value. """
@@ -210,7 +216,7 @@ class IntegerMapper(BatchedStructuredEmbedding):
 
 
 class MeanOfList(Module):
-    def __init__(self):
+    def __init__(self,):
         super().__init__()
 
     def forward(self, list_of_embeddings, cuda=None):
@@ -221,11 +227,13 @@ class MeanOfList(Module):
 
 
 class RNNOfList(BatchedStructuredEmbedding):
-    def __init__(self, embedding_size, hidden_size, num_layers=1):
-        super().__init__(hidden_size)
+    def __init__(self, embedding_size, hidden_size, num_layers=1,use_cuda=None):
+        super().__init__(hidden_size,use_cuda=use_cuda)
         self.num_layers = num_layers
         self.hidden_size = hidden_size
         self.lstm = LSTM(embedding_size, hidden_size, num_layers, batch_first=True)
+        if self.use_cuda:
+            self.lstm=self.lstm.cuda()
 
     def forward(self, list_of_embeddings):
         if list_of_embeddings.dim() == 2:
@@ -267,13 +275,13 @@ class RNNOfList(BatchedStructuredEmbedding):
 class Reduce(BatchedStructuredEmbedding):
     """ Reduce a list of embedded fields or messages using a feed forward. Requires list to be a constant size """
 
-    def __init__(self, input_dims, encoding_output_dim):
+    def __init__(self, input_dims, encoding_output_dim,use_cuda=None):
         """
 
         :param input_dims: dimensions of the elements to reduce (list of size the number of elements, integer dimension).
         :param encoding_output_dim: dimension of the reduce output.
         """
-        super().__init__(embedding_size=encoding_output_dim)
+        super().__init__(embedding_size=encoding_output_dim,use_cuda=use_cuda)
         self.encoding_dim = encoding_output_dim
         self.input_dims = input_dims
         sum_input_dims = 0
@@ -282,6 +290,9 @@ class Reduce(BatchedStructuredEmbedding):
         self.sum_input_dims = sum_input_dims
         self.linear1 = Linear(sum_input_dims, sum_input_dims * 2)
         self.linear2 = Linear(sum_input_dims * 2, encoding_output_dim)
+        if self.use_cuda:
+            self.linear1=self.linear1.cuda()
+            self.linear2=self.linear2.cuda()
 
     def forward(self, input_list, pad_missing=False):
         if len(input_list) != len(self.input_dims) and not pad_missing:
@@ -328,15 +339,15 @@ def get_indices_in_message(mapper, message):
 
 
 class MapSequence(BatchedStructuredEmbedding):
-    def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N')):
-        super().__init__(embedding_size=hidden_size)
+    def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N'),use_cuda=None):
+        super().__init__(embedding_size=hidden_size,use_cuda=use_cuda)
         self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=hidden_size,
-                                      num_layers=num_layers)
+                                      num_layers=num_layers,use_cuda=use_cuda)
         self.base_to_index = {}
         for base_index, base in enumerate(bases):
             self.base_to_index[base[0]] = base_index
         self.mapped_base_dim = mapped_base_dim
-        self.map_bases = IntegerMapper(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim)
+        self.map_bases = IntegerMapper(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim,use_cuda=use_cuda)
 
     def collect_tensors(self, sequence, field_name, tensors, index_maps={}):
         assert isinstance(index_maps, dict), "index_maps must be of type dict"
@@ -396,15 +407,15 @@ class MapSequence(BatchedStructuredEmbedding):
 
 
 class MapBaseInformation(BatchedStructuredEmbedding):
-    def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2):
-        super().__init__(sample_dim)
+    def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2,use_cuda=False):
+        super().__init__(sample_dim,use_cuda=use_cuda)
         self.sample_mapper = sample_mapper
 
         # We reuse the same sequence mapper as the one used in MapCountInfo:
         self.map_sequence = sample_mapper.count_mapper.map_sequence
         self.sum_of_dims = self.map_sequence.embedding_size * 2 + (sample_dim) * num_samples
         self.reduce_samples = Reduce([self.sum_of_dims],
-                                     encoding_output_dim=sample_dim)
+                                     encoding_output_dim=sample_dim,use_cuda=use_cuda)
 
         self.num_samples = num_samples
         self.ploidy = ploidy
@@ -495,13 +506,13 @@ class MapBaseInformation(BatchedStructuredEmbedding):
 
 class MapSampleInfo(BatchedStructuredEmbedding):
 
-    def __init__(self, count_mapper, count_dim, sample_dim, num_counts):
-        super().__init__(sample_dim)
+    def __init__(self, count_mapper, count_dim, sample_dim, num_counts,use_cuda):
+        super().__init__(sample_dim,use_cuda=use_cuda)
         assert isinstance(count_mapper, MapCountInfo)
         self.count_mapper = count_mapper
         self.num_counts = num_counts
         self.count_dim = count_dim
-        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
+        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim,use_cuda=use_cuda)
 
     def forward(self, input):
         observed_counts = self.get_observed_counts(input)
@@ -579,12 +590,12 @@ class MapCountInfo(BatchedStructuredEmbedding):
                  use_cuda=False):
         super().__init__(count_dim, use_cuda=use_cuda)
 
-        self.frequency_list_mapper_base_qual = MapNumberWithFrequencyList(distinct_numbers=1000)
-        self.frequency_list_mapper_num_var = MapNumberWithFrequencyList(distinct_numbers=1000)
-        self.frequency_list_mapper_mapping_qual = MapNumberWithFrequencyList(distinct_numbers=100)
-        self.frequency_list_mapper_distance_to = MapNumberWithFrequencyList(distinct_numbers=1000)
-        self.frequency_list_mapper_aligned_lengths = MapNumberWithFrequencyList(distinct_numbers=1000)
-        self.frequency_list_mapper_read_indices = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_base_qual = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=self.use_cuda)
+        self.frequency_list_mapper_num_var = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=self.use_cuda)
+        self.frequency_list_mapper_mapping_qual = MapNumberWithFrequencyList(distinct_numbers=100,use_cuda=self.use_cuda)
+        self.frequency_list_mapper_distance_to = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=self.use_cuda)
+        self.frequency_list_mapper_aligned_lengths = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=self.use_cuda)
+        self.frequency_list_mapper_read_indices = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=self.use_cuda)
 
         self.nf_names_mappers = [('qualityScoresForwardStrand', self.frequency_list_mapper_base_qual),
                                  ('qualityScoresReverseStrand', self.frequency_list_mapper_base_qual),
@@ -605,11 +616,11 @@ class MapCountInfo(BatchedStructuredEmbedding):
         self.all_fields += self.nf_names_mappers
 
         self.map_sequence = MapSequence(hidden_size=count_dim,
-                                        mapped_base_dim=mapped_base_dim)
-        self.map_gobyGenotypeIndex = IntegerMapper(distinct_numbers=100, embedding_size=mapped_genotype_index_dim)
+                                        mapped_base_dim=mapped_base_dim,use_cuda=use_cuda)
+        self.map_gobyGenotypeIndex = IntegerMapper(distinct_numbers=100, embedding_size=mapped_genotype_index_dim,use_cuda=use_cuda)
 
-        self.map_count = IntegerMapper(distinct_numbers=100000, embedding_size=mapped_count_dim)
-        self.map_boolean = BooleanMapper()
+        self.map_count = IntegerMapper(distinct_numbers=100000, embedding_size=mapped_count_dim,use_cuda=use_cuda)
+        self.map_boolean = BooleanMapper(use_cuda=use_cuda)
 
         self.all_fields += [('toSequence', self.map_sequence),
                             ('gobyGenotypeIndex', self.map_gobyGenotypeIndex),
@@ -624,7 +635,7 @@ class MapCountInfo(BatchedStructuredEmbedding):
             sum_of_dims += mapper.embedding_size
         # print("sum_of_dims {}".format(sum_of_dims))
         self.reduce_count = Reduce([sum_of_dims],
-                                   encoding_output_dim=count_dim)
+                                   encoding_output_dim=count_dim,use_cuda=use_cuda)
 
     def new_batch(self):
         super().new_batch()
@@ -752,8 +763,8 @@ class MapCountInfo(BatchedStructuredEmbedding):
 
 
 class FrequencyMapper(BatchedStructuredEmbedding):
-    def __init__(self):
-        super().__init__(3)
+    def __init__(self,use_cuda=None):
+        super().__init__(3,use_cuda=use_cuda)
         self.LOG10 = log(10)
         self.LOG2 = log(2)
         self.epsilon = 1E-5
@@ -761,6 +772,8 @@ class FrequencyMapper(BatchedStructuredEmbedding):
     def convert_list_of_floats(self, values):
         """This method accepts a list of floats."""
         x = torch.FloatTensor(values).view(-1, 1)
+        if self.use_cuda:
+            x=x.cuda()
         x = x + self.epsilon
         return x
 
@@ -798,19 +811,21 @@ class FrequencyMapper(BatchedStructuredEmbedding):
 
 
 class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
-    def __init__(self, distinct_numbers=-1, mapped_number_dim=4):
+    def __init__(self, distinct_numbers=-1, mapped_number_dim=4,use_cuda=False):
         mapped_frequency_dim = 3
-        super().__init__(embedding_size=mapped_number_dim + mapped_frequency_dim)
+        super().__init__(embedding_size=mapped_number_dim + mapped_frequency_dim,use_cuda=use_cuda)
 
         output_dim = mapped_number_dim + mapped_frequency_dim
-        self.map_number = IntegerMapper(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim)
-        self.map_frequency = FrequencyMapper()
+        self.map_number = IntegerMapper(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim,use_cuda=self.use_cuda)
+        self.map_frequency = FrequencyMapper(use_cuda=use_cuda)
         # stores offsets across a batch key is list name, value is offset to use when generating new indices.
         self.start_offsets = {}
         # self.map_frequency = Variable(torch.FloatTensor([[]]))
         # IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
 
         self.mean_sequence = MeanOfList()
+        if use_cuda:
+            self.cuda()
 
     def forward(self, nwf_list, nf_name="unknown"):
 
@@ -861,7 +876,7 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
 
     def forward_batch(self, elements, field_prefix, tensors, index_maps=[]):
         super().forward_batch(elements, field_prefix, tensors, index_maps)
-
+        print(elements)
         # map the batched inputs:
         field_prefix += ".nwf"
         self.create_tensor_holder(tensors, field_prefix)
@@ -897,7 +912,7 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
         return result
 
 
-def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64):
+def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64,use_cuda=False):
     """Return a tuple with two elements:
     mapper-dictionary: key is name of message type. value is function to map the message.
     all-modules: list of modules that implement mapping. """
@@ -905,11 +920,12 @@ def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count
     num_counts = ploidy + extra_genotypes
 
     map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=2,
-                                 mapped_genotype_index_dim=2)
+                                 mapped_genotype_index_dim=2,use_cuda=use_cuda)
     map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,
-                                   sample_dim=sample_dim)
+                                   sample_dim=sample_dim,use_cuda=use_cuda)
     map_SbiRecords = MapBaseInformation(sample_mapper=map_SampleInfo, num_samples=num_samples, sample_dim=sample_dim,
-                                        sequence_output_dim=count_dim, ploidy=ploidy, extra_genotypes=extra_genotypes)
+                                        sequence_output_dim=count_dim, ploidy=ploidy, extra_genotypes=extra_genotypes,
+                                        use_cuda=use_cuda)
 
     sbi_mappers = {"BaseInformation": map_SbiRecords,
                    "SampleInfo": map_SampleInfo,

@@ -61,7 +61,7 @@ class StructGenotypingModel(Module):
         return features
 
     def forward(self, sbi_records):
-        return self.classifier(self.map_sbi_messages(sbi_records,cuda=self.use_cuda))
+        return self.classifier(self.map_sbi_messages(sbi_records))
 
 
 class StructGenotypingSupervisedTrainer(CommonTrainer):
@@ -88,8 +88,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [AccuracyHelper("train_")]
-        if self.use_cuda:
-            self.tensor_cache.cuda()
+
         print('\nTraining, epoch: %d' % epoch)
 
         for performance_estimator in performance_estimators:
@@ -253,12 +252,12 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                          performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
                                                                   "test_accuracy"]))
 
-    def create_struct_model(self, problem, args):
+    def create_struct_model(self, problem, args,use_cuda):
 
         sbi_mappers, *_ = configure_mappers(ploidy=args.struct_ploidy,
                                                       extra_genotypes=args.struct_extra_genotypes,
                                                       num_samples=1, count_dim=args.struct_count_dim,
-                                                      sample_dim=args.struct_sample_dim)
+                                                      sample_dim=args.struct_sample_dim,use_cuda=use_cuda)
         sbi_mapper = sbi_mappers['BaseInformation']
         # determine feature size:
 

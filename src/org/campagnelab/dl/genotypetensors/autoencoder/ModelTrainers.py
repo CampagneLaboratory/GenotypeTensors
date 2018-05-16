@@ -156,7 +156,7 @@ def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequ
                                                      use_cuda=train_use_cuda)
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: model_trainer.create_struct_model(
-                problem=train_problem, args=train_args)))
+                problem=train_problem, args=train_args,use_cuda=train_use_cuda)))
 
         training_loop_method = model_trainer.train_supervised
         testing_loop_method = model_trainer.test_supervised

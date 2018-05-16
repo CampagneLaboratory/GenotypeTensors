@@ -4,12 +4,12 @@ from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised
 from org.campagnelab.dl.genotypetensors.structured.BatchedSbiMappers import MapSequence, BatchedStructuredEmbedding, \
     MapCountInfo, MapSampleInfo, MapBaseInformation
 
-
+use_cuda=True
 class BatchedMappersTestCase(unittest.TestCase):
     def test_count(self):
 
 
-        map_container =MapCountInfo()
+        map_container =MapCountInfo(use_cuda=use_cuda)
         import ujson
         record = ujson.loads(sbi_json_string)
         containers=[record['samples'][0]['counts'][0],record['samples'][0]['counts'][1] ]
@@ -31,8 +31,8 @@ class BatchedMappersTestCase(unittest.TestCase):
     def test_sample(self):
 
 
-        count_mapper =MapCountInfo()
-        map_container =MapSampleInfo(count_mapper=count_mapper,count_dim=64, sample_dim=66, num_counts=2)
+        count_mapper =MapCountInfo(use_cuda=use_cuda)
+        map_container =MapSampleInfo(count_mapper=count_mapper,count_dim=64, sample_dim=66, num_counts=2,use_cuda=use_cuda)
         import ujson
         record = ujson.loads(sbi_json_string)
         container=[record['samples'][0],record['samples'][0] ]
@@ -52,9 +52,9 @@ class BatchedMappersTestCase(unittest.TestCase):
 
 
         count_mapper =MapCountInfo()
-        sample_mapper =MapSampleInfo(count_mapper=count_mapper,count_dim=64, sample_dim=66, num_counts=2)
+        sample_mapper =MapSampleInfo(count_mapper=count_mapper,count_dim=64, sample_dim=66, num_counts=2,use_cuda=use_cuda)
         map_container =MapBaseInformation(sample_mapper=sample_mapper,sample_dim=sample_mapper.embedding_size,
-                                          num_samples=1, sequence_output_dim=64, ploidy=2, extra_genotypes=2)
+                                          num_samples=1, sequence_output_dim=64, ploidy=2, extra_genotypes=2,use_cuda=use_cuda)
         import ujson
         record = ujson.loads(sbi_json_string)
         container=[record,record ,record]
@@ -74,9 +74,9 @@ class BatchedMappersTestCase(unittest.TestCase):
 
 
         count_mapper =MapCountInfo()
-        sample_mapper =MapSampleInfo(count_mapper=count_mapper,count_dim=64, sample_dim=66, num_counts=2)
+        sample_mapper =MapSampleInfo(count_mapper=count_mapper,count_dim=64, sample_dim=66, num_counts=2,use_cuda=use_cuda)
         map_container =MapBaseInformation(sample_mapper=sample_mapper,sample_dim=sample_mapper.embedding_size,
-                                          num_samples=1, sequence_output_dim=64, ploidy=2, extra_genotypes=2)
+                                          num_samples=1, sequence_output_dim=64, ploidy=2, extra_genotypes=2,use_cuda=use_cuda)
         import ujson
         record = ujson.loads(sbi_json_string)
 
