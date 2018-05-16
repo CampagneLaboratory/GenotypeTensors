@@ -46,9 +46,10 @@ class NoCache(TensorCache):
 
 
 class StructuredEmbedding(Module):
-    def __init__(self, embedding_size):
+    def __init__(self, embedding_size, use_cuda):
         super().__init__()
         self.embedding_size = embedding_size
+        self.use_cuda=use_cuda
 
     def define_long_variable(self, values, cuda=None):
         variable = Variable(torch.LongTensor(values), requires_grad=False)
@@ -91,16 +92,16 @@ class StructuredEmbedding(Module):
         pass
 
 class map_Boolean(StructuredEmbedding):
-    def __init__(self):
-        super().__init__(2)
+    def __init__(self,use_cuda):
+        super().__init__(2,use_cuda)
         self.true_value = Variable(torch.FloatTensor([[1, 0]]))
         self.false_value = Variable(torch.FloatTensor([[0, 1]]))
 
-    def __call__(self, predicate, tensor_cache, cuda=None):
+    def forward(self, predicate, tensor_cache, cuda=None):
         assert isinstance(predicate,bool),"predicate must be a boolean"
         value= tensor_cache.cache(key=predicate,value=predicate, tensor_creation_lambda=
         lambda predicate: Variable(torch.FloatTensor([[1, 0]]))  if predicate else  Variable(torch.FloatTensor([[0, 1]])))
-        if cuda:
+        if self.use_cuda:
             value=value.cuda(async=True)
         return value
         #return Variable(value.data,requires_grad=True)
@@ -109,7 +110,7 @@ class map_Boolean(StructuredEmbedding):
     def collect_inputs(self, values, tensor_cache=NoCache(), phase=0, cuda=None, batcher=None):
         if isinstance(values,list):
             cat = torch.cat([self(predicate, tensor_cache, cuda) for predicate in values], dim=1)
-            if cuda:
+            if self.use_cuda:
                 cat=cat.cuda(async=True)
             return batcher.store_inputs(mapper=self, inputs=cat)
 
@@ -127,8 +128,8 @@ class map_Boolean(StructuredEmbedding):
             return result
 
 class IntegerModel(StructuredEmbedding):
-    def __init__(self, distinct_numbers, embedding_size):
-        super().__init__(embedding_size)
+    def __init__(self, distinct_numbers, embedding_size,use_cuda):
+        super().__init__(embedding_size,use_cuda)
         self.distinct_numbers = distinct_numbers
         self.embedding = Embedding(distinct_numbers, embedding_size)
         self.embedding.requires_grad = True
@@ -169,11 +170,13 @@ class MeanOfList(Module):
         return (torch.sum(list_of_embeddings, dim=0) / num_elements).view(1, -1)
 
 class RNNOfList(StructuredEmbedding):
-    def __init__(self, embedding_size, hidden_size, num_layers=1):
-        super().__init__(hidden_size)
+    def __init__(self, embedding_size, hidden_size, num_layers=1,use_cuda=None):
+        super().__init__(hidden_size,use_cuda)
         self.num_layers = num_layers
         self.hidden_size = hidden_size
         self.lstm = LSTM(embedding_size, hidden_size, num_layers, batch_first=True)
+        if use_cuda:
+            self.lstm=self.lstm.cuda()
 
     def forward(self, list_of_embeddings, cuda=None):
 
@@ -182,7 +185,7 @@ class RNNOfList(StructuredEmbedding):
         hidden_size = self.hidden_size
         hidden = Variable(torch.zeros(num_layers, batch_size, hidden_size))
         memory = Variable(torch.zeros(num_layers, batch_size, hidden_size))
-        if self.is_cuda(cuda):
+        if self.use_cuda:
             hidden = hidden.cuda(async=True)
             memory = memory.cuda(async=True)
         states = (hidden, memory)
@@ -200,13 +203,13 @@ class RNNOfList(StructuredEmbedding):
 class Reduce(StructuredEmbedding):
     """ Reduce a list of embedded fields or messages using a feed forward. Requires list to be a constant size """
 
-    def __init__(self, input_dims, encoding_output_dim):
+    def __init__(self, input_dims, encoding_output_dim,use_cuda):
         """
 
         :param input_dims: dimensions of the elements to reduce (list of size the number of elements, integer dimension).
         :param encoding_output_dim: dimension of the reduce output.
         """
-        super().__init__(embedding_size=encoding_output_dim)
+        super().__init__(embedding_size=encoding_output_dim,use_cuda=use_cuda)
         self.encoding_dim = encoding_output_dim
         self.input_dims = input_dims
         sum_input_dims = 0
@@ -215,6 +218,9 @@ class Reduce(StructuredEmbedding):
         self.sum_input_dims=sum_input_dims
         self.linear1 = Linear(sum_input_dims, sum_input_dims * 2)
         self.linear2 = Linear(sum_input_dims * 2, encoding_output_dim)
+        if self.use_cuda:
+            self.linear1=self.linear1.cuda()
+            self.linear2=self.linear2.cuda()
 
     def forward(self, input_list, cuda=None, pad_missing=False):
         if len(input_list) != len(self.input_dims) and not pad_missing:

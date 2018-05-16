@@ -193,7 +193,6 @@ class IntegerMapper(BatchedStructuredEmbedding):
         self.create_tensor_holder(tensors, field_name)
         # do not modify prefix, since we have no delegage fields.
         index = self.get_start_offset(field_name)
-
         if field_name not in index_maps:
             index_maps[field_name] = []
         end = index + len(bases)
@@ -602,8 +601,8 @@ class MapCountInfo(BatchedStructuredEmbedding):
         self.frequency_list_mapper_aligned_lengths = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=self.use_cuda)
         self.frequency_list_mapper_read_indices = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=self.use_cuda)
 
-        self.nf_names_mappers = [('qualityScoresForwardStrand', self.frequency_list_mapper_base_qual),
-                                 ('qualityScoresReverseStrand', self.frequency_list_mapper_base_qual),
+        self.nf_names_mappers = [#('qualityScoresForwardStrand', self.frequency_list_mapper_base_qual),
+                                 #('qualityScoresReverseStrand', self.frequency_list_mapper_base_qual),
                                  # ('distanceToStartOfRead', self.frequency_list_mapper_distance_to),
                                  # ('distanceToEndOfRead', self.frequency_list_mapper_distance_to),  # OK
                                  # ('readIndicesReverseStrand', self.frequency_list_mapper_read_indices),  # OK
@@ -859,14 +858,15 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
         assert isinstance(index_maps, dict), "index_maps must be of type dict"
 
         field_prefix += ".nwf"
-        start_offset = self.get_start_offset(field_prefix)
+        start_offset = self.get_start_offset(field_prefix+".list")
+        print("nwf {}: {}".format(field_prefix+".list", start_offset))
 
         number_field = field_prefix + ".number"
         frequency_field = field_prefix + ".frequency"
         if number_field not in tensors:
             tensors[number_field] = []
             tensors[frequency_field] = []
-
+        index=start_offset
         for nwf_index, nwf in enumerate(list_of_nwf):
             assert nwf[
                        'type'] == "NumberWithFrequency", "This mapper only accepts type==NumberWithFrequency, got " + str(
@@ -876,10 +876,12 @@ class MapNumberWithFrequencyList(BatchedStructuredEmbedding):
             # when calling new_batch()
             if 'indices' not in nwf:
                 nwf['indices'] = {}
-            offset = nwf_index + start_offset
-            nwf['index'] = offset
+            index = nwf_index + start_offset
+            nwf['index'] = index
             self.map_number.collect_tensors([nwf['number']], field_prefix + '.number', tensors, index_maps)
             self.map_frequency.collect_tensors([nwf['frequency']], field_prefix + '.frequency', tensors, index_maps)
+        print("nwf {}: {}".format(field_prefix + ".list", index+1))
+        self.set_start_offset(field_prefix + ".list",index+1)
 
         return tensors
 

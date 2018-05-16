@@ -23,15 +23,15 @@ use_mean_to_map_nwf = True
 
 
 class MapSequence(StructuredEmbedding):
-    def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N')):
-        super().__init__(embedding_size=hidden_size)
+    def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N'),use_cuda=None):
+        super().__init__(embedding_size=hidden_size,use_cuda=use_cuda)
         self.map_sequence = RNNOfList(embedding_size=mapped_base_dim, hidden_size=hidden_size,
-                                      num_layers=num_layers)
+                                      num_layers=num_layers,use_cuda=use_cuda)
         self.base_to_index = {}
         for base_index, base in enumerate(bases):
             self.base_to_index[base[0]] = base_index
 
-        self.map_bases = IntegerModel(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim)
+        self.map_bases = IntegerModel(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim,use_cuda=use_cuda)
 
     def forward(self, sequence_field, tensor_cache=NoCache(), cuda=None):
         return self.map_sequence(
@@ -40,16 +40,16 @@ class MapSequence(StructuredEmbedding):
 
 
 
-class MapBaseInformation(Module):
-    def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2):
-        super().__init__()
+class MapBaseInformation(StructuredEmbedding):
+    def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2,use_cuda=None):
+        super().__init__(sample_dim,use_cuda)
         self.sample_mapper = sample_mapper
 
         # We reuse the same sequence mapper as the one used in MapCountInfo:
         self.map_sequence = sample_mapper.count_mapper.map_sequence
         self.reduce_samples = Reduce(
             [sequence_output_dim] + [sequence_output_dim] + [sample_dim + sequence_output_dim] * num_samples,
-            encoding_output_dim=sample_dim)
+            encoding_output_dim=sample_dim,use_cuda=use_cuda)
 
         self.num_samples = num_samples
         self.ploidy = ploidy
@@ -72,12 +72,12 @@ class MapBaseInformation(Module):
 
 
 class MapSampleInfo(Module):
-    def __init__(self, count_mapper, count_dim, sample_dim, num_counts):
+    def __init__(self, count_mapper, count_dim, sample_dim, num_counts,use_cuda=None):
         super().__init__()
         self.count_mapper = count_mapper
         self.num_counts = num_counts
         self.count_dim = count_dim
-        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim)
+        self.reduce_counts = Reduce([count_dim] * num_counts, encoding_output_dim=sample_dim,use_cuda=use_cuda)
 
     def forward(self, input, tensor_cache, cuda=None):
         observed_counts = self.get_observed_counts(input)
@@ -138,21 +138,21 @@ class MapSampleInfo(Module):
 
 
 class MapCountInfo(StructuredEmbedding):
-    def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=2, mapped_genotype_index_dim=4):
-        super().__init__(count_dim)
+    def __init__(self, mapped_count_dim=5, count_dim=64, mapped_base_dim=2, mapped_genotype_index_dim=4,use_cuda=None):
+        super().__init__(count_dim,use_cuda)
         self.map_sequence = MapSequence(hidden_size=count_dim,
-                                        mapped_base_dim=mapped_base_dim)
-        self.map_gobyGenotypeIndex = IntegerModel(distinct_numbers=100, embedding_size=mapped_genotype_index_dim)
+                                        mapped_base_dim=mapped_base_dim,use_cuda=use_cuda)
+        self.map_gobyGenotypeIndex = IntegerModel(distinct_numbers=100, embedding_size=mapped_genotype_index_dim,use_cuda=use_cuda)
 
-        self.map_count = IntegerModel(distinct_numbers=100000, embedding_size=mapped_count_dim)
-        self.map_boolean = map_Boolean()
+        self.map_count = IntegerModel(distinct_numbers=100000, embedding_size=mapped_count_dim,use_cuda=use_cuda)
+        self.map_boolean = map_Boolean(use_cuda=use_cuda)
 
-        self.frequency_list_mapper_base_qual = MapNumberWithFrequencyList(distinct_numbers=1000)
-        self.frequency_list_mapper_num_var = MapNumberWithFrequencyList(distinct_numbers=1000)
-        self.frequency_list_mapper_mapping_qual = MapNumberWithFrequencyList(distinct_numbers=100)
-        self.frequency_list_mapper_distance_to = MapNumberWithFrequencyList(distinct_numbers=1000)
-        self.frequency_list_mapper_aligned_lengths = MapNumberWithFrequencyList(distinct_numbers=1000)
-        self.frequency_list_mapper_read_indices = MapNumberWithFrequencyList(distinct_numbers=1000)
+        self.frequency_list_mapper_base_qual = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=use_cuda)
+        self.frequency_list_mapper_num_var = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=use_cuda)
+        self.frequency_list_mapper_mapping_qual = MapNumberWithFrequencyList(distinct_numbers=100,use_cuda=use_cuda)
+        self.frequency_list_mapper_distance_to = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=use_cuda)
+        self.frequency_list_mapper_aligned_lengths = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=use_cuda)
+        self.frequency_list_mapper_read_indices = MapNumberWithFrequencyList(distinct_numbers=1000,use_cuda=use_cuda)
 
         count_mappers = [self.map_gobyGenotypeIndex,
                          self.map_boolean,  # isIndel
@@ -179,12 +179,12 @@ class MapCountInfo(StructuredEmbedding):
             count_mappers += [mapper]
 
         # below, [2+2+2] is for the booleans mapped with a function:
-        self.reduce_count = Reduce([mapper.embedding_size for mapper in count_mappers], encoding_output_dim=count_dim)
+        self.reduce_count = Reduce([mapper.embedding_size for mapper in count_mappers], encoding_output_dim=count_dim,use_cuda=use_cuda)
         batched_count_mappers = []
         self.reduce_batched = Reduce([self.map_gobyGenotypeIndex.embedding_size,
                                       self.map_count.embedding_size * 2,
                                       self.map_boolean.embedding_size * 2,
-                                      self.map_sequence.embedding_size * 2, ], encoding_output_dim=count_dim)
+                                      self.map_sequence.embedding_size * 2, ], encoding_output_dim=count_dim,use_cuda=use_cuda)
 
     def forward(self, c, tensor_cache, cuda=None):
         mapped_gobyGenotypeIndex = self.map_gobyGenotypeIndex([c['gobyGenotypeIndex']], tensor_cache=tensor_cache,
@@ -288,8 +288,8 @@ class MapCountInfo(StructuredEmbedding):
 
 
 class FrequencyMapper(StructuredEmbedding):
-    def __init__(self):
-        super().__init__(3)
+    def __init__(self,use_cuda=None):
+        super().__init__(3,use_cuda=use_cuda)
         self.LOG10 = log(10)
         self.LOG2 = log(2)
         self.epsilon = 1E-5
@@ -331,13 +331,13 @@ class FrequencyMapper(StructuredEmbedding):
 
 
 class MapNumberWithFrequencyList(StructuredEmbedding):
-    def __init__(self, distinct_numbers=-1, mapped_number_dim=4):
+    def __init__(self, distinct_numbers=-1, mapped_number_dim=4,use_cuda=None):
         mapped_frequency_dim = 3
-        super().__init__(embedding_size=mapped_number_dim + mapped_frequency_dim)
+        super().__init__(embedding_size=mapped_number_dim + mapped_frequency_dim,use_cuda=use_cuda)
 
         output_dim = mapped_number_dim + mapped_frequency_dim
-        self.map_number = IntegerModel(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim)
-        self.map_frequency = FrequencyMapper()
+        self.map_number = IntegerModel(distinct_numbers=distinct_numbers, embedding_size=mapped_number_dim,use_cuda=use_cuda)
+        self.map_frequency = FrequencyMapper(use_cuda=use_cuda)
         # self.map_frequency = Variable(torch.FloatTensor([[]]))
         # IntegerModel(distinct_numbers=distinct_frequencies, embedding_size=mapped_frequency_dim)
         if use_mean_to_map_nwf:
@@ -345,7 +345,7 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
         else:
             self.map_sequence = RNNOfList(embedding_size=mapped_number_dim + mapped_frequency_dim,
                                           hidden_size=output_dim,
-                                          num_layers=1)
+                                          num_layers=1,use_cuda=use_cuda)
 
     def forward(self, nwf_list, tensor_cache=NoCache(), cuda=None, nf_name="unknown"):
 
@@ -377,7 +377,7 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
                                          values=nwf_list['frequency'], phase=phase, cuda=cuda, batcher=batcher))
 
 
-def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64):
+def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count_dim=64,use_cuda=None):
     """Return a tuple with two elements:
     mapper-dictionary: key is name of message type. value is function to map the message.
     all-modules: list of modules that implement mapping. """
@@ -385,11 +385,12 @@ def configure_mappers(ploidy, extra_genotypes, num_samples, sample_dim=64, count
     num_counts = ploidy + extra_genotypes
 
     map_CountInfo = MapCountInfo(mapped_count_dim=5, count_dim=count_dim, mapped_base_dim=2,
-                                 mapped_genotype_index_dim=2)
+                                 mapped_genotype_index_dim=2,use_cuda=use_cuda)
     map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,
-                                   sample_dim=sample_dim)
+                                   sample_dim=sample_dim,use_cuda=use_cuda)
     map_SbiRecords = MapBaseInformation(sample_mapper=map_SampleInfo, num_samples=num_samples, sample_dim=sample_dim,
-                                        sequence_output_dim=count_dim, ploidy=ploidy, extra_genotypes=extra_genotypes)
+                                        sequence_output_dim=count_dim, ploidy=ploidy, extra_genotypes=extra_genotypes,
+                                        use_cuda=use_cuda)
 
     sbi_mappers = {"BaseInformation": map_SbiRecords,
                    "SampleInfo": map_SampleInfo,
