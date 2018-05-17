@@ -144,8 +144,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         optimized_loss = weighted_supervised_loss
         optimized_loss.backward()
         self.optimizer_training.step()
-        performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
-        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+        performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
@@ -244,8 +244,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.estimate_errors(errors, output_s, target_s)
         _, target_index = torch.max(target_s, dim=1)
         _, output_index = torch.max(output_s_p, dim=1)
-        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
-        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,

@@ -166,10 +166,10 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
                     opt.step()
                 self.zero_grad_all_optimizers()
 
-                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-                performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
-                performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
-                performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.item())
+                performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.item())
+                performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.item())
+                performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.item())
                 performance_estimators.set_metric(batch_idx, "weight", weight)
                 if not self.args.no_progress:
                     progress_bar(batch_idx * self.mini_batch_size, self.max_training_examples,
@@ -240,11 +240,11 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
                 categories_loss = self.net.semisup_loss_criterion(categories_predicted, target_s)
 
                 weight = self.estimate_example_density_weight(latent_code)
-                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.item())
                 performance_estimators.set_metric(batch_idx, "weight", weight)
-                performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
+                performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.item(),
                                                                categories_predicted_p, target_index)
-                performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
+                performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.item() * weight,
                                                                categories_predicted_p, target_s)
 
                 if not self.args.no_progress:

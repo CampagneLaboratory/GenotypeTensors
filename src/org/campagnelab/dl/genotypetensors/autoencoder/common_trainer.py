@@ -431,8 +431,8 @@ class CommonTrainer:
         output_index = output_index.cpu()
         for class_index in range(target_s[0].size()[0]):
             for example_index in range(self.mini_batch_size):
-                if target_index[example_index].data[0] == class_index and \
-                        (target_index[example_index].data != output_index[example_index].data)[0] > 0:
+                if target_index[example_index].item() == class_index and \
+                        (target_index[example_index].item() != output_index[example_index].item()):
                     errors[class_index] += 1
 
     def _recreate_mixup_batch(self, input_1, input_2, target_1, target_2):

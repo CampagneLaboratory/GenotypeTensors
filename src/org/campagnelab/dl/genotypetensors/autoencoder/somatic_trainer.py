@@ -63,9 +63,9 @@ class SomaticTrainer(CommonTrainer):
 
             optimized_loss.backward()
             self.optimizer_training.step()
-            performance_estimators.set_metric(batch_idx, "train_loss", optimized_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "classification_loss", classification_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "frequency_loss", frequency_loss.data[0])
+            performance_estimators.set_metric(batch_idx, "train_loss", optimized_loss.item())
+            performance_estimators.set_metric(batch_idx, "classification_loss", classification_loss.item())
+            performance_estimators.set_metric(batch_idx, "frequency_loss", frequency_loss.item())
 
             supervised_grad_norm = grad_norm(self.net.parameters())
             performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
@@ -113,9 +113,9 @@ class SomaticTrainer(CommonTrainer):
             frequency_loss = mse_loss(output_frequency, freq_targets)
             test_loss = classification_loss + frequency_loss
 
-            performance_estimators.set_metric(batch_idx, "test_loss", test_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "classification_loss", classification_loss.data[0])
-            performance_estimators.set_metric(batch_idx, "frequency_loss", frequency_loss.data[0])
+            performance_estimators.set_metric(batch_idx, "test_loss", test_loss.item())
+            performance_estimators.set_metric(batch_idx, "classification_loss", classification_loss.item())
+            performance_estimators.set_metric(batch_idx, "frequency_loss", frequency_loss.item())
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                          performance_estimators.progress_message(["test_loss"]))

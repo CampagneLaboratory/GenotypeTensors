@@ -27,7 +27,7 @@ def recode_as_multi_label(one_hot_vector):
     coded = torch.zeros(one_hot_vector.size())
     for example_index in range(0, len(one_hot_vector)):
         value, index = torch.max(one_hot_vector[example_index], dim=0)
-        count_indices = list(to_binary(index.data[0], len(one_hot_vector)))
+        count_indices = list(to_binary(index.item(), len(one_hot_vector)))
         for count_index in count_indices:
             coded[example_index, count_index] = 1
     # print(coded)
@@ -152,8 +152,8 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         optimized_loss = weighted_supervised_loss
         optimized_loss.backward()
         self.optimizer_training.step()
-        performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
-        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+        performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
@@ -223,8 +223,8 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         supervised_loss = self.criterion_classifier(output_s, target_s)
         #self.estimate_errors(errors, output_s_p, target_s)
 
-        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
-        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,

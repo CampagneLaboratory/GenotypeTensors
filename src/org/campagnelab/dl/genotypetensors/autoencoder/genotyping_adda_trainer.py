@@ -227,11 +227,11 @@ class GenotypingADDATrainer(CommonTrainer):
                                                              source_is_training_set)
             performance_estimators.set_metric(batch_idx, "train_encoded_accuracy", train_encoded_accuracy)
 
-        ratio = self.calculate_ratio(train_encoded_accuracy, accuracy.data[0])
+        ratio = self.calculate_ratio(train_encoded_accuracy, accuracy.item())
         performance_estimators.set_metric(batch_idx,"ratio",ratio)
 
-        performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.data[0])
-        performance_estimators.set_metric(batch_idx, "train_accuracy",accuracy.data[0])
+        performance_estimators.set_metric(batch_idx, "train_critic_loss", loss_critic.item())
+        performance_estimators.set_metric(batch_idx, "train_accuracy",accuracy.item())
 
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
@@ -264,8 +264,8 @@ class GenotypingADDATrainer(CommonTrainer):
 
         # Optimize target encoder
         self.optimizer_tgt.step()
-        performance_estimators.set_metric(batch_idx, "train_encoder_loss", loss_tgt.data[0])
-        return accuracy.data[0]
+        performance_estimators.set_metric(batch_idx, "train_encoder_loss", loss_tgt.item())
+        return accuracy.item()
 
     def reset_before_test_epoch(self):
         self.cm = ConfusionMeter(self.num_classes, normalized=False)
@@ -283,8 +283,8 @@ class GenotypingADDATrainer(CommonTrainer):
 
         _, target_index = torch.max(target_s, dim=1)
         _, output_index = torch.max(output_s_p, dim=1)
-        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
-        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         # use target encoding:
         output_s = self.net(input_supervised)
@@ -294,8 +294,8 @@ class GenotypingADDATrainer(CommonTrainer):
 
         _, target_index = torch.max(target_s, dim=1)
         _, output_index = torch.max(output_s_p, dim=1)
-        performance_estimators.set_metric(batch_idx, "test_encoded_supervised_loss", supervised_loss.data[0])
-        performance_estimators.set_metric_with_outputs(batch_idx, "test_encoded_accuracy", supervised_loss.data[0],
+        performance_estimators.set_metric(batch_idx, "test_encoded_supervised_loss", supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_encoded_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,

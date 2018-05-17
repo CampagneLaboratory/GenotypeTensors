@@ -85,10 +85,10 @@ class GenotypingSemiSupTrainer(CommonTrainer):
                 optimized_loss = supervised_loss + reconstruction_loss
                 optimized_loss.backward()
                 self.optimizer_training.step()
-                performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
-                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-                performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.data[0])
-                performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+                performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.item())
+                performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.item())
+                performance_estimators.set_metric(batch_idx, "optimized_loss", optimized_loss.item())
+                performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.item(),
                                                                output_s_p, targets=target_index)
 
                 progress_bar(batch_idx * self.mini_batch_size,
@@ -135,9 +135,9 @@ class GenotypingSemiSupTrainer(CommonTrainer):
                 supervised_loss = self.criterion_classifier(output_s, target_s)
                 reconstruction_loss = self.criterion_autoencoder(output_u, target_u)
 
-                performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
-                performance_estimators.set_metric(batch_idx, "test_reconstruction_loss", reconstruction_loss.data[0])
-                performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+                performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.item())
+                performance_estimators.set_metric(batch_idx, "test_reconstruction_loss", reconstruction_loss.item())
+                performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.item(),
                                                                output_s_p, targets=target_index)
 
                 progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,

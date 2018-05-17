@@ -7,6 +7,7 @@ class AccuracyHelper(PerformanceEstimator):
     def __init__(self, prefix=""):
         self.prefix=prefix
         self.init_performance_metrics()
+        self.device = torch.device("cpu")
 
     def init_performance_metrics(self):
 
@@ -25,7 +26,7 @@ class AccuracyHelper(PerformanceEstimator):
     def observe_performance_metric(self, iteration, loss, outputs, targets):
         _, predicted = torch.max(outputs.data, 1)
         self.total += targets.size(0)
-        self.correct += predicted.eq(targets.data).cpu().sum()
+        self.correct += predicted.eq(targets.data).to(self.device).sum().item()
 
     def progress_message(self):
         """ Return a message suitable for logging progress of the metrics."""

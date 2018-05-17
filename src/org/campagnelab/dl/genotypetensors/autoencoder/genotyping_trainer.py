@@ -46,13 +46,13 @@ class GenotypingAutoEncoderTrainer(CommonTrainer):
             optimized_loss = supervised_loss
             optimized_loss.backward()
             self.optimizer_training.step()
-            performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.data[0],
+            performance_estimators.set_metric_with_outputs(batch_idx, "train_loss", supervised_loss.item(),
                                                            outputs, targets)
 
             supervised_grad_norm = grad_norm(self.net.parameters())
             performance_estimators.set_metric(batch_idx, "train_grad_norm", supervised_grad_norm)
 
-            performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.data[0],
+            performance_estimators.set_metric_with_outputs(batch_idx, "optimized_loss", optimized_loss.item(),
                                                            outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size,
@@ -85,7 +85,7 @@ class GenotypingAutoEncoderTrainer(CommonTrainer):
             outputs = self.net(inputs)
             loss = self.criterion(outputs, targets)
 
-            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", loss.data[0], outputs, targets)
+            performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", loss.item(), outputs, targets)
 
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                          performance_estimators.progress_message(["test_loss"]))

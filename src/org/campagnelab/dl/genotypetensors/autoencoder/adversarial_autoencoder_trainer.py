@@ -140,10 +140,10 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
             opt.step()
         self.zero_grad_all_optimizers()
 
-        performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
-        performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.data[0])
-        performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.data[0])
-        performance_estimators.set_metric(batch_idx, "semisup_loss", semisup_loss.data[0])
+        performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.item())
+        performance_estimators.set_metric(batch_idx, "discriminator_loss", discriminator_loss.item())
+        performance_estimators.set_metric(batch_idx, "generator_loss", generator_loss.item())
+        performance_estimators.set_metric(batch_idx, "semisup_loss", semisup_loss.item())
         performance_estimators.set_metric(batch_idx, "weight", weight)
 
         if self.args.latent_code_output is not None:
@@ -311,11 +311,11 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
 
         self.cm.add(predicted=output_index.data, target=target_index.data)
 
-        performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.data[0])
+        performance_estimators.set_metric(batch_idx, "reconstruction_loss", reconstruction_loss.item())
         performance_estimators.set_metric(batch_idx, "weight", weight)
-        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.data[0],
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", reconstruction_loss.item(),
                                                        categories_predicted_p, target_index)
-        performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.data[0] * weight,
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_loss", categories_loss.item() * weight,
                                                        categories_predicted_p, target_s)
 
         if not self.args.no_progress:
