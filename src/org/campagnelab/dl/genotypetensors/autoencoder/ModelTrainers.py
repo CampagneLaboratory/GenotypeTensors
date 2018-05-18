@@ -149,14 +149,15 @@ def define_train_auto_encoder_parser():
     parser.add_argument("--struct-extra-genotypes", type=int, default=2, help="Number of extra genotypes to use for structured mapping")
     return parser
 
-def configure_model_trainer(train_args, train_problem,train_use_cuda,class_frequencies=None):
+
+def configure_model_trainer(train_args, train_problem, train_device, class_frequencies=None):
     args=train_args
     if train_args.mode == "struct_genotyping":
         model_trainer = StructGenotypingSupervisedTrainer(args=train_args, problem=train_problem,
-                                                     use_cuda=train_use_cuda)
+                                                          device=train_device)
         model_trainer.init_model(create_model_function=(
             lambda model_name, problem_type: model_trainer.create_struct_model(
-                problem=train_problem, args=train_args,use_cuda=train_use_cuda)))
+                problem=train_problem, args=train_args, device=train_device)))
 
         training_loop_method = model_trainer.train_supervised
         testing_loop_method = model_trainer.test_supervised

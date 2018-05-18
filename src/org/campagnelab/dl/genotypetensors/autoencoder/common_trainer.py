@@ -52,12 +52,12 @@ class CommonTrainer:
     Common code to train and test models and log their performance.
     """
 
-    def __init__(self, args, problem, use_cuda):
+    def __init__(self, args, problem, device):
         """
         Initialize model training with arguments and problem.
 
         :param args command line arguments.
-        :param use_cuda When True, use the GPU.
+        :param device where to put tensors and model- either cuda or cpu device
          """
         self.training_performance_estimators=self.create_training_performance_estimators()
         self.test_performance_estimators=self.create_test_performance_estimators()
@@ -75,7 +75,7 @@ class CommonTrainer:
         self.problem = problem
         self.best_test_loss = sys.maxsize if not self.is_better(1, 0) else -1
         self.start_epoch = 0
-        self.use_cuda = use_cuda
+        self.device = device
         self.mini_batch_size = problem.mini_batch_size()
         self.net = None
         self.optimizer_training = None
@@ -93,6 +93,7 @@ class CommonTrainer:
         self.epsilon = args.epsilon_label_smoothing if hasattr( args,"epsilon_label_smoothing") else 0.0
         self.reweight_by_validation_error = args.reweight_by_validation_error if hasattr( args,"reweight_by_validation_error") else False
         self.num_classes = problem.output_size("softmaxGenotype")[0]
+        self.estimate_errors_device = torch.device("cpu")
 
     def init_model(self, create_model_function,class_frequencies=None):
         """Resume training if necessary (args.--resume flag is True), or call the
@@ -137,9 +138,7 @@ class CommonTrainer:
                 self.start_epoch = checkpoint['epoch']
                 self.best_model_confusion_matrix=checkpoint['confusion-matrix']
                 # we just resumed from a best saved model, load it indei:
-                self.best_model = self.load_checkpoint("best")
-                if self.use_cuda:
-                    self.best_model.cuda()
+                self.best_model = self.load_checkpoint("best").to(self.device)
                 model_built = True
             else:
                 print("Could not load model checkpoint, unable to --resume.")
@@ -148,11 +147,9 @@ class CommonTrainer:
         if not model_built:
             print('==> Building model...')
 
-            self.net = create_model_function(args.model, self.problem)
+            self.net = create_model_function(args.model, self.problem).to(self.device)
             self.net.apply(init_params)
 
-        if self.use_cuda:
-            self.net.cuda()
         cudnn.benchmark = True
 
         self.class_frequencies = self.class_frequency(class_frequencies=class_frequencies)
@@ -382,10 +379,8 @@ class CommonTrainer:
 
             class_frequencies_output = class_frequencies[output_name]
             # normalize with 1-f, where f is normalized frequency vector:
-            weights = torch.ones(class_frequencies_output.size())
+            weights = torch.ones(class_frequencies_output.size()).to(self.device)
             weights -= class_frequencies_output / torch.norm(class_frequencies_output, p=1, dim=0)
-            if self.use_cuda:
-                weights = weights.cuda()
 
             self.rebuild_criterions(output_name=output_name, weights=weights)
         return class_frequencies
@@ -417,18 +412,16 @@ class CommonTrainer:
         return (weight_sum_1 + weight_sum_2) / (batch_size_1 + batch_size_2)
 
     def reweight_by_val_errors(self, errors):
-        weights = torch.ones(errors.size())
+        weights = torch.ones(errors.size()).to(self.device)
         errors += 1
         weights -= errors / torch.norm(errors, p=1, dim=0)
-        if self.use_cuda:
-            weights = weights.cuda()
         self.rebuild_criterions(output_name="softmaxGenotype", weights=weights)
 
     def estimate_errors(self, errors, output_s_p, target_s):
         _, target_index = torch.max(target_s, dim=1)
         _, output_index = torch.max(output_s_p, dim=1)
-        target_index = target_index.cpu()
-        output_index = output_index.cpu()
+        target_index = target_index.to(self.estimate_errors_device)
+        output_index = output_index.to(self.estimate_errors_device)
         for class_index in range(target_s[0].size()[0]):
             for example_index in range(self.mini_batch_size):
                 if target_index[example_index].item() == class_index and \
@@ -504,8 +497,8 @@ class CommonTrainer:
                 self.best_model.eval()
                 # we use the best model we trained so far to predict the outputs. These labels will overfit to the
                 # training set as training progresses:
-                best_model_output = self.best_model(Variable(input.data, volatile=True).cuda())
-                model_output_p=self.get_p(best_model_output).data
+                best_model_output = self.best_model(Variable(input.data, volatile=True).to(self.device))
+                model_output_p=self.get_p(best_model_output).data.to(self.device)
                 # assume three classes and predicted= [0.9, 0.1, 0]
                 # assume confusion matrix is [10, 10, 0,
                 #                             80, 20, 10,
@@ -514,10 +507,7 @@ class CommonTrainer:
                 # reweight confusion matrix by probability of predictions:
 
                 normalized_confusion_matrix=torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
-                                                         dim=0, maxnorm=1)
-                if self.use_cuda:
-                    normalized_confusion_matrix = normalized_confusion_matrix.cuda()
-                    model_output_p=model_output_p.cuda()
+                                                         dim=0, maxnorm=1).to(self.device)
                 # result will be: [17,11,1,
                 #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch
                 select =  (normalized_confusion_matrix.t()@model_output_p.t()).t()
@@ -531,8 +521,8 @@ class CommonTrainer:
                 # we use the best model we trained so far to predict the outputs. These labels will overfit to the
                 # training set as training progresses:
                 self.best_model.eval()
-                best_model_output = self.best_model(Variable(input.data, volatile=True).cuda())
-                model_output_p = self.get_p(best_model_output).data
+                best_model_output = self.best_model(Variable(input.data, volatile=True).to(self.device))
+                model_output_p = self.get_p(best_model_output).data.to(self.device)
                 # assume three classes and predicted= [0.9, 0.1, 0]
                 # assume confusion matrix is [10, 10, 0,
                 #                             80, 20, 10,
@@ -540,10 +530,7 @@ class CommonTrainer:
 
                 # reweight confusion matrix by probability of predictions:
                 normalized_confusion_matrix = torch.renorm(self.best_model_confusion_matrix.type(torch.FloatTensor), p=1,
-                                                           dim=0, maxnorm=1)
-                if self.use_cuda:
-                    normalized_confusion_matrix = normalized_confusion_matrix.cuda()
-                    model_output_p=model_output_p.cuda()
+                                                           dim=0, maxnorm=1).to(self.device)
 
                 # result will be: [17,11,1,
                 #                  40,25,25] corresponding to the marginals of the confusion matrix across the minibatch

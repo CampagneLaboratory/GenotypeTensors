@@ -46,6 +46,7 @@ if __name__ == '__main__':
         args_file.write(" ".join(sys.argv + ["--seed ", str(args.seed)]))
 
     use_cuda = torch.cuda.is_available() and not args.no_cuda
+    device = torch.device("cuda" if use_cuda else "cpu")
     is_parallel = False
     best_acc = 0  # best test accuracy
     start_epoch = 0  # start from epoch 0 or last checkpoint epoch
@@ -69,11 +70,12 @@ if __name__ == '__main__':
                 return metric
 
 
-    def train_once(train_args, train_problem, train_use_cuda):
+    def train_once(train_args, train_problem, train_device, train_use_cuda):
         train_problem.describe()
         training_loop_method = None
         testing_loop_method = None
-        model_trainer, training_loop_method, testing_loop_method=configure_model_trainer(train_args,train_problem,train_use_cuda)
+        model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(train_args, train_problem,
+                                                                                           train_device)
 
         torch.manual_seed(train_args.seed)
         if train_use_cuda:
@@ -83,6 +85,6 @@ if __name__ == '__main__':
                                             testing_loop_method=testing_loop_method)
 
 
-    train_once(args, problem, use_cuda)
+    train_once(args, problem, device, use_cuda)
     # don't wait for threads to die, just exit:
     os._exit(0)

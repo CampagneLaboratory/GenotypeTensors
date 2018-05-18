@@ -76,6 +76,8 @@ class VectorWriterBinary:
             }
             self.num_bytes_per_example = num_bytes_per_example
             self.vector_props_written = True
+            self.device = torch.device("cpu")
+
         elif self.using_input_data:
             def _get_vector_length_from_props(vector_name_for_dims):
                 return VectorWriterBinary._get_vector_length(self.input_vector_properties_reader
@@ -155,7 +157,7 @@ class VectorWriterBinary:
                 # Take inverse of logit (exp(logit(z)) / (exp(logit(z) + 1)) to get logistic fn value back
                 tensor_pytorch_exp = torch.exp(tensor_pytorch)
                 tensor_pytorch = torch.div(tensor_pytorch_exp, torch.add(tensor_pytorch_exp, 1))
-            tensor = tensor_pytorch.data.cpu().numpy()
+            tensor = tensor_pytorch.data.to(self.device).numpy()
             num_rows_tensor = tensor.shape[0]
             if num_rows is not None and num_rows_tensor != num_rows:
                 raise RuntimeError("Shape mismatch")

@@ -50,6 +50,7 @@ if __name__ == '__main__':
 
 
     problem = Problem()
+    device = torch.device("cpu")
     for model_label in args.model_labels.split(","):
         trainer=CommonTrainer(args,problem,use_cuda)
         # Convert best model:
@@ -58,7 +59,7 @@ if __name__ == '__main__':
         epoch=state["epoch"]
         model=state["model"]
         test_loss = state["best_test_loss"]
-        model.cpu()
+        model.to(device)
         trainer.net=model
 
         trainer.save_model(best_test_loss=test_loss,epoch=epoch, model=model,model_label=model_label)

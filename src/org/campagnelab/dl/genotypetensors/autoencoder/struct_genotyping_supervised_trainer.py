@@ -35,10 +35,10 @@ enable_recode = False
 
 
 class StructGenotypingModel(Module):
-    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, use_cuda, use_batching=True):
+    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, device, use_batching=True):
         super().__init__()
         self.sbi_mapper = sbi_mapper
-        self.use_cuda = use_cuda
+        self.device = device
         self.use_batching = use_batching
         self.classifier = GenotypeSoftmaxClassifer(num_inputs=mapped_features_size, target_size=output_size[0],
                                                    num_layers=args.num_layers,
@@ -67,8 +67,8 @@ class StructGenotypingModel(Module):
 class StructGenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using structured supervised training."""
 
-    def __init__(self, args, problem, use_cuda):
-        super().__init__(args, problem, use_cuda)
+    def __init__(self, args, problem, device):
+        super().__init__(args, problem, device)
         self.criterion_classifier = None
         self.thread_executor = ThreadPoolExecutor(max_workers=args.num_workers) if args.num_workers > 1 \
             else None
@@ -252,7 +252,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                          performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
                                                                   "test_accuracy"]))
 
-    def create_struct_model(self, problem, args,use_cuda):
+    def create_struct_model(self, problem, args, device):
 
         sbi_mappers, *_ = configure_mappers(ploidy=args.struct_ploidy,
                                                       extra_genotypes=args.struct_extra_genotypes,
@@ -269,7 +269,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         mapped_features_size = sbi_mapper(record).size(1)
 
         output_size = problem.output_size("softmaxGenotype")
-        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.use_cuda,
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, device,
                                       args.use_batching)
         print(model)
         return model

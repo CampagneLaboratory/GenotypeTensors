@@ -1,6 +1,8 @@
 import pickle
 import unittest
 
+import torch
+
 from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances, NoCache, TensorCache
 from org.campagnelab.dl.genotypetensors.structured.SbiMappers import configure_mappers
 
@@ -56,7 +58,7 @@ class StructuredSbiMapperTestCase(unittest.TestCase):
         mappers, all_modules=configure_mappers(ploidy=2, extra_genotypes=3, num_samples=1)
 
         mapper = BatchOfInstances(mappers=mappers,all_modules=all_modules)
-        mapper=mapper.cuda()
+        mapper=mapper.to(torch.device("cuda"))
         mapper([record],tensor_cache=NoCache(), cuda=True)
 
     def test_profile(self):
@@ -72,7 +74,7 @@ class StructuredSbiMapperTestCase(unittest.TestCase):
         mappers, all_modules = configure_mappers(ploidy=2, extra_genotypes=3, num_samples=1)
 
         mapper = BatchOfInstances(mappers=mappers, all_modules=all_modules)
-        mapper = mapper.cuda()
+        mapper = mapper.to(torch.device("cuda"))
         tensor_cache=TensorCache()
         mapper([record], tensor_cache=tensor_cache, cuda=True)
 if __name__ == '__main__':
