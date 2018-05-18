@@ -1,21 +1,16 @@
-import bisect
-import sys
-import threading
-from pathlib import Path
-
 import os
+import sys
+from multiprocessing import Lock
+from pathlib import Path
 
 import numpy
 import torch
+from torchnet.dataset import ConcatDataset
 from torchnet.dataset.dataset import Dataset
 
-from org.campagnelab.dl.genotypetensors.SBIToJsonIterator import sbi_json_generator
 from org.campagnelab.dl.genotypetensors.VectorCache import VectorCache
 from org.campagnelab.dl.genotypetensors.VectorPropertiesReader import VectorPropertiesReader
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
-from org.campagnelab.dl.genotypetensors.VectorReaderBinary import VectorReaderBinary
-
-from multiprocessing import Lock, current_process
 
 
 # Given n items and s sets to partition into, return ceiling of count in any partition (faster than math.ceil)
@@ -24,6 +19,31 @@ def _ceiling_partition(n, s):
         return n
     return -(-n // s)
 
+class ListDataset(Dataset):
+    def __init__(self,basename,postfix,vector_names):
+        self.basename=basename
+        if self.file_exists(self.basename + "-{}.list".format(postfix)):
+            # Use a list of datasets and interleave their records:
+            with open(self.basename + "-unlabeled.list") as list_file:
+                lines = list_file.readlines()
+                self.delegate= ConcatDataset(
+                    [CachedGenotypeDataset(path.rstrip(), vector_names=vector_names) for path in
+                     lines])
+        else:
+            if self.file_exists(self.basename + "-{}.vec".format(postfix)):
+                self.delegate = CachedGenotypeDataset(self.basename + "-{}.vec".format(postfix),
+                                             vector_names=vector_names)
+            else:
+                self.delegate = EmptyDataset()
+
+    def __len__(self):
+        return len(self.delegate)
+
+    def __getitem__(self, idx):
+        return self.delegate[idx]
+
+    def file_exists(self, filename):
+        return Path(filename).is_file()
 
 class SmallerDataset(Dataset):
     def __init__(self, delegate, new_size):
