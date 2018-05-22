@@ -2,7 +2,7 @@ import torch
 from torch.nn import MultiLabelSoftMarginLoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -33,8 +33,8 @@ def recode_as_multi_label(one_hot_vector):
 
 class GenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using supervised training only."""
-    def __init__(self, args, problem, use_cuda):
-        super().__init__(args, problem, use_cuda)
+    def __init__(self, args, problem, device):
+        super().__init__(args, problem, device)
         self.criterion_classifier = None
         if self.args.normalize:
             problem_mean = self.problem.load_tensor("input", "mean")
@@ -70,12 +70,11 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["training"],
             requires_grad={"training": ["input"]},
-            volatile={"training": ["metaData"]},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
                 "input": self.normalize_inputs
@@ -138,19 +137,14 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         errors = None
         performance_estimators = self.create_test_performance_estimators()
 
-
-
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(validation_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
-            volatile={
-                "validation": ["input", "softmaxGenotype"]
-            },
             recode_functions={
                 "input": self.normalize_inputs
             }

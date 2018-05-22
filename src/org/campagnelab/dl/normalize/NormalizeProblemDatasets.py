@@ -6,7 +6,7 @@ import threading
 
 import torch
 
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 
 if __name__ == '__main__':
@@ -67,11 +67,10 @@ if __name__ == '__main__':
     for index, dataset in enumerate(datasets):
         train_loader_subset = problem.loader_for_dataset(dataset, shuffle=True)
         print("Summing dataset {}/{}".format(index + 1, len(datasets)))
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset),
-            is_cuda=False,
+            device=torch.device("cpu"),
             batch_names=["dataset"],
-            volatile={"dataset": [args.vector_name]},
             recode_functions={
                 args.vector_name: add_to_sum
             })
@@ -88,11 +87,10 @@ if __name__ == '__main__':
     for index, dataset in enumerate(datasets):
         train_loader_subset = problem.loader_for_dataset(dataset, shuffle=True)
         print("Calculating sum of squared deviations for dataset {}/{}".format(index + 1, len(datasets)))
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset),
-            is_cuda=False,
+            device=torch.device("cpu"),
             batch_names=["dataset"],
-            volatile={"dataset": [args.vector_name]},
             recode_functions={
                 args.vector_name: add_to_sum_sdm
             })

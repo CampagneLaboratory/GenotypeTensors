@@ -36,29 +36,22 @@ class SomaticTrainer(CommonTrainer):
         self.net.train()
 
         for batch_idx, (_, data_dict) in enumerate(train_loader_subset):
-            inputs = data_dict["input"]
-            is_mutated_base_target = data_dict["isBaseMutated"]
+            inputs = data_dict["input"].to(self.device)
+            is_mutated_base_target = data_dict["isBaseMutated"].to(self.device)
             # transform one-hot encoding into a class index:
             max,indices=is_mutated_base_target.max(dim=1)
             is_mutated_base_target=indices
-            somatic_frequency_target = data_dict["somaticFrequency"]
+            somatic_frequency_target = data_dict["somaticFrequency"].to(self.device)
             num_batches += 1
 
-            if self.use_cuda:
-                inputs, is_mutated_base_target, somatic_frequency_target = inputs.cuda(), \
-                                                                           is_mutated_base_target.cuda(), \
-                                                                           somatic_frequency_target.cuda()
-
-            inputs, mut_targets, freq_targets = Variable(inputs), Variable(is_mutated_base_target, requires_grad=False), \
-                                                Variable(somatic_frequency_target, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
             # must be done with the model prior to regularization:
 
             self.optimizer_training.zero_grad()
             output_mut, output_frequency = self.net(inputs)
 
-            classification_loss = cross_entropy_loss(output_mut, mut_targets)
-            frequency_loss = mse_loss(output_frequency, freq_targets)
+            classification_loss = cross_entropy_loss(output_mut, is_mutated_base_target)
+            frequency_loss = mse_loss(output_frequency, somatic_frequency_target)
             optimized_loss = classification_loss + frequency_loss
 
             optimized_loss.backward()
@@ -94,23 +87,16 @@ class SomaticTrainer(CommonTrainer):
         cross_entropy_loss = CrossEntropyLoss()
         mse_loss = MSELoss()
         for batch_idx, (_, data_dict) in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
-            inputs = data_dict["input"]
-            is_mutated_base_target = data_dict["isBaseMutated"]
+            inputs = data_dict["input"].to(self.device)
+            is_mutated_base_target = data_dict["isBaseMutated"].to(self.device)
             # transform one-hot encoding into a class index:
             max, indices = is_mutated_base_target.max(dim=1)
             is_mutated_base_target = indices
-            somatic_frequency_target = data_dict["somaticFrequency"]
-            if self.use_cuda:
-                inputs, is_mutated_base_target, somatic_frequency_target = inputs.cuda(), \
-                                                                           is_mutated_base_target.cuda(), \
-                                                                           somatic_frequency_target.cuda()
-
-            inputs, mut_targets, freq_targets = Variable(inputs), Variable(is_mutated_base_target, volatile=True), \
-                                                Variable(somatic_frequency_target, volatile=True)
+            somatic_frequency_target = data_dict["somaticFrequency"].to(self.device)
 
             is_base_mutated, output_frequency = self.net(inputs)
-            classification_loss = cross_entropy_loss(is_base_mutated, mut_targets)
-            frequency_loss = mse_loss(output_frequency, freq_targets)
+            classification_loss = cross_entropy_loss(is_base_mutated, is_mutated_base_target)
+            frequency_loss = mse_loss(output_frequency, somatic_frequency_target)
             test_loss = classification_loss + frequency_loss
 
             performance_estimators.set_metric(batch_idx, "test_loss", test_loss.item())

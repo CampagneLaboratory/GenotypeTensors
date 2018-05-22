@@ -251,14 +251,8 @@ class SemiSupAdvAutoencoder(ConfigurableModule):
 
         mini_batch_size = model_input.data.size()[0]
         categories_real = common_trainer.dreamup_target_for(input=model_input, num_classes=self.num_classes,
-                                             category_prior=category_prior)
-
-
-        prior_real = draw_from_gaussian(self.prior_dim, mini_batch_size)
-
-        if model_input.data.is_cuda:
-            categories_real=categories_real.cuda()
-            prior_real=prior_real.cuda()
+                                                            category_prior=category_prior).to(self.device)
+        prior_real = draw_from_gaussian(self.prior_dim, mini_batch_size).to(self.device)
         categories_input, prior_input = self.encoder(model_input)
         cat_prob_real = self.discriminator_cat(categories_real)
         cat_prob_input = self.discriminator_cat(categories_input)

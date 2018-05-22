@@ -65,7 +65,7 @@ parser.add_argument("--processing", choices=["multithreaded", "sequential", "par
 
 args = parser.parse_args()
 
-use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print('==> Loading model from checkpoint..')
 model = None
@@ -107,7 +107,7 @@ input_files = checkpoint["input_files"] if "input_files" in checkpoint else None
 
 normalize=hasattr(model,"prenormalized_inputs") and model.prenormalized_inputs
 
-tester = PredictModel(model=model, problem=problem, use_cuda=use_cuda,
+tester = PredictModel(model=model, problem=problem, device=device,
                       domain_descriptor=domain_descriptor,
                       feature_mapper=feature_mapper, samples=samples, input_files=input_files,
                       processing_type=args.processing, num_workers=args.num_workers,

@@ -10,7 +10,7 @@ from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar
@@ -86,8 +86,8 @@ class GenotypingADDATrainer(CommonTrainer):
     See https://arxiv.org/pdf/1702.05464.pdf and https://github.com/corenel/pytorch-adda
     """
 
-    def __init__(self, args, problem, use_cuda):
-        super().__init__(args, problem, use_cuda)
+    def __init__(self, args, problem, device):
+        super().__init__(args, problem, device)
         # we need to use NLLLoss because the critic already has LogSoftmax as its last layer:
         self.criterion_nll = torch.nn.NLLLoss()
         self.criterion_classifier = None
@@ -139,12 +139,11 @@ class GenotypingADDATrainer(CommonTrainer):
         # Use the entire training set to draw examples, even num_training is limiting the length of an epoch.
         train_loader_subset = self.problem.train_loader_subset_range(0, len(self.problem.train_set()))
         unlabeled_loader_subset = self.problem.unlabeled_loader()
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["training", "unlabeled"],
             requires_grad={"training": ["input"], "unlabeled": ["input"]},
-            volatile={"training": ["metaData"], "unlabeled": ["metaData"]},
         )
 
         try:
@@ -329,15 +328,11 @@ class GenotypingADDATrainer(CommonTrainer):
 
         self.reset_before_test_epoch()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(validation_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
-            volatile={
-                "validation": ["input", "softmaxGenotype"]
-            },
-
         )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
@@ -370,16 +365,12 @@ class GenotypingADDATrainer(CommonTrainer):
         input_size = problem.input_size("input")
         assert hasattr(args,"adda_source_model") and args.adda_source_model is not None, "Argument --adda-source-model is required"
         assert len(input_size) == 1, "This ADDA implementation requires 1D input features."
-        source_model=self.load_source_model(args,problem,source_model_key=args.adda_source_model)
-        source_model_copy=self.load_source_model(args,problem,source_model_key=args.adda_source_model)
+        source_model = self.load_source_model(args,problem,source_model_key=args.adda_source_model).to(self.device)
+        source_model_copy = self.load_source_model(args,problem,source_model_key=args.adda_source_model).to(self.device)
 
         # let's measure the dimensionality of the source model's features:
         input_size = problem.input_size("input")[0]
-        inputs=Variable(torch.rand(10,input_size))
-        if self.use_cuda:
-            source_model.cuda()
-            source_model_copy.cuda()
-            inputs=inputs.cuda()
+        inputs = Variable(torch.rand(10,input_size)).to(self.device)
         feature_input_size=source_model.features(inputs).size(1)
 
         self.critic = Critic(args=args, input_size=feature_input_size)

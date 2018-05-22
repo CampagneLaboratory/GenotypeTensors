@@ -52,7 +52,7 @@ if __name__ == '__main__':
     problem = Problem()
     device = torch.device("cpu")
     for model_label in args.model_labels.split(","):
-        trainer=CommonTrainer(args,problem,use_cuda)
+        trainer=CommonTrainer(args, problem, torch.device("cuda" if use_cuda else "cpu"))
         # Convert best model:
         state=trainer.load_checkpoint_state(model_label=model_label)
 

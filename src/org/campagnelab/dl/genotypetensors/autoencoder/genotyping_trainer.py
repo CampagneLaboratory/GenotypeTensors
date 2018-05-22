@@ -29,11 +29,8 @@ class GenotypingAutoEncoderTrainer(CommonTrainer):
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
 
         for batch_idx, (_, data_dict) in enumerate(train_loader_subset):
-            inputs = data_dict["input"]
+            inputs = data_dict["input"].to(self.device)
             num_batches += 1
-
-            if self.use_cuda:
-                inputs = inputs.cuda()
 
             inputs, targets = Variable(inputs), Variable(inputs, requires_grad=False)
             # outputs used to calculate the loss of the supervised model
@@ -76,9 +73,7 @@ class GenotypingAutoEncoderTrainer(CommonTrainer):
             performance_estimator.init_performance_metrics()
 
         for batch_idx, (_, data_dict) in enumerate(self.problem.validation_loader_range(0, self.args.num_validation)):
-            inputs = data_dict["input"]
-            if self.use_cuda:
-                inputs = inputs.cuda()
+            inputs = data_dict["input"].to(self.device)
 
             inputs, targets = Variable(inputs, volatile=True), Variable(inputs, volatile=True)
 

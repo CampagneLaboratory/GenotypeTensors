@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from org.campagnelab.dl.genotypetensors.VectorWriterBinary import VectorWriterBinary
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import DispatchDataset
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider, DataProvider
 from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenotypingProblem
 from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
@@ -12,11 +12,11 @@ from multiprocessing import Lock
 
 
 class PredictModel:
-    def __init__(self, model, use_cuda, problem, domain_descriptor=None,
+    def __init__(self, model, device, problem, domain_descriptor=None,
                  feature_mapper=None, samples=None, input_files=None, processing_type="multithreaded",
                  num_workers=0, normalize=False):
         self.model = model
-        self.use_cuda = use_cuda
+        self.device = device
         self.problem = problem
         self.mini_batch_size = problem.mini_batch_size()
         self.domain_descriptor = domain_descriptor
@@ -39,19 +39,16 @@ class PredictModel:
         self.model.eval()
         if self.processing_type == "multithreaded":
             # Enable fake_GPU_on_CPU to debug on CPU
-            data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(iterator),
-                                                            is_cuda=self.use_cuda,
-                                                            batch_names=["unlabeled"],
-                                                            volatile={"unlabeled": [self.input_name]},
-                                                            recode_functions=self.recode_fn,
-                                                            fake_gpu_on_cpu=False
-                                                            )
+            data_provider = MultiThreadedDataProvider(iterator=zip(iterator),
+                                                      device=self.device,
+                                                      batch_names=["unlabeled"],
+                                                      recode_functions=self.recode_fn,
+                                                      )
 
         elif self.processing_type == "sequential":
             data_provider = DataProvider(iterator=zip(iterator),
-                                         is_cuda=self.use_cuda,
+                                         device=self.device,
                                          batch_names=["unlabeled"],
-                                         volatile={"unlabeled": [self.input_name]},
                                          recode_functions=self.recode_fn
                                          )
         else:

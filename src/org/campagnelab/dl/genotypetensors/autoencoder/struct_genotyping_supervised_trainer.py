@@ -9,7 +9,7 @@ from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import Common
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
 from org.campagnelab.dl.genotypetensors.structured.BatchedSbiMappers import configure_mappers, sbi_json_string
 
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider, DataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -97,12 +97,11 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["training"],
             requires_grad={"training": ["sbi"]},
-            volatile={"training": ["metaData"]},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
             }
@@ -186,15 +185,11 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(validation_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
-            volatile={
-                "validation": ["sbi", "softmaxGenotype"]
-            },
-
         )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
@@ -258,14 +253,12 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                                                       extra_genotypes=args.struct_extra_genotypes,
                                                       num_samples=1, count_dim=args.struct_count_dim,
                                                       sample_dim=args.struct_sample_dim,use_cuda=use_cuda)
-        sbi_mapper = sbi_mappers['BaseInformation']
+        sbi_mapper = sbi_mappers['BaseInformation'].to(self.device)
         # determine feature size:
 
 
         import ujson
         record = ujson.loads(sbi_json_string)
-        if self.use_cuda:
-            sbi_mapper.cuda()
         mapped_features_size = sbi_mapper(record).size(1)
 
         output_size = problem.output_size("softmaxGenotype")

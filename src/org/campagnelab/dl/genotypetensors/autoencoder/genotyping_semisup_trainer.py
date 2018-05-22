@@ -3,7 +3,7 @@ from torch.autograd import Variable
 from torch.nn import MSELoss, MultiLabelSoftMarginLoss
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -13,8 +13,8 @@ from org.campagnelab.dl.utils.utils import progress_bar
 
 class GenotypingSemiSupTrainer(CommonTrainer):
     """Train a genotyping model using supervised and reconstruction on unlabeled set."""
-    def __init__(self, args, problem, use_cuda):
-        super().__init__(args, problem, use_cuda)
+    def __init__(self, args, problem, device):
+        super().__init__(args, problem, device)
         self.criterion_classifier = None
         self.criterion_autoencoder = None
 
@@ -47,10 +47,9 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader = self.problem.unlabeled_loader()
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),is_cuda=self.use_cuda,
+        data_provider = MultiThreadedDataProvider(iterator=zip(train_loader_subset, unlabeled_loader), device=self.device,
                                      batch_names=["training", "unlabeled"],
                                      requires_grad={"training": ["input"], "unlabeled": ["input"]},
-                                     volatile={"training": ["metaData"], "unlabeled": []},
                                      recode_functions={"softmaxGenotype": lambda x: recode_for_label_smoothing(x,self.epsilon)})
         self.net.autoencoder.train()
         try:
@@ -115,10 +114,9 @@ class GenotypingSemiSupTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(validation_loader_subset), is_cuda=self.use_cuda,
-                                                        batch_names=["validation"],
-                                                        requires_grad={"validation": []},
-                                                        volatile={"validation": ["input", "softmaxGenotype"]})
+        data_provider = MultiThreadedDataProvider(iterator=zip(validation_loader_subset), device=self.device,
+                                                  batch_names=["validation"],
+                                                  requires_grad={"validation": []})
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 input_s = data_dict["validation"]["input"]

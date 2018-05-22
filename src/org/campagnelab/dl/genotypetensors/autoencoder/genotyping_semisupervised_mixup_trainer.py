@@ -4,7 +4,7 @@ from torch.nn import MultiLabelSoftMarginLoss
 from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -36,8 +36,8 @@ def recode_as_multi_label(one_hot_vector):
 class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
     """Train a genotyping model using semisupervised mixup (labels on the unlabeled set are made up by sampling)."""
 
-    def __init__(self, args, problem, use_cuda):
-        super().__init__(args, problem, use_cuda)
+    def __init__(self, args, problem, device):
+        super().__init__(args, problem, device)
         self.criterion_classifier = None
         self.cm=None
         if self.args.normalize:
@@ -90,12 +90,11 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader_subset = self.problem.unlabeled_loader()
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["training", "unlabeled"],
             requires_grad={"training": ["input"], "unlabeled": ["input"]},
-            volatile={"training": ["metaData"], "unlabeled": ["metaData"]},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
                 "input": self.normalize_inputs
@@ -130,11 +129,8 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
 
-        target_s_2 = self.dreamup_target_for( num_classes=self.num_classes,
-                                             category_prior=category_prior,input=input_u_2)
-
-        if self.use_cuda:
-            target_s_2 = target_s_2.cuda()
+        target_s_2 = self.dreamup_target_for(num_classes=self.num_classes,
+                                             category_prior=category_prior,input=input_u_2).to(self.device)
         with self.lock:
             input_s_mixup, target_s_mixup = self._recreate_mixup_batch(input_s_1, input_u_2, target_s_1, target_s_2)
 
@@ -199,14 +195,11 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(validation_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
-            volatile={
-                "validation": ["input", "softmaxGenotype"]
-            },
             recode_functions={
                 "input": self.normalize_inputs
             }
@@ -247,6 +240,4 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         self.confusion_matrix = self.cm.value().transpose()
 
         if self.best_model_confusion_matrix is None:
-            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
-            if self.use_cuda:
-                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
+            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix).to(self.device)

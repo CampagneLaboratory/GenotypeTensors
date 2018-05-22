@@ -5,7 +5,7 @@ from torch.nn import MultiLabelSoftMarginLoss
 import numpy as np
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -36,8 +36,8 @@ def recode_as_multi_label(one_hot_vector):
 
 class GenotypingSupervisedMixupTrainer(CommonTrainer):
     """Train a genotyping model using supervised mixup training."""
-    def __init__(self, args, problem, use_cuda):
-        super().__init__(args, problem, use_cuda)
+    def __init__(self, args, problem, device):
+        super().__init__(args, problem, device)
         self.criterion_classifier = None
         if self.args.normalize:
             problem_mean = self.problem.load_tensor("input", "mean")
@@ -68,13 +68,9 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         early_stop,best_performance_metrics=super().log_performance_metrics(epoch, performance_estimators, kind)
 
         # we load the best model we saved previously as a second model:
-        self.best_model = self.load_checkpoint()
-        if self.use_cuda:
-            self.best_model = self.best_model.cuda()
+        self.best_model = self.load_checkpoint().to(self.device)
         if self.confusion_matrix is not None:
-            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
-            if self.use_cuda:
-                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
+            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix).to(self.device)
         return (early_stop, best_performance_metrics)
 
     def get_test_metric_name(self):
@@ -98,12 +94,11 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
 
         train_loader_subset_1 = self.problem.train_loader_subset_range(0, self.args.num_training)
         train_loader_subset_2 = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset_1, train_loader_subset_2),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["training_1", "training_2"],
             requires_grad={"training_1": ["input"], "training_2": ["input"]},
-            volatile={"training_1": ["metaData"], "training_2": ["metaData"]},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
                 "input": self.normalize_inputs
@@ -176,14 +171,11 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(validation_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
-            volatile={
-                "validation": ["input", "softmaxGenotype"]
-            },
             recode_functions={
                 "input": self.normalize_inputs
             }

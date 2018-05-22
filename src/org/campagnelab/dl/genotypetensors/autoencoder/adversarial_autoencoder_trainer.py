@@ -4,7 +4,7 @@ from scipy.stats import norm
 from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -13,8 +13,8 @@ from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std, dra
 
 
 class AdversarialAutoencoderTrainer(CommonTrainer):
-    def __init__(self, args, problem, use_cuda=False):
-        super().__init__(args, problem, use_cuda)
+    def __init__(self, args, problem, device):
+        super().__init__(args, problem, device)
         self.encoder_semisup_opt = None
         self.encoder_generator_opt = None
         self.encoder_reconstruction_opt = None
@@ -182,12 +182,11 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader = self.problem.unlabeled_loader()
 
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["training", "unlabeled"],
             requires_grad={"training": ["input"], "unlabeled": ["input"]},
-            volatile={"training": ["metaData"], "unlabeled": []},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
                 "input": self.normalize_inputs
@@ -255,15 +254,13 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(validation_loader_subset),
-                                                        is_cuda=self.use_cuda,
-                                                        batch_names=["validation"],
-                                                        requires_grad={"validation": []},
-                                                        volatile={"validation": ["input", "softmaxGenotype"],
-                                                                  },
-                                                        recode_functions={
-                                                            "input": self.normalize_inputs
-                                                        })
+        data_provider = MultiThreadedDataProvider(iterator=zip(validation_loader_subset),
+                                                  device=self.device,
+                                                  batch_names=["validation"],
+                                                  requires_grad={"validation": []},
+                                                  recode_functions={
+                                                      "input": self.normalize_inputs
+                                                  })
         self.reset_before_test_epoch()
         errors=None
         try:
@@ -327,6 +324,4 @@ class AdversarialAutoencoderTrainer(CommonTrainer):
         self.confusion_matrix = self.cm.value().transpose()
 
         if self.best_model_confusion_matrix is None:
-            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix)
-            if self.use_cuda:
-                self.best_model_confusion_matrix = self.best_model_confusion_matrix.cuda()
+            self.best_model_confusion_matrix = torch.from_numpy(self.confusion_matrix).to(self.device)

@@ -34,7 +34,7 @@ from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenoty
 
 if __name__ == '__main__':
 
-    parser=define_train_auto_encoder_parser()
+    parser = define_train_auto_encoder_parser()
     args = parser.parse_args()
 
     if args.max_examples_per_epoch is None:

@@ -35,7 +35,7 @@ import torch
 from org.campagnelab.dl.genotypetensors.autoencoder.ModelTrainers import configure_model_trainer, \
     define_train_auto_encoder_parser
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider, DataProvider
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 from org.campagnelab.dl.utils.utils import progress_bar
@@ -112,10 +112,8 @@ if __name__ == '__main__':
     print("Estimating class frequencies..")
     train_loader_subset = problem.train_loader_subset_range(0, args.num_estimate_class_frequencies)
     class_frequencies = {}  # one frequency vector per output_name
-    with DataProvider(iterator=zip(train_loader_subset), is_cuda=False,
-                      batch_names=["training"],
-                      volatile={"training": problem.get_vector_names()},
-                      ) as    data_provider:
+    with DataProvider(iterator=zip(train_loader_subset), device=torch.device("cpu"),
+                      batch_names=["training"]) as data_provider:
         done = False
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             if done:
@@ -152,7 +150,7 @@ if __name__ == '__main__':
         with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
             args_file.write(trainer_command_line + "--seed " + str(trainer_args.seed))
 
-        use_cuda = torch.cuda.is_available()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         is_parallel = False
         best_acc = 0  # best test accuracy
         start_epoch = 0  # start from epoch 0 or last checkpoint epoch
@@ -161,7 +159,7 @@ if __name__ == '__main__':
             trainer_args.max_examples_per_epoch = args.num_training
         model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(trainer_args,
                                                                                            problem,
-                                                                                           use_cuda,
+                                                                                           device,
                                                                                            class_frequencies)
         model_trainer.set_common_lock(global_lock)
         model_trainer.args.max_epochs=args.max_epochs
@@ -219,10 +217,9 @@ if __name__ == '__main__':
             train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
             data_provider = DataProvider(
                 iterator=zip(train_loader_subset),
-                is_cuda=use_cuda,
+                device=device,
                 batch_names=["training"],
                 requires_grad={"training": ["input"]},
-                volatile={"training": ["metaData"]},
             )
             train_loaders += [train_loader_subset]
         elif args.mode == "supervised_mixup":
@@ -230,22 +227,18 @@ if __name__ == '__main__':
             train_loader_subset2 = problem.train_loader_subset_range(0, args.num_training)
             data_provider = DataProvider(
                 iterator=zip(train_loader_subset1, train_loader_subset2),
-                is_cuda=use_cuda,
+                device=device,
                 batch_names=["training_1", "training_2"],
-                requires_grad={"training_1": ["input"], "training_2": ["input"]},
-                volatile={"training_1": ["metaData"], "training_2": ["metaData"]}, )
+                requires_grad={"training_1": ["input"], "training_2": ["input"]})
             train_loaders += [train_loader_subset1, train_loader_subset2]
         if args.mode == "semisupervised":
             train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
             unlabeled_loader = problem.unlabeled_loader()
-            data_provider = MultiThreadedCpuGpuDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),
-                                                            is_cuda=use_cuda,
-                                                            batch_names=["training", "unlabeled"],
-                                                            requires_grad={"training": ["input"],
-                                                                           "unlabeled": ["input"]},
-                                                            volatile={"training": ["metaData"],
-                                                                      "unlabeled": ["metaData"]}
-                                                            )
+            data_provider = MultiThreadedDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),
+                                                      device=device,
+                                                      batch_names=["training", "unlabeled"],
+                                                      requires_grad={"training": ["input"],
+                                                                     "unlabeled": ["input"]})
             train_loaders += [train_loader_subset, unlabeled_loader]
         try:
 
@@ -340,12 +333,9 @@ if __name__ == '__main__':
         validation_loader_subset = problem.validation_loader_range(0, args.num_validation)
         data_provider = DataProvider(
             iterator=zip(validation_loader_subset),
-            is_cuda=use_cuda,
+            device=device,
             batch_names=["validation"],
             requires_grad={"validation": []},
-            volatile={
-                "validation": ["input", "softmaxGenotype"]
-            },
         )
 
         try:
