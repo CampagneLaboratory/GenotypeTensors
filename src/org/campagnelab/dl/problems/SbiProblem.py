@@ -35,7 +35,6 @@ class SbiProblem(Problem):
     def test_set(self):
         return ListDataset(self.basename, "test", self.get_vector_names())
 
-    @property
     def unlabeled_set(self):
         return ListDataset(self.basename, "unlabeled", self.get_input_names())
 
@@ -86,7 +85,7 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def unlabeled_loader(self):
-        dataset = self.unlabeled_set
+        dataset = self.unlabeled_set()
         use_shuffle = not isinstance(dataset, EmptyDataset)
         return self.loader_for_dataset(dataset=dataset, shuffle=use_shuffle)
 

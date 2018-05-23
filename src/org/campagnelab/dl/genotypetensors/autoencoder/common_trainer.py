@@ -109,7 +109,7 @@ class CommonTrainer:
         training_set_length = (len(self.problem.train_set()))
         if hasattr(args, 'num_training') and args.num_training > training_set_length:
             args.num_training = training_set_length
-        unsup_set_length = (len(self.problem.unlabeled_set))
+        unsup_set_length = (len(self.problem.unlabeled_set()))
         if hasattr(args, 'num_shaving') and args.num_shaving > unsup_set_length:
             args.num_shaving = unsup_set_length
         test_set_length = (len(self.problem.validation_set()))
