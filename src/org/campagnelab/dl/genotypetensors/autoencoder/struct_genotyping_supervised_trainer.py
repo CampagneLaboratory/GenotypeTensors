@@ -10,7 +10,7 @@ from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier 
 from org.campagnelab.dl.genotypetensors.structured.Batcher import Batcher
 from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances, NoCache, TensorCache
 from org.campagnelab.dl.genotypetensors.structured.SbiMappers import configure_mappers
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider, DataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -36,10 +36,10 @@ enable_recode = False
 
 
 class StructGenotypingModel(Module):
-    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, use_cuda, use_batching=True):
+    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, device, use_batching=True):
         super().__init__()
         self.sbi_mapper = sbi_mapper
-        self.use_cuda = use_cuda
+        self.device = device
         self.use_batching = use_batching
         self.classifier = GenotypeSoftmaxClassifer(num_inputs=mapped_features_size, target_size=output_size[0],
                                                    num_layers=args.num_layers,
@@ -69,14 +69,14 @@ class StructGenotypingModel(Module):
         return features
 
     def forward(self, sbi_records):
-        return self.classifier(self.map_sbi_messages(sbi_records,cuda=self.use_cuda))
+        return self.classifier(self.map_sbi_messages(sbi_records, cuda=self.use_cuda))
 
 
 class StructGenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using structured supervised training."""
 
-    def __init__(self, args, problem, use_cuda):
-        super().__init__(args, problem, use_cuda)
+    def __init__(self, args, problem, device):
+        super().__init__(args, problem, device)
         self.criterion_classifier = None
         self.thread_executor = ThreadPoolExecutor(max_workers=args.num_workers) if args.num_workers > 1 \
             else None
@@ -106,12 +106,11 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(train_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["training"],
             requires_grad={"training": ["sbi"]},
-            volatile={"training": ["metaData"]},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
             }
@@ -153,8 +152,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         optimized_loss = weighted_supervised_loss
         optimized_loss.backward()
         self.optimizer_training.step()
-        performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.data[0])
-        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.data[0],
+        performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
@@ -195,15 +194,11 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedCpuGpuDataProvider(
+        data_provider = MultiThreadedDataProvider(
             iterator=zip(validation_loader_subset),
-            is_cuda=self.use_cuda,
+            device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
-            volatile={
-                "validation": ["sbi", "softmaxGenotype"]
-            },
-
         )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
@@ -253,32 +248,28 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.estimate_errors(errors, output_s, target_s)
         _, target_index = torch.max(target_s, dim=1)
         _, output_index = torch.max(output_s_p, dim=1)
-        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.data[0])
-        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.data[0],
+        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
                          performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
                                                                   "test_accuracy"]))
 
-    def create_struct_model(self, problem, args,use_cuda):
+    def create_struct_model(self, problem, args, device):
 
         sbi_mappers_configuration = configure_mappers(ploidy=args.struct_ploidy,
                                                       extra_genotypes=args.struct_extra_genotypes,
                                                       num_samples=1, count_dim=args.struct_count_dim,
-                                                      sample_dim=args.struct_sample_dim,use_cuda=use_cuda)
-        sbi_mapper = BatchOfInstances(*sbi_mappers_configuration)
+                                                      sample_dim=args.struct_sample_dim, use_cuda=use_cuda)
+        sbi_mapper = BatchOfInstances(*sbi_mappers_configuration).to(self.device)
         # determine feature size:
-
-
         import ujson
         record = ujson.loads(sbi_json_string)
-        if self.use_cuda:
-            sbi_mapper.cuda()
         mapped_features_size = sbi_mapper([record], tensor_cache=NoCache(), cuda=self.use_cuda).size(1)
 
         output_size = problem.output_size("softmaxGenotype")
-        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.use_cuda,
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.device,
                                       args.use_batching)
         print(model)
         return model

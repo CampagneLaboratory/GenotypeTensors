@@ -331,6 +331,7 @@ def store_indices_in_message(mapper, message, indices):
 def get_indices_in_message(mapper, message):
     return message['indices'][id(mapper)]
 
+
 class BatchOfInstances(Module):
     """Takes a list of structure instances and produce a tensor of size batch x embedding dim of each instance."""
 
@@ -343,22 +344,24 @@ class BatchOfInstances(Module):
         self.mappers = Dispatcher(mappers)
         self.all_modules = ModuleList(all_modules)
 
-    def forward(self, instance_list,tensor_cache=NoCache(), cuda=None):
-        instance_list=list(instance_list)
+    def forward(self, instance_list, tensor_cache=NoCache(), cuda=None):
+        instance_list = list(instance_list)
         mapped = [self.mappers.dispatch(instance, tensor_cache=tensor_cache,cuda=cuda) for instance in instance_list]
         return torch.cat(mapped, dim=0)
 
-    def collect_inputs(self,instance_list,batcher,phase=0, tensor_cache=NoCache(), cuda=None):
-        if phase==0:
+    def collect_inputs(self, instance_list, batcher, phase=0, tensor_cache=NoCache(), cuda=None):
+        if phase == 0:
             for instance in instance_list:
                 if 'indices' not in instance:
-                    instance['indices']={}
-                    store_indices_in_message(mapper=self.mappers.mapper(instance),message=instance, indices=
-                        self.mappers.collect_inputs(structure=instance,phase=phase,cuda=cuda,batcher=batcher,tensor_cache=tensor_cache))
+                    instance['indices'] = {}
+                    store_indices_in_message(mapper=self.mappers.mapper(instance), message=instance,
+                                             indices=self.mappers.collect_inputs(structure=instance, phase=phase,
+                                                                                 cuda=cuda, batcher=batcher,
+                                                                                 tensor_cache=tensor_cache))
 
             return None
 
-    def forward_batch(self,batcher,phase=0):
-        inputs=batcher.get_batched_input(mapper=self)
-        return self.mappers.forward_batch(torch.cat(inputs, dim=0),phase=0)
+    def forward_batch(self, batcher, phase=0):
+        inputs = batcher.get_batched_input(mapper=self)
+        return self.mappers.forward_batch(torch.cat(inputs, dim=0), phase=0)
 
