@@ -1,13 +1,12 @@
-import warnings
+import copy
 from pathlib import Path
 
-import copy
 import torch
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 
 from org.campagnelab.dl.genotypetensors.VectorReader import VectorReader
-from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import GenotypeDataset, EmptyDataset, \
-    InterleaveDatasets, CyclicInterleavedDatasets, CachedGenotypeDataset, DispatchDataset
+from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import EmptyDataset, \
+    ListDataset
 from org.campagnelab.dl.problems.Problem import Problem
 
 
@@ -28,40 +27,17 @@ class SbiProblem(Problem):
         return self.meta_data.get_vector_dimensions_from_name(output_name)
 
     def train_set(self):
-        # return DispatchDataset(
-        #     CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names()),
-        #     num_workers=self.num_workers)
-        return CachedGenotypeDataset(self.basename + "-train.vec", vector_names=self.get_vector_names())
-
-    def test_set(self):
-        # return DispatchDataset(
-        #     CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names()),
-        #     num_workers=self.num_workers)
-        return CachedGenotypeDataset(self.basename + "-test.vec", vector_names=self.get_vector_names())
-
-    def unlabeled_set(self):
-        if self.file_exists(self.basename + "-unlabeled.list"):
-            # Use a list of datasets and interleave their records:
-            with open(self.basename + "-unlabeled.list") as list_file:
-                lines = list_file.readlines()
-                return ConcatDataset(
-                    [CachedGenotypeDataset(path.rstrip(), vector_names=self.get_input_names()) for path in
-                     lines])
-        else:
-            if self.file_exists(self.basename + "-unlabeled.vec"):
-                return CachedGenotypeDataset(self.basename + "-unlabeled.vec",
-                                             vector_names=self.get_input_names())
-            else:
-                return EmptyDataset()
+        return ListDataset(self.basename, "train", self.get_vector_names())
 
     def validation_set(self):
-        if self.file_exists(self.basename + "-validation.vec"):
-            # return DispatchDataset(
-            #     CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names()),
-            #     num_workers=self.num_workers)
-            return CachedGenotypeDataset(self.basename + "-validation.vec", vector_names=self.get_vector_names())
-        else:
-            return EmptyDataset()
+        return ListDataset(self.basename, "validation", self.get_vector_names())
+
+    def test_set(self):
+        return ListDataset(self.basename, "test", self.get_vector_names())
+
+    @property
+    def unlabeled_set(self):
+        return ListDataset(self.basename, "unlabeled", self.get_input_names())
 
     def __init__(self, mini_batch_size, code, drop_last_batch=True, num_workers=0):
         super().__init__(mini_batch_size)
@@ -70,9 +46,10 @@ class SbiProblem(Problem):
         self.drop_last_batch = drop_last_batch
         self.reader = None
         self.meta_data = None
-        for dataset in ["train","validation","test","unlabeled"]:
+        for dataset in ["train", "validation", "test", "unlabeled"]:
             try:
-                self.reader = VectorReader(self.basename + "-"+dataset, sample_id=0, return_example_id=False, vector_names=[])
+                self.reader = VectorReader(self.basename + "-" + dataset, sample_id=0, return_example_id=False,
+                                           vector_names=[])
                 break
             except:
                 pass
@@ -109,7 +86,7 @@ class SbiProblem(Problem):
         assert False, "Not support for text .vec files"
 
     def unlabeled_loader(self):
-        dataset = self.unlabeled_set()
+        dataset = self.unlabeled_set
         use_shuffle = not isinstance(dataset, EmptyDataset)
         return self.loader_for_dataset(dataset=dataset, shuffle=use_shuffle)
 
@@ -182,7 +159,7 @@ class SbiGenotypingProblem(SbiProblem):
         return ["input"]
 
     def get_vector_names(self):
-        return ["input", "softmaxGenotype","metaData"]
+        return ["input", "softmaxGenotype", "metaData"]
 
     def get_output_names(self):
         return ["softmaxGenotype"]
