@@ -223,6 +223,7 @@ if __name__ == '__main__':
                 batch_names=["training"],
                 requires_grad={"training": ["input"]},
                 volatile={"training": ["metaData"]},
+                recode_functions={"softmaxGenotype": lambda x: x}
             )
             train_loaders += [train_loader_subset]
         elif args.mode == "supervised_mixup":
@@ -233,7 +234,9 @@ if __name__ == '__main__':
                 is_cuda=use_cuda,
                 batch_names=["training_1", "training_2"],
                 requires_grad={"training_1": ["input"], "training_2": ["input"]},
-                volatile={"training_1": ["metaData"], "training_2": ["metaData"]}, )
+                volatile={"training_1": ["metaData"], "training_2": ["metaData"]},
+                recode_functions={"softmaxGenotype": lambda x: x}
+            )
             train_loaders += [train_loader_subset1, train_loader_subset2]
         if args.mode == "semisupervised":
             train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
@@ -244,7 +247,8 @@ if __name__ == '__main__':
                                                             requires_grad={"training": ["input"],
                                                                            "unlabeled": ["input"]},
                                                             volatile={"training": ["metaData"],
-                                                                      "unlabeled": ["metaData"]}
+                                                                      "unlabeled": ["metaData"]},
+                                                            recode_functions={"softmaxGenotype": lambda x: x}
                                                             )
             train_loaders += [train_loader_subset, unlabeled_loader]
         try:
@@ -346,6 +350,7 @@ if __name__ == '__main__':
             volatile={
                 "validation": ["input", "softmaxGenotype"]
             },
+            recode_functions={"metaData": lambda x: x}
         )
 
         try:
