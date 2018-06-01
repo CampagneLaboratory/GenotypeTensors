@@ -355,7 +355,7 @@ class GenotypingADDATrainer(CommonTrainer):
         return performance_estimators
 
     def load_source_model(self,args,problem, source_model_key):
-        trainer = CommonTrainer(deepcopy(args), problem, self.use_cuda)
+        trainer = CommonTrainer(deepcopy(args), problem, self.device)
         trainer.args.checkpoint_key = source_model_key
         print("Loading source mode for ADDA adaptation: " + args.adda_source_model)
         # Convert best model:
