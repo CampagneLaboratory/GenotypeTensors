@@ -10,7 +10,7 @@ from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier 
 from org.campagnelab.dl.genotypetensors.structured.Batcher import Batcher
 from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances, NoCache, TensorCache
 from org.campagnelab.dl.genotypetensors.structured.SbiMappers import configure_mappers
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider, DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -106,14 +106,15 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         unsupervised_loss_acc = 0
         num_batches = 0
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset),
             device=self.device,
             batch_names=["training"],
             requires_grad={"training": ["sbi"]},
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
-            }
+            },
+            vectors_to_keep=["metaData"]
         )
         cudnn.benchmark = False
         try:
@@ -194,11 +195,12 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(validation_loader_subset),
             device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
+            vectors_to_keep=["sbi"]
         )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):

@@ -7,7 +7,7 @@ from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, CrossEntropyLoss, MultiLabelSoftMarginLoss
 
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.LRHelper import LearningRateHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.LRSchedules import construct_scheduler
@@ -350,8 +350,12 @@ class CommonTrainer:
 
             train_loader_subset = self.problem.train_loader_subset_range(0, min(self.args.num_estimate_class_frequencies,
                                                                                 min(100000, self.args.num_training)))
-            data_provider = MultiThreadedDataProvider(iterator=zip(train_loader_subset), device=torch.device("cpu"),
-                                                      batch_names=["training"])
+            data_provider = MultiThreadedCpuGpuDataProvider(
+                iterator=zip(train_loader_subset),
+                device=torch.device("cpu"),
+                batch_names=["training"],
+                vectors_to_keep=self.problem.get_vector_names()
+            )
 
             class_frequencies = {}
             done = False

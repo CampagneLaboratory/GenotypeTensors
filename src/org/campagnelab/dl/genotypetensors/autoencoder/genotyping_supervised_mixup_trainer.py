@@ -5,7 +5,7 @@ from torch.nn import MultiLabelSoftMarginLoss
 import numpy as np
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -94,7 +94,7 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
 
         train_loader_subset_1 = self.problem.train_loader_subset_range(0, self.args.num_training)
         train_loader_subset_2 = self.problem.train_loader_subset_range(0, self.args.num_training)
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset_1, train_loader_subset_2),
             device=self.device,
             batch_names=["training_1", "training_2"],
@@ -102,7 +102,8 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
                 "input": self.normalize_inputs
-            }
+            },
+            vectors_to_keep=["metaData"]
         )
 
 
@@ -171,14 +172,15 @@ class GenotypingSupervisedMixupTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(validation_loader_subset),
             device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
             recode_functions={
                 "input": self.normalize_inputs
-            }
+            },
+            vectors_to_keep=["softmaxGenotype"]
         )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):

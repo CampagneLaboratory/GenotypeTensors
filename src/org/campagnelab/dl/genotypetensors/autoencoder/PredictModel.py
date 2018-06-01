@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from org.campagnelab.dl.genotypetensors.VectorWriterBinary import VectorWriterBinary
 from org.campagnelab.dl.genotypetensors.genotype_pytorch_dataset import DispatchDataset
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider, DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenotypingProblem
 from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
 
@@ -39,18 +39,22 @@ class PredictModel:
         self.model.eval()
         if self.processing_type == "multithreaded":
             # Enable fake_GPU_on_CPU to debug on CPU
-            data_provider = MultiThreadedDataProvider(iterator=zip(iterator),
-                                                      device=self.device,
-                                                      batch_names=["unlabeled"],
-                                                      recode_functions=self.recode_fn,
-                                                      )
+            data_provider = MultiThreadedCpuGpuDataProvider(
+                iterator=zip(iterator),
+                device=self.device,
+                batch_names=["unlabeled"],
+                recode_functions=self.recode_fn,
+                vectors_to_keep=[self.input_name]
+            )
 
         elif self.processing_type == "sequential":
-            data_provider = DataProvider(iterator=zip(iterator),
-                                         device=self.device,
-                                         batch_names=["unlabeled"],
-                                         recode_functions=self.recode_fn
-                                         )
+            data_provider = DataProvider(
+                iterator=zip(iterator),
+                device=self.device,
+                batch_names=["unlabeled"],
+                recode_functions=self.recode_fn,
+                vectors_to_keep=[self.input_name]
+            )
         else:
             raise Exception("Unrecognized processing type {}".format(self.processing_type))
 

@@ -10,7 +10,7 @@ from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar
@@ -139,11 +139,12 @@ class GenotypingADDATrainer(CommonTrainer):
         # Use the entire training set to draw examples, even num_training is limiting the length of an epoch.
         train_loader_subset = self.problem.train_loader_subset_range(0, len(self.problem.train_set()))
         unlabeled_loader_subset = self.problem.unlabeled_loader()
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader_subset),
             device=self.device,
             batch_names=["training", "unlabeled"],
             requires_grad={"training": ["input"], "unlabeled": ["input"]},
+            vectors_to_keep=["metaData"]
         )
 
         try:
@@ -328,11 +329,12 @@ class GenotypingADDATrainer(CommonTrainer):
 
         self.reset_before_test_epoch()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(validation_loader_subset),
             device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
+            vectors_to_keep=["input", "softmaxGenotype"]
         )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):

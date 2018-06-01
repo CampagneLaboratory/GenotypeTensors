@@ -6,7 +6,7 @@ import threading
 
 import torch
 
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 
 if __name__ == '__main__':
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     for index, dataset in enumerate(datasets):
         train_loader_subset = problem.loader_for_dataset(dataset, shuffle=True)
         print("Summing dataset {}/{}".format(index + 1, len(datasets)))
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset),
             device=torch.device("cpu"),
             batch_names=["dataset"],
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     for index, dataset in enumerate(datasets):
         train_loader_subset = problem.loader_for_dataset(dataset, shuffle=True)
         print("Calculating sum of squared deviations for dataset {}/{}".format(index + 1, len(datasets)))
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset),
             device=torch.device("cpu"),
             batch_names=["dataset"],

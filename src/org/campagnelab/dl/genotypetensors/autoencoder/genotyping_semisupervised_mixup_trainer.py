@@ -4,7 +4,7 @@ from torch.nn import MultiLabelSoftMarginLoss
 from torchnet.meter import ConfusionMeter
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -90,7 +90,7 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
 
         train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
         unlabeled_loader_subset = self.problem.unlabeled_loader()
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset, unlabeled_loader_subset),
             device=self.device,
             batch_names=["training", "unlabeled"],
@@ -98,7 +98,8 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
             recode_functions={
                 "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
                 "input": self.normalize_inputs
-            }
+            },
+            vectors_to_keep=["metaData"]
         )
 
         try:
@@ -195,14 +196,15 @@ class GenotypingSemisupervisedMixupTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(validation_loader_subset),
             device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
             recode_functions={
                 "input": self.normalize_inputs
-            }
+            },
+            vectors_to_keep=["softmaxGenotype"]
         )
         if self.best_model is None:
             self.best_model=self.net

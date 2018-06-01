@@ -35,7 +35,7 @@ import torch
 from org.campagnelab.dl.genotypetensors.autoencoder.ModelTrainers import configure_model_trainer, \
     define_train_auto_encoder_parser
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider, DataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.problems.SbiProblem import SbiGenotypingProblem, SbiSomaticProblem
 from org.campagnelab.dl.utils.utils import progress_bar
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     train_loader_subset = problem.train_loader_subset_range(0, args.num_estimate_class_frequencies)
     class_frequencies = {}  # one frequency vector per output_name
     with DataProvider(iterator=zip(train_loader_subset), device=torch.device("cpu"),
-                      batch_names=["training"]) as data_provider:
+                      batch_names=["training"], vectors_to_keep=problem.get_vector_names()) as data_provider:
         done = False
         for batch_idx, (_, data_dict) in enumerate(data_provider):
             if done:
@@ -220,6 +220,7 @@ if __name__ == '__main__':
                 device=device,
                 batch_names=["training"],
                 requires_grad={"training": ["input"]},
+                vectors_to_keep=["metaData", "softmaxGenotype"]
             )
             train_loaders += [train_loader_subset]
         elif args.mode == "supervised_mixup":
@@ -229,16 +230,21 @@ if __name__ == '__main__':
                 iterator=zip(train_loader_subset1, train_loader_subset2),
                 device=device,
                 batch_names=["training_1", "training_2"],
-                requires_grad={"training_1": ["input"], "training_2": ["input"]})
+                requires_grad={"training_1": ["input"], "training_2": ["input"]},
+                vectors_to_keep=["metaData", "softmaxGenotype"]
+            )
             train_loaders += [train_loader_subset1, train_loader_subset2]
         if args.mode == "semisupervised":
             train_loader_subset = problem.train_loader_subset_range(0, args.num_training)
             unlabeled_loader = problem.unlabeled_loader()
-            data_provider = MultiThreadedDataProvider(iterator=zip(train_loader_subset, unlabeled_loader),
-                                                      device=device,
-                                                      batch_names=["training", "unlabeled"],
-                                                      requires_grad={"training": ["input"],
-                                                                     "unlabeled": ["input"]})
+            data_provider = MultiThreadedCpuGpuDataProvider(
+                iterator=zip(train_loader_subset, unlabeled_loader),
+                device=device,
+                batch_names=["training", "unlabeled"],
+                requires_grad={"training": ["input"],
+                               "unlabeled": ["input"]},
+                vectors_to_keep=["metaData", "softmaxGenotype"]
+            )
             train_loaders += [train_loader_subset, unlabeled_loader]
         try:
 
@@ -336,6 +342,7 @@ if __name__ == '__main__':
             device=device,
             batch_names=["validation"],
             requires_grad={"validation": []},
+            vectors_to_keep=["input", "softmaxGenotype", "metaData"]
         )
 
         try:

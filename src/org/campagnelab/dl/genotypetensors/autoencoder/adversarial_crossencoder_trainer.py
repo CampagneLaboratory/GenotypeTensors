@@ -5,7 +5,7 @@ from torch.autograd import Variable
 from scipy.stats import norm
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
@@ -93,7 +93,7 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
         train_loader_subset1 = self.problem.train_loader_subset_range(0, self.args.num_training)
         train_loader_subset2 = self.problem.train_loader_subset_range(0, self.args.num_training)
 
-        data_provider = MultiThreadedDataProvider(
+        data_provider = MultiThreadedCpuGpuDataProvider(
             iterator=zip(train_loader_subset1, train_loader_subset2),
             device=self.device,
             batch_names=["training1", "training2"],
@@ -101,7 +101,9 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
             recode_functions={
                 "softmaxGenotype": recode_for_label_smoothing,
                 "input": self.normalize_inputs
-            })
+            },
+            vectors_to_keep=["metaData"]
+        )
 
         indel_weight = self.args.indel_weight_factor
         snp_weight = 1.0
@@ -211,13 +213,16 @@ class AdversarialCrossencoderTrainer(CommonTrainer):
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
         validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
-        data_provider = MultiThreadedDataProvider(iterator=zip(validation_loader_subset),
-                                                  device=self.device,
-                                                  batch_names=["validation"],
-                                                  requires_grad={"validation": []},
-                                                  recode_functions={
-                                                      "input": self.normalize_inputs
-                                                  })
+        data_provider = MultiThreadedCpuGpuDataProvider(
+            iterator=zip(validation_loader_subset),
+            device=self.device,
+            batch_names=["validation"],
+            requires_grad={"validation": []},
+            recode_functions={
+                "input": self.normalize_inputs
+            },
+            vectors_to_keep=["softmaxGenotype"]
+        )
         self.net.eval()
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
