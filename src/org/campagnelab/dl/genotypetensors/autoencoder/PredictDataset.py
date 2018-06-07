@@ -125,7 +125,7 @@ elif args.dataset=="test":
     iterator = problem.test_loader_range(0, args.n)
 elif args.dataset == "train":
     args.n = min(args.n, len(problem.train_set()))
-    iterator = problem.train_loader_subset_range(0, args.n)
+    iterator = problem.train_loader_subset_range(0, args.n,shuffle=False)
 
 else:
     print("Unsupported dataset: " + args.dataset)
