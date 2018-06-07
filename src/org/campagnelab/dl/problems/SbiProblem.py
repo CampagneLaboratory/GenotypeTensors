@@ -86,7 +86,7 @@ class SbiProblem(Problem):
 
     def unlabeled_loader(self):
         dataset = self.unlabeled_set()
-        use_shuffle = not isinstance(dataset, EmptyDataset)
+        use_shuffle = len(dataset)>0
         return self.loader_for_dataset(dataset=dataset, shuffle=use_shuffle)
 
     def unlabeled_loader_subset(self, indices):
