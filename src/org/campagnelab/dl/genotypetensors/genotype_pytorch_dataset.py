@@ -24,7 +24,7 @@ class ListDataset(Dataset):
         self.basename=basename
         if self.file_exists(self.basename + "-{}.list".format(postfix)):
             # Use a list of datasets and interleave their records:
-            with open(self.basename + "-unlabeled.list") as list_file:
+            with open(self.basename + "-{}.list".format(postfix)) as list_file:
                 lines = list_file.readlines()
                 self.delegate= ConcatDataset(
                     [CachedGenotypeDataset(path.rstrip(), vector_names=vector_names) for path in
