@@ -50,6 +50,10 @@ def define_train_auto_encoder_parser():
                         help='Weight multiplying factor (with respect to SNPs) to increase loss contribution'
                              ' for indels.',
                         default=10.0)
+    parser.add_argument('--variant-weight-factor', type=float,
+                        help='Weight variants (with respect to reference-matching sites) to increase loss contribution'
+                             ' for polymorphic sites.',
+                        default=1.0)
     parser.add_argument('--max-examples-per-epoch', type=int, help='Maximum number of examples scanned in an epoch'
                                                                    '(e.g., for ureg model training). By default, equal '
                                                                    'to the number of examples in the training set.',
