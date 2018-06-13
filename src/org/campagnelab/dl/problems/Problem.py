@@ -69,11 +69,11 @@ class Problem:
         """Returns the torch dataloader over the test set. """
         pass
 
-    def train_loader_subset_range(self, start, end):
+    def train_loader_subset_range(self, start, end, shuffle=True):
         """Returns the torch dataloader over the training set, shuffled,
         but limited to the example range start-end."""
         if start==0:
-            return self.loader_for_dataset(SmallerDataset(delegate=self.train_set(), new_size=end),shuffle=True)
+            return self.loader_for_dataset(SmallerDataset(delegate=self.train_set(), new_size=end),shuffle=shuffle)
         else:
             return self.train_loader_subset(range(start, end))
 
