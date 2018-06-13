@@ -102,6 +102,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         # must be done with the model prior to regularization:
         self.net.train()
         indel_weight = self.args.indel_weight_factor
+        variant_weight = self.args.variant_weight_factor
         snp_weight = 1.0
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
@@ -112,8 +113,10 @@ class GenotypingSupervisedTrainer(CommonTrainer):
 
         batch_weight = self.estimate_batch_weight(metadata, indel_weight=indel_weight,
                                                   snp_weight=snp_weight)
+        variant_weight=self.estimate_batch_weight(metadata, indel_weight=variant_weight,
+                                                  snp_weight=snp_weight, index=0)
 
-        weighted_supervised_loss = supervised_loss * batch_weight
+        weighted_supervised_loss = supervised_loss * batch_weight * variant_weight
         optimized_loss = weighted_supervised_loss
         optimized_loss.backward()
         self.optimizer_training.step()
