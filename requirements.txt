@@ -1,0 +1,8 @@
+scipy
+torchvision
+mkl
+mkl-fft
+intel-openmp
+numpy
+ujson
+git+https://github.com/pytorch/tnt.git@master

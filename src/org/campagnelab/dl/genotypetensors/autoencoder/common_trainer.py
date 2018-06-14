@@ -379,7 +379,7 @@ class CommonTrainer:
             self.class_frequencies=class_frequencies
         for output_name in self.problem.get_output_names():
 
-            class_frequencies_output = class_frequencies[output_name]
+            class_frequencies_output = class_frequencies[output_name].to(self.device)
             # normalize with 1-f, where f is normalized frequency vector:
             weights = torch.ones(class_frequencies_output.size()).to(self.device)
             weights -= class_frequencies_output / torch.norm(class_frequencies_output, p=1, dim=0)

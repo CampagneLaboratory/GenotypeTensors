@@ -9,9 +9,9 @@ GenotypeTensors has been upgraded to pytorch 0.4.0.
 
 on windows:
 ````bash
-conda create --name pytorch3
+conda create --name pytorch4
 conda install pytorch -c pytorch
-miniconda/Scripts/activate.bat pytorch3
+miniconda/Scripts/activate.bat pytorch4
 ````
 Use the pip.exe in miniconda for the following.
 
@@ -22,9 +22,7 @@ conda install pytorch torchvision -c pytorch
 
 Common to all platforms:
 ````bash
-pip install torchvision
-pip install git+https://github.com/pytorch/tnt.git@master
-pip install scipy
+pip install -r requirements.txt
 ````
 
 

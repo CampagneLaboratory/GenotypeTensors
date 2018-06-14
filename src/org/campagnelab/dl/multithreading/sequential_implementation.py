@@ -90,7 +90,7 @@ class CpuGpuDataProvider(DataProvider):
         super(CpuGpuDataProvider, self).__init__(iterator=iterator, batch_names=batch_names, device=device,
                                                  requires_grad=requires_grad, recode_functions=recode_functions,
                                                  vectors_to_keep=vectors_to_keep)
-        self.is_cuda = device.type == "cpu"
+        self.is_cuda = device.type != "cpu"
         self.cpu_batches_queue = Queue(maxsize=preload_n)
         self.batch_index = 0
         self.fake_gpu_on_cpu = fake_gpu_on_cpu
