@@ -44,10 +44,12 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                                                               problem_std=problem_std)
                                            if self.args.normalize
                                            else x)
+        self.class_reweighting=None
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
-            self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
+            self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights,reduce=False)
+            self.class_reweighting=weights
 
     def get_test_metric_name(self):
         return "test_accuracy"
@@ -101,6 +103,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         # outputs used to calculate the loss of the supervised model
         # must be done with the model prior to regularization:
         self.net.train()
+        batch_size=input_s.size(0)
         indel_weight = self.args.indel_weight_factor
         variant_weight = self.args.variant_weight_factor
         snp_weight = 1.0
@@ -110,18 +113,30 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         output_s_p = self.get_p(output_s)
         _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
         supervised_loss = self.criterion_classifier(output_s, recode_as_multi_label(target_s))
+        # reweight loss for each class:
+        supervised_loss=(supervised_loss*self.class_reweighting).sum(dim=1)
 
-        batch_weight = self.estimate_batch_weight(metadata, indel_weight=indel_weight,
-                                                  snp_weight=snp_weight)
-        variant_weight=self.estimate_batch_weight(metadata, indel_weight=variant_weight,
-                                                  snp_weight=snp_weight, index=0)
+        # reweight for indels:
+        is_indel =metadata[:,1]
 
-        weighted_supervised_loss = supervised_loss * batch_weight * variant_weight
+        is_indel_weights=is_indel.clone()
+        is_indel_weights[is_indel==0]=1
+        is_indel_weights[is_indel!=0]=indel_weight
+
+        # reweight for variations/non-ref:
+        is_variant = metadata[:, 0]
+        is_variant_weights = is_variant.clone()
+        is_variant_weights[is_variant == 0] = 1
+        is_variant_weights[is_variant != 0] = variant_weight
+
+        reweighting=is_indel_weights*is_variant_weights
+        weighted_supervised_loss = (supervised_loss * reweighting ).mean()
+
         optimized_loss = weighted_supervised_loss
         optimized_loss.backward()
         self.optimizer_training.step()
-        performance_estimators.set_metric(batch_idx, "supervised_loss", supervised_loss.item())
-        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.item(),
+        performance_estimators.set_metric(batch_idx, "supervised_loss", weighted_supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", weighted_supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size,
