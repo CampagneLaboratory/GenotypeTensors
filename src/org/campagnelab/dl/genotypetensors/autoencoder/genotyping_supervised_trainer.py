@@ -104,8 +104,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         # must be done with the model prior to regularization:
         self.net.train()
         batch_size=input_s.size(0)
-        indel_weight = self.args.indel_weight_factor
-        variant_weight = self.args.variant_weight_factor
+
         snp_weight = 1.0
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
@@ -113,24 +112,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         output_s_p = self.get_p(output_s)
         _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
         supervised_loss = self.criterion_classifier(output_s, recode_as_multi_label(target_s))
-        # reweight loss for each class:
-        supervised_loss=(supervised_loss*self.class_reweighting).sum(dim=1)
-
-        # reweight for indels:
-        is_indel =metadata[:,1]
-
-        is_indel_weights=is_indel.clone()
-        is_indel_weights[is_indel==0]=1
-        is_indel_weights[is_indel!=0]=indel_weight
-
-        # reweight for variations/non-ref:
-        is_variant = metadata[:, 0]
-        is_variant_weights = is_variant.clone()
-        is_variant_weights[is_variant == 0] = 1
-        is_variant_weights[is_variant != 0] = variant_weight
-
-        reweighting=is_indel_weights*is_variant_weights
-        weighted_supervised_loss = (supervised_loss * reweighting ).mean()
+        weighted_supervised_loss = self.reweight_loss(metadata, supervised_loss)
 
         optimized_loss = weighted_supervised_loss
         optimized_loss.backward()
@@ -143,6 +125,25 @@ class GenotypingSupervisedTrainer(CommonTrainer):
                          self.max_training_examples,
                          performance_estimators.progress_message(
                              ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
+
+    def reweight_loss(self,  metadata, supervised_loss):
+        indel_weight = self.args.indel_weight_factor
+        variant_weight = self.args.variant_weight_factor
+        # reweight loss for each class:
+        supervised_loss = (supervised_loss * self.class_reweighting).sum(dim=1)
+        # reweight for indels:
+        is_indel = metadata[:, 1]
+        is_indel_weights = is_indel.clone()
+        is_indel_weights[is_indel == 0] = 1
+        is_indel_weights[is_indel != 0] = indel_weight
+        # reweight for variations/non-ref:
+        is_variant = metadata[:, 0]
+        is_variant_weights = is_variant.clone()
+        is_variant_weights[is_variant == 0] = 1
+        is_variant_weights[is_variant != 0] = variant_weight
+        reweighting = is_indel_weights * is_variant_weights
+        weighted_supervised_loss = (supervised_loss * reweighting).mean()
+        return weighted_supervised_loss
 
     def get_p(self, output_s):
         # Pytorch tensors output logits, inverse of logistic function (1 / 1 + exp(-z))
@@ -167,14 +168,15 @@ class GenotypingSupervisedTrainer(CommonTrainer):
             recode_functions={
                 "input": self.normalize_inputs
             },
-            vectors_to_keep=["softmaxGenotype"]
+            vectors_to_keep=["softmaxGenotype","metaData"]
         )
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 input_s = data_dict["validation"]["input"]
                 target_s = data_dict["validation"]["softmaxGenotype"]
+                metadata = data_dict["validation"]["metaData"]
                 self.net.eval()
-                self.test_one_batch(performance_estimators,batch_idx, input_s, target_s,errors=errors)
+                self.test_one_batch(performance_estimators,batch_idx, input_s, target_s,errors=errors, metadata=metadata)
 
                 if ((batch_idx + 1) * self.mini_batch_size) > self.max_validation_examples:
                     break
@@ -213,11 +215,13 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         output_s_p = self.get_p(output_s)
 
         supervised_loss = self.criterion_classifier(output_s, target_s)
+        weighted_supervised_loss = self.reweight_loss( metadata, supervised_loss)
+
         self.estimate_errors(errors, output_s, target_s)
         _, target_index = torch.max(recode_as_multi_label(target_s), dim=1)
         _, output_index = torch.max(recode_as_multi_label(output_s_p), dim=1)
-        performance_estimators.set_metric(batch_idx, "test_supervised_loss", supervised_loss.item())
-        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", supervised_loss.item(),
+        performance_estimators.set_metric(batch_idx, "test_supervised_loss", weighted_supervised_loss.item())
+        performance_estimators.set_metric_with_outputs(batch_idx, "test_accuracy", weighted_supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
