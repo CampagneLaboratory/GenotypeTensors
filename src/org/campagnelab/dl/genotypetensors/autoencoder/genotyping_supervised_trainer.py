@@ -130,7 +130,7 @@ class GenotypingSupervisedTrainer(CommonTrainer):
         indel_weight = self.args.indel_weight_factor
         variant_weight = self.args.variant_weight_factor
         # reweight loss for each class:
-        supervised_loss = (supervised_loss ).sum(dim=1)
+        supervised_loss = (supervised_loss * self.class_reweighting).sum(dim=1)
         # reweight for indels:
         is_indel = metadata[:, 1]
         is_indel_weights = is_indel.clone()
