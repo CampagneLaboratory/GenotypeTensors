@@ -38,6 +38,8 @@ class VectorWriterBinary:
         self.using_input_data = input_data_path is not None
         self.problem = problem
         self.using_structured_problem = isinstance(self.problem, StructuredSbiGenotypingProblem)
+        self.device = torch.device("cpu")
+
         if self.using_structured_problem:
             assert model is not None, "Need to have model present for use with structured problem"
             base_info = model.sbi_mapper.mappers.mappers["BaseInformation"]
@@ -76,7 +78,6 @@ class VectorWriterBinary:
             }
             self.num_bytes_per_example = num_bytes_per_example
             self.vector_props_written = True
-            self.device = torch.device("cpu")
 
         elif self.using_input_data:
             def _get_vector_length_from_props(vector_name_for_dims):
