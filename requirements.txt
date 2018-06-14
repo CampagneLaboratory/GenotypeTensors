@@ -5,4 +5,5 @@ mkl-fft
 intel-openmp
 numpy
 ujson
+six
 git+https://github.com/pytorch/tnt.git@master
