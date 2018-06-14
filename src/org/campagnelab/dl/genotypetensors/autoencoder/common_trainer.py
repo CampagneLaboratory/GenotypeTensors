@@ -348,7 +348,7 @@ class CommonTrainer:
         """
         if class_frequencies is None:
 
-            train_loader_subset = self.problem.train_loader_subset_range(0, min(self.args.num_estimate_class_frequencies,
+            train_loader_subset = self.problem.train_loader_subset_range(0, max(self.args.num_estimate_class_frequencies,
                                                                                 min(100000, self.args.num_training)))
             data_provider = MultiThreadedCpuGpuDataProvider(
                 iterator=zip(train_loader_subset),
