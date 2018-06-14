@@ -5,18 +5,21 @@ with pytorch.
 
 # Installation
 
+GenotypeTensors has been upgraded to pytorch 0.4.0.
+
 on windows:
 ````bash
 conda create --name pytorch3
-conda install pytorch3 -c peterjc123 pytorch
+conda install pytorch -c pytorch
 miniconda/Scripts/activate.bat pytorch3
 ````
 Use the pip.exe in miniconda for the following.
 
 on mac:
 ````bash
-pip install http://download.pytorch.org/whl/cu80/torch-0.3.0.post4-cp35-cp35m-linux_x86_64.whl 
+conda install pytorch torchvision -c pytorch
 ````
+
 Common to all platforms:
 ````bash
 pip install torchvision
