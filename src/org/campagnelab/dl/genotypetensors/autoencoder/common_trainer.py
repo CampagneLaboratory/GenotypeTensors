@@ -1,13 +1,15 @@
 import os
 import sys
 import threading
+from functools import reduce
 
 import torch
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import MSELoss, CrossEntropyLoss, MultiLabelSoftMarginLoss
 
-from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider
+from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, \
+    CpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.performance.LRHelper import LearningRateHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.LRSchedules import construct_scheduler
@@ -103,6 +105,7 @@ class CommonTrainer:
         The create_model_function takes one argument: the name of the model to be
         created.
         """
+        self.create_model_function=create_model_function
         args = self.args
         mini_batch_size = self.mini_batch_size
         # restrict limits to actual size of datasets:
@@ -262,8 +265,15 @@ class CommonTrainer:
 
     def save_model(self, best_test_loss, epoch, model, model_label):
         model.eval()
+        model=model.module if self.is_parallel else model
+        def recode_device(m):
+
+            if hasattr(m, 'device'): m.device = str(m.device)
+
+        model.apply(recode_device)
         state = {
-            'model': model.module if self.is_parallel else model,
+            'model': model,
+            'model-classname': "{0}.{1}".format(model.__class__.__module__,model.__class__.__name__),
             'confusion-matrix': self.best_model_confusion_matrix,
             'best_test_loss': best_test_loss,
             'epoch': epoch,
@@ -284,6 +294,11 @@ class CommonTrainer:
             os.mkdir('models')
         state = torch.load('./models/pytorch_{}_{}.t7'.format(self.args.checkpoint_key, model_label))
         model = state['model']
+
+        def recode_device(m):
+            if hasattr(m, 'device'): m.device = torch.device(m.device)
+
+        model.apply(recode_device)
         return model
 
     def load_checkpoint_state(self, model_label="best"):
@@ -350,7 +365,7 @@ class CommonTrainer:
 
             train_loader_subset = self.problem.train_loader_subset_range(0, max(self.args.num_estimate_class_frequencies,
                                                                                 min(100000, self.args.num_training)))
-            data_provider = MultiThreadedCpuGpuDataProvider(
+            data_provider = DataProvider(
                 iterator=zip(train_loader_subset),
                 device=torch.device("cpu"),
                 batch_names=["training"],
@@ -384,7 +399,7 @@ class CommonTrainer:
             weights = torch.ones(class_frequencies_output.size()).to(self.device)
             weights -= class_frequencies_output / torch.norm(class_frequencies_output, p=1, dim=0)
 
-            self.rebuild_criterions(output_name=output_name, weights=weights)
+            self.rebuild_criterions(output_name=output_name, weights=torch.norm(weights,p=1,dim=0))
         return class_frequencies
 
     def get_p(self, output_s):

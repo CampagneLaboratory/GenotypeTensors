@@ -7,8 +7,8 @@ from torch.nn import MultiLabelSoftMarginLoss, Module
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
-from org.campagnelab.dl.genotypetensors.structured.Batcher import Batcher
-from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances, NoCache, TensorCache
+
+from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances
 from org.campagnelab.dl.genotypetensors.structured.SbiMappers import configure_mappers
 from org.campagnelab.dl.multithreading.sequential_implementation import MultiThreadedCpuGpuDataProvider, DataProvider
 from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
@@ -48,28 +48,14 @@ class StructGenotypingModel(Module):
                                                    dropout_p=args.dropout_probability, ngpus=1, use_selu=args.use_selu,
                                                    skip_batch_norm=args.skip_batch_norm)
 
-    def map_sbi_messages(self, sbi_records, tensor_cache=NoCache(), cuda=None):
-        batcher = Batcher()
-        mapper = self.sbi_mapper.mappers.mapper_for_type("SampleInfo")
-        if self.use_batching:
-            features = None
-            for phase in [0, 1, 2]:
-                # print("Mapping phase "+str(phase))
-                for record in sbi_records:
-                    for sample in record['samples']:
-                        batcher.collect_inputs(mapper=mapper, example=sample, phase=phase,
-                                               cuda=cuda, tensor_cache=tensor_cache)
-                features = batcher.forward_batch(mapper=mapper, phase=phase)
+    def map_sbi_messages(self, sbi_records):
 
-
-        else:
-            # Create a new cache for each mini-batch because we cache embeddings:
-            tensor_cache=TensorCache()
-            features = self.sbi_mapper(sbi_records, tensor_cache=tensor_cache, cuda=self.use_cuda)
+        # Create a new cache for each mini-batch because we cache embeddings:
+        features = self.sbi_mapper(sbi_records)
         return features
 
     def forward(self, sbi_records):
-        return self.classifier(self.map_sbi_messages(sbi_records, cuda=self.use_cuda))
+        return self.classifier(self.map_sbi_messages(sbi_records))
 
 
 class StructGenotypingSupervisedTrainer(CommonTrainer):
@@ -80,7 +66,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.criterion_classifier = None
         self.thread_executor = ThreadPoolExecutor(max_workers=args.num_workers) if args.num_workers > 1 \
             else None
-        self.tensor_cache = TensorCache()
+
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -96,8 +82,6 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators = PerformanceList()
         performance_estimators += [FloatHelper("supervised_loss")]
         performance_estimators += [AccuracyHelper("train_")]
-        if self.use_cuda:
-            self.tensor_cache.cuda()
         print('\nTraining, epoch: %d' % epoch)
 
         for performance_estimator in performance_estimators:
@@ -200,6 +184,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             device=self.device,
             batch_names=["validation"],
             requires_grad={"validation": []},
+            recode_functions={
+                "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
+            },
             vectors_to_keep=["sbi"]
         )
         try:
@@ -258,17 +245,17 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                          performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
                                                                   "test_accuracy"]))
 
-    def create_struct_model(self, problem, args, device):
+    def create_struct_model(self, problem, args, device=torch.device('cpu')):
 
         sbi_mappers_configuration = configure_mappers(ploidy=args.struct_ploidy,
                                                       extra_genotypes=args.struct_extra_genotypes,
                                                       num_samples=1, count_dim=args.struct_count_dim,
-                                                      sample_dim=args.struct_sample_dim, use_cuda=use_cuda)
-        sbi_mapper = BatchOfInstances(*sbi_mappers_configuration).to(self.device)
+                                                      sample_dim=args.struct_sample_dim, device=device)
+        sbi_mapper = BatchOfInstances(*sbi_mappers_configuration,device)
         # determine feature size:
         import ujson
         record = ujson.loads(sbi_json_string)
-        mapped_features_size = sbi_mapper([record], tensor_cache=NoCache(), cuda=self.use_cuda).size(1)
+        mapped_features_size = sbi_mapper([record]).size(1)
 
         output_size = problem.output_size("softmaxGenotype")
         model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.device,

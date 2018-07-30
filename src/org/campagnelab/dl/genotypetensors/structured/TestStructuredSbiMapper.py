@@ -3,7 +3,7 @@ import unittest
 
 import torch
 
-from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances, NoCache, TensorCache
+from org.campagnelab.dl.genotypetensors.structured.Models import BatchOfInstances
 from org.campagnelab.dl.genotypetensors.structured.SbiMappers import configure_mappers
 
 def to_profile():
@@ -71,11 +71,10 @@ class StructuredSbiMapperTestCase(unittest.TestCase):
         import ujson
         record = ujson.loads(json_string)
         print(record)
-        mappers, all_modules = configure_mappers(ploidy=2, extra_genotypes=3, num_samples=1)
+        mappers, all_modules = configure_mappers(ploidy=2, extra_genotypes=3, num_samples=1,device=torch.device('cuda'))
 
-        mapper = BatchOfInstances(mappers=mappers, all_modules=all_modules)
-        mapper = mapper.to(torch.device("cuda"))
-        tensor_cache=TensorCache()
-        mapper([record], tensor_cache=tensor_cache, cuda=True)
+        mapper = BatchOfInstances(mappers=mappers, all_modules=all_modules,device=torch.device('cuda'))
+
+        mapper([record])
 if __name__ == '__main__':
     unittest.main()

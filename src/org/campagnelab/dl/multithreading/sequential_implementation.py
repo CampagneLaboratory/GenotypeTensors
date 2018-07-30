@@ -95,6 +95,7 @@ class CpuGpuDataProvider(DataProvider):
         self.batch_index = 0
         self.fake_gpu_on_cpu = fake_gpu_on_cpu
         if self.is_cuda or self.fake_gpu_on_cpu:
+            self.cuda_device=torch.device("cuda")
             self.gpu_batches_queue = Queue(maxsize=preload_cuda_n)
 
     def __next__(self):
@@ -135,7 +136,7 @@ class CpuGpuDataProvider(DataProvider):
             for var_name in batch.keys():
                 if not self.fake_gpu_on_cpu:
                     if hasattr(batch[var_name], "cuda"):
-                        batch[var_name] = batch[var_name].to(torch.device("cuda"))
+                        batch[var_name] = batch[var_name].to(self.cuda_device)
         self.gpu_batches_queue.put((batch_indices, batch_data), block=True)
 
 
