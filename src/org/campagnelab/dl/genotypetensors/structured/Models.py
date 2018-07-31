@@ -33,8 +33,9 @@ class StructuredEmbedding(Module):
         return preloaded.tensor()
 
 class LoadedTensor:
-    def __init__(self,tensor):
+    def __init__(self,tensor,mapper=None):
         self.tensor_=tensor
+        self.mapper = mapper
 
     def to(self, device, non_blocking=True):
         """Move the tensor to the device. """
@@ -45,6 +46,10 @@ class LoadedTensor:
     def tensor(self):
         """Return the tensor. """
         return self.tensor_
+
+    def forward(self):
+        """Call forward on the mapper with this pre-loaded tensor."""
+        return self.mapper.loaded_forward(self)
 
 
 class LoadedBoolean(LoadedTensor):

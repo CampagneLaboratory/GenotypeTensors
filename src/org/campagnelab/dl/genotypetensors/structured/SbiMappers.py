@@ -117,8 +117,10 @@ class MapBaseInformation(StructuredEmbedding):
 
 
 class LoadedSample(LoadedTensor):
-    def __init__(self, counts):
-        self.counts = [LoadedCount(count) for count in counts]
+    def __init__(self, counts,mapper):
+        super(LoadedSample, self).__init__(tensor=None,mapper=mapper)
+        self.counts = counts
+
 
     def to(self, device,non_blocking=True):
         self.counts = [count.to(device, non_blocking=True) for count in self.counts]
@@ -144,13 +146,19 @@ class MapSampleInfo(Module):
 
     def preload(self, input):
         observed_counts = self.get_observed_counts(input)
-        return LoadedSample(observed_counts[0:self.num_counts])
+
+        return LoadedSample( [self.count_mapper.preload(count) for count in observed_counts[0:self.num_counts]],mapper=self)
+
+
+    def loaded_forward(self, preloaded):
+        return self.reduce_counts([self.count_mapper.loaded_forward(count) for count in
+                                   preloaded.counts],
+                                  pad_missing=True)
 
 
 class LoadedZeros(LoadedTensor):
     def __init__(self, shape):
-        self.tensor = torch.zeros(*shape, requires_grad=True)
-
+        super(LoadedZeros, self).__init__(torch.zeros(*shape, requires_grad=True))
 
 class LoadedCount(LoadedTensor):
     def __init__(self, mapper, **args):
