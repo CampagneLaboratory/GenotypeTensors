@@ -5,7 +5,6 @@ from torch.autograd import Variable
 from torch.nn import Module, Embedding, LSTM, Linear, ModuleList
 
 
-
 class StructuredEmbedding(Module):
     def __init__(self, embedding_size, device=None):
         super().__init__()
@@ -29,6 +28,32 @@ class StructuredEmbedding(Module):
             cuda = next(self.parameters()).data.is_cuda
         return cuda
 
+    def loaded_forward(self, preloaded):
+        """Accepts a preloaded instance (subclass of LoadedTensor) and returns a mapped tensor. """
+        return preloaded.tensor()
+
+class LoadedTensor:
+    def __init__(self,tensor):
+        self.tensor_=tensor
+
+    def to(self, device, non_blocking=True):
+        """Move the tensor to the device. """
+
+        self.tensor_ = self.tensor_.to(device)
+        return self
+
+    def tensor(self):
+        """Return the tensor. """
+        return self.tensor_
+
+
+class LoadedBoolean(LoadedTensor):
+    def __init__(self, tensor):
+        super(LoadedBoolean, self).__init__(tensor)
+
+class LoadedLongs(LoadedTensor):
+    def __init__(self,tensor):
+        super(LoadedLongs, self).__init__(tensor)
 
 class map_Boolean(StructuredEmbedding):
     def __init__(self, device):
@@ -40,10 +65,14 @@ class map_Boolean(StructuredEmbedding):
     def forward(self, predicate):
         assert isinstance(predicate, bool), "predicate must be a boolean"
         value = torch.FloatTensor([[1, 0]]) if predicate else torch.FloatTensor([[0, 1]])
-        value=value.to(self.device)
+        value = value.to(self.device)
         return value
         # return Variable(value.data,requires_grad=True)
         # return value
+
+    def preload(self, predicate):
+        return LoadedBoolean(tensor=torch.FloatTensor([[1, 0]]) if predicate else torch.FloatTensor([[0, 1]]))
+
 
 
 class IntegerModel(StructuredEmbedding):
@@ -70,6 +99,21 @@ class IntegerModel(StructuredEmbedding):
         values = torch.cat(cached_values, dim=0)
         return values
 
+    def preload(self,values):
+        assert isinstance(values, list), "values must be a list of integers."
+        for value in values:
+            assert value < self.distinct_numbers, "A value is larger than the embedding input allow: " + str(value)
+
+        # cache the embedded values:
+        cached_values = []
+        return LoadedLongs(self.define_long_variable(values))
+
+
+    def loaded_forward(self, preloaded):
+        """Accepts a preloaded tensor of dimension batch x 1 x length and produces a batch of batch x embedded-value x length. """
+        tensor = preloaded.tensor().type(dtype=torch.long)
+        return self.embedding(tensor)
+
 
 class MeanOfList(Module):
     def __init__(self):
@@ -77,7 +121,7 @@ class MeanOfList(Module):
 
     def forward(self, list_of_embeddings, ):
         assert isinstance(list_of_embeddings, torch.Tensor) or isinstance(list_of_embeddings,
-                                                                      torch.Tensor), "input must be a Variable or Tensor"
+                                                                          torch.Tensor), "input must be a Variable or Tensor"
         num_elements = list_of_embeddings.size(0)
         return (torch.sum(list_of_embeddings, dim=0) / num_elements).view(1, -1)
 
@@ -137,7 +181,7 @@ class Reduce(StructuredEmbedding):
             index = 0
             while len(input_list) < len(self.input_dims):
                 # pad input list with minibatches of zeros:
-                variable =torch.zeros(batch_size, self.input_dims[index]).to(self.device)
+                variable = torch.zeros(batch_size, self.input_dims[index]).to(self.device)
 
                 input_list += [variable]
                 index += 1

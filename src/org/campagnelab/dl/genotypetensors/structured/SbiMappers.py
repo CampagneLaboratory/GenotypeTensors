@@ -5,7 +5,7 @@ from torch.autograd import Variable
 from torch.nn import Module
 
 from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, IntegerModel, map_Boolean, RNNOfList, \
-    StructuredEmbedding,  MeanOfList
+    StructuredEmbedding, MeanOfList, LoadedTensor, LoadedBoolean
 
 
 def store_indices_in_message(mapper, message, indices):
@@ -22,6 +22,14 @@ def get_indices_in_message(mapper, message):
 use_mean_to_map_nwf = True
 
 
+class LoadedSequence(LoadedTensor):
+    def __init__(self, sequence, base_to_index):
+        # we cache a tensor of dimension 1 x seq_length, with one byte per base:
+
+        super(LoadedSequence, self).__init__(torch.Tensor(list([base_to_index[b] for b in sequence])).type(dtype=torch.int8))
+
+
+
 class MapSequence(StructuredEmbedding):
     def __init__(self, mapped_base_dim=2, hidden_size=64, num_layers=1, bases=('A', 'C', 'T', 'G', '-', 'N'),
                  device=None):
@@ -34,13 +42,37 @@ class MapSequence(StructuredEmbedding):
 
         self.map_bases = IntegerModel(distinct_numbers=len(self.base_to_index), embedding_size=mapped_base_dim,
                                       device=device)
+        self.bases = bases
         self.to(self.device)
 
     def forward(self, sequence_field):
         return self.map_sequence(
             self.map_bases(list([self.base_to_index[b] for b in sequence_field]))
-            )
+        )
 
+    def preload(self, sequence_field):
+        return LoadedSequence(sequence_field, self.base_to_index)
+
+    def loaded_forward(self, preloaded):
+        """preloaded must have dimension batch x 1 x seq_length. We map each integer encoding of a base with map_bases to
+        obtain dimension batch x encoding_dim x seq_length then map the sequence through the RNN. """
+        return self.map_sequence.forward(
+            self.map_bases.loaded_forward(preloaded))
+
+
+class LoadedMapBaseInformation:
+    def __init__(self, referenceBase, genomicSequenceContext, sequenceFrom, samples):
+        self.referenceBase = LoadedSequence(referenceBase)
+        self.genomicSequenceContext = LoadedSequence(genomicSequenceContext)
+        self.samples = [LoadedSample(sample) for sample in samples]
+        self.sample_from = LoadedSequence(sequenceFrom)
+
+    def to(self, device,non_blocking=True):
+        self.referenceBase = self.referenceBase.to(device, non_blocking=True)
+        self.genomicSequenceContext = self.genomicSequenceContext.to(device, non_blocking=True)
+        self.samples = [sample.to(device, non_blocking=True) for sample in self.samples]
+        self.sequence_from = self.sequence_from.to(device=device, non_blocking=True)
+        return self
 
 class MapBaseInformation(StructuredEmbedding):
     def __init__(self, sample_mapper, sample_dim, num_samples, sequence_output_dim=64, ploidy=2, extra_genotypes=2,
@@ -58,8 +90,12 @@ class MapBaseInformation(StructuredEmbedding):
         self.ploidy = ploidy
         self.extra_genotypes = extra_genotypes
 
-    def forward(self, input):
+    def preload(self, input):
+        return LoadedMapBaseInformation(input['referenceBase'], input['genomicSequenceContext'],
+                                        input['samples'][0]['counts'][0]['fromSequence'],
+                                        [sample for sample in input['samples'][0:self.num_samples]])
 
+    def forward(self, input):
         return self.reduce_samples(
             [self.map_sequence(input['referenceBase'])] +
             [self.map_sequence(input['genomicSequenceContext'])] +
@@ -69,6 +105,24 @@ class MapBaseInformation(StructuredEmbedding):
                         self.map_sequence(sample['counts'][0]['fromSequence'])], dim=1)
              for sample in input['samples'][0:self.num_samples]])
 
+    def loaded_forward(self, preloaded):
+        return self.reduce_samples(
+            [self.map_sequence.loaded_forward(preloaded.referenceBase)] +
+            [self.map_sequence.loaded_forward(preloaded.genomicSequenceContext)] +
+            # each sample has a unique from (same across all counts), which gets mapped and concatenated
+            # only once here:
+            [self.map_sequence.loaded_forward(preloaded.fromSequence)] +
+            # the sample mapper will not map fromSequence:
+            [self.sample_mapper.loaded_forward(sample) for sample in preloaded.samples])
+
+
+class LoadedSample(LoadedTensor):
+    def __init__(self, counts):
+        self.counts = [LoadedCount(count) for count in counts]
+
+    def to(self, device,non_blocking=True):
+        self.counts = [count.to(device, non_blocking=True) for count in self.counts]
+        return self
 
 class MapSampleInfo(Module):
     def __init__(self, count_mapper, count_dim, sample_dim, num_counts, device=None):
@@ -87,6 +141,33 @@ class MapSampleInfo(Module):
     def get_observed_counts(self, input):
         return [count for count in input['counts'] if
                 (count['genotypeCountForwardStrand'] + count['genotypeCountReverseStrand']) > 0]
+
+    def preload(self, input):
+        observed_counts = self.get_observed_counts(input)
+        return LoadedSample(observed_counts[0:self.num_counts])
+
+
+class LoadedZeros(LoadedTensor):
+    def __init__(self, shape):
+        self.tensor = torch.zeros(*shape, requires_grad=True)
+
+
+class LoadedCount(LoadedTensor):
+    def __init__(self, mapper, **args):
+        self.mapper = mapper
+        self.leaf_tensors = args
+
+    def to(self, device, non_blocking=True):
+        for key in self.leaf_tensors.keys():
+            try:
+                source = self.leaf_tensors[key]
+                self.leaf_tensors[key]= source.to(device, non_blocking=non_blocking)
+            except Exception as e:
+                print("Error moving key {} to device {}: {}".format(key,device,e))
+        return self
+
+    def evaluate(self):
+        self.mapper.loaded_forward()
 
 
 class MapCountInfo(StructuredEmbedding):
@@ -166,12 +247,52 @@ class MapCountInfo(StructuredEmbedding):
                 mapped += [mapper(c[nf_name], nf_name=nf_name)]
             else:
                 variable = torch.zeros(1, mapper.embedding_size, requires_grad=True)
-                variable=variable.to(self.device)
+                variable = variable.to(self.device)
                 mapped += [variable]
         return self.reduce_count(mapped)
 
+    def preload(self, c):
+        mapped = {}
+        for nf_name, mapper in self.nf_names_mappers:
+            if nf_name in c.keys():
+                mapped[nf_name] = mapper.preload(c[nf_name])
+            else:
+                mapped[nf_name] = LoadedZeros(shape=(1, mapper.embedding_size))
 
+        return LoadedCount(mapper=self,
+                           gobyGenotypeIndex=self.map_gobyGenotypeIndex.preload([c['gobyGenotypeIndex']]),
+                           isIndel=self.map_boolean.preload(c['isIndel']),
+                           matchesReference=self.map_boolean.preload(c['matchesReference']),
+                           toSequence=self.map_sequence.preload(c['toSequence']),
+                           genotypeCountForwardStrand=self.map_count.preload([c['genotypeCountForwardStrand']]),
+                           genotypeCountReverseStrand=self.map_count.preload([c['genotypeCountReverseStrand']]),
+                           **mapped
+                           )
 
+    def loaded_forward(self, preloaded):
+        mapped_gobyGenotypeIndex = self.map_gobyGenotypeIndex.loaded_forward(preloaded.leaf_tensors['gobyGenotypeIndex'])
+        # Do not map isCalled, it is a field that contains the truth and is used to calculate the label.
+
+        mapped_isIndel = self.map_boolean.loaded_forward(preloaded.leaf_tensors['isIndel'])
+        mapped_matchesReference = self.map_boolean.loaded_forward(preloaded.leaf_tensors['matchesReference'])
+
+        # NB: fromSequence was mapped at the level of BaseInformation.
+        mapped_to = self.map_sequence.loaded_forward(preloaded.leaf_tensors['toSequence'])
+        mapped_genotypeCountForwardStrand = self.map_count.loaded_forward(preloaded.leaf_tensors['genotypeCountForwardStrand'])
+        mapped_genotypeCountReverseStrand = self.map_count.loaded_forward(preloaded.leaf_tensors['genotypeCountReverseStrand'])
+
+        mapped = [mapped_gobyGenotypeIndex,
+                  mapped_isIndel,
+                  mapped_matchesReference,
+                  mapped_to,
+                  mapped_genotypeCountForwardStrand,
+                  mapped_genotypeCountReverseStrand]
+
+        for nf_name, mapper in self.nf_names_mappers:
+
+             mapped += [mapper.loaded_forward(preloaded.leaf_tensors[nf_name])]
+
+        return self.reduce_count(mapped)
 
 class FrequencyMapper(StructuredEmbedding):
     def __init__(self, device=None):
@@ -180,24 +301,45 @@ class FrequencyMapper(StructuredEmbedding):
         self.LOG2 = log(2)
         self.epsilon = 1E-5
 
-    def convert_list_of_floats(self, values):
+    def convert_list_of_floats(self, values, ignore_device=False):
         """This method accepts a list of floats."""
         x = torch.Tensor(values).view(-1, 1)
         if hasattr(self, 'epsilon'):
             x = x + self.epsilon
+        if ignore_device:
+            return x
+        else:
+            return x.to(self.device)
 
-        return x.to(self.device)
-
-    def forward(self, x):
+    def forward(self, x, ignore_device=False):
         """We use two floats to represent each number (the natural log of the number and the number divided by 10). The input must be a Float tensor of dimension:
         (num-elements in list, 1), or a list of float values.
         """
         if not torch.is_tensor(x):
-            x = self.convert_list_of_floats(x)
+            x = self.convert_list_of_floats(x, ignore_device)
 
         x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=1)
 
         return x
+
+    def preload(self, x):
+        return LoadedTensor(self.forward(x,ignore_device=True))
+
+
+class LoadedNumberWithFrequency(LoadedTensor):
+    def __init__(self, numbers, frequencies, mapper):
+        self.mapper = mapper
+        self.numbers = numbers
+        self.frequencies = frequencies
+
+    def to(self, device, non_blocking=True):
+        self.numbers=self.numbers.to(device,non_blocking=non_blocking)
+        self.frequencies=self.frequencies.to(device,non_blocking=non_blocking)
+        return self
+
+    def tensor(self):
+        assert False, "tensor() called on LoadedNumberWithFrequency"
+        #return torch.cat([self.numbers.tensor(), self.frequencies.tensor()],dim=0)
 
 
 class MapNumberWithFrequencyList(StructuredEmbedding):
@@ -231,10 +373,29 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
             else:
                 return self.map_sequence(mapped_frequencies)
         else:
-            variable = torch.zeros(1, self.embedding_size,requires_grad=True).to(self.device)
+            variable = torch.zeros(1, self.embedding_size, requires_grad=True).to(self.device)
             return variable
 
+    def preload(self, nwf_list):
+        if len(nwf_list)>0:
+            return LoadedNumberWithFrequency(numbers=self.map_number.preload([nwf['number'] for nwf in nwf_list]),
+                                         frequencies=self.map_frequency.preload([nwf['frequency'] for nwf in nwf_list]),
+                                         mapper=self)
+        else:
+            return LoadedZeros(shape=(1,self.embedding_size))
 
+    def loaded_forward(self, preloaded):
+         if hasattr(preloaded,'numbers'):
+            mapped_frequencies = torch.cat([
+                self.map_number.loaded_forward(preloaded.numbers),
+                self.map_frequency.loaded_forward(preloaded.frequencies)], dim=1)
+
+            if use_mean_to_map_nwf:
+                return self.mean_sequence(mapped_frequencies)
+            else:
+                return self.map_sequence(mapped_frequencies)
+         else:
+            return preloaded.tensor()
 
 def configure_mappers(ploidy, extra_genotypes, num_samples, device, sample_dim=64, count_dim=64):
     """Return a tuple with two elements:
