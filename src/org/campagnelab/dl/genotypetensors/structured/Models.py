@@ -196,8 +196,9 @@ class Reduce(StructuredEmbedding):
             print("STOP: input dims={} sizes={}".format([input.dim() for input in input_list],
                                                         [input.size() for input in input_list]))
         for index, input in enumerate(input_list):
-            assert input.size(1) == self.input_dims[index], "input dimension must match declared for input {} ".format(
-                index)
+            assert input.size(1) == self.input_dims[index], "input dimension must match declared for input {}. " \
+                                                            "Was {}, should have been {}".format(
+                index,input.size(1),self.input_dims[index] )
         x = torch.cat(input_list, dim=1)
 
         return self.forward_flat_inputs(x)

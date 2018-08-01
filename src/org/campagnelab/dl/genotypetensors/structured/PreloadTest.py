@@ -2,7 +2,7 @@ import torch
 import unittest
 
 from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised_trainer import sbi_json_string
-from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo, MapSampleInfo
+from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo, MapSampleInfo, MapBaseInformation
 
 cuda=torch.device('cuda')
 cpu=torch.device('cpu')
@@ -31,6 +31,24 @@ class PreloadTestCase(unittest.TestCase):
         record = ujson.loads(sbi_json_string)
         sample = record['samples'][0]
         loaded=map_container.preload(sample)
+        # move preloaded tensors to cuda:
+        loaded.to(cuda)
+        print(loaded)
+
+        self.assertIsNotNone(loaded)
+        mapped = loaded.mapper.loaded_forward(loaded)
+        self.assertIsNotNone(mapped)
+        loaded.to(torch.device(cpu))
+        print(mapped)
+
+    def test_preload_record(self):
+        count_mapper = MapCountInfo(device=cuda,count_dim=32)
+        map_sample = MapSampleInfo(count_mapper=count_mapper, count_dim=32, sample_dim=64, num_counts=3, device=cuda)
+        map_container=MapBaseInformation(sample_mapper=map_sample, sample_dim=64, num_samples=1, device=cuda)
+        import ujson
+        record = ujson.loads(sbi_json_string)
+
+        loaded=map_container.preload(record)
         # move preloaded tensors to cuda:
         loaded.to(cuda)
         print(loaded)
