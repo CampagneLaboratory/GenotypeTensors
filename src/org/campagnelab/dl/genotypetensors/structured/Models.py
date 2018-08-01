@@ -282,3 +282,7 @@ class BatchOfInstances(Module):
         instance_list = list(instance_list)
         mapped = [self.mappers.dispatch(instance) for instance in instance_list]
         return torch.cat(mapped, dim=0)
+
+    def preload(self, preloaded_tensor_list):
+        mapped = [self.mappers.dispatch(instance) for instance in preloaded_tensor_list]
+        return torch.cat(mapped, dim=0)

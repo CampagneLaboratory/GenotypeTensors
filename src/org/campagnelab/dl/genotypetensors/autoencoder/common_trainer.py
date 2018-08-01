@@ -440,7 +440,8 @@ class CommonTrainer:
         target_index = target_index.to(self.estimate_errors_device)
         output_index = output_index.to(self.estimate_errors_device)
         for class_index in range(target_s[0].size()[0]):
-            for example_index in range(self.mini_batch_size):
+            batch_size = target_s.size(0)
+            for example_index in range(batch_size):
                 if target_index[example_index].item() == class_index and \
                         (target_index[example_index].item() != output_index[example_index].item()):
                     errors[class_index] += 1

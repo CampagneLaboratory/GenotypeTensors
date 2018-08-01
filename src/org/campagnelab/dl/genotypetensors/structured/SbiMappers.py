@@ -78,6 +78,10 @@ class LoadedMapBaseInformation(LoadedTensor):
         self.fromSequence = self.fromSequence.to(device=device, non_blocking=True)
         return self
 
+    def tensor(self):
+        """Return the tensor. """
+        return self.mapper.loaded_forward(self)
+
 
 class MapBaseInformation(StructuredEmbedding):
     def __init__(self, sample_mapper, sample_dim, num_samples, ploidy=2, extra_genotypes=2,
@@ -421,6 +425,46 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
         else:
             return preloaded.tensor()
 
+class LoadedList(LoadedTensor):
+    def __init__(self, loaded_tensors):
+        self.loaded_tensors = loaded_tensors
+
+    def to(self, device, non_blocking=True):
+        for tensor in self.loaded_tensors:
+            tensor.to(device, non_blocking=non_blocking)
+        return self
+
+    def tensor(self):
+        return torch.cat([t.tensor() for t in self.loaded_tensors], dim=1)
+
+    def __getitem__(self, item):
+        return self.loaded_tensors[item]
+
+class BatchOfRecords(Module):
+    """Takes a list of structure instances and produce a tensor of size batch x embedding dim of each instance."""
+
+    def __init__(self, sbi_mapper, device):
+        """
+
+        :param mappers: a dictionary, mapping message type to its mapper.
+        """
+        super().__init__()
+
+        self.sbi_mapper=sbi_mapper
+        self.to(device)
+
+    def forward(self, preloaded_instance_list):
+        mapped = [self.sbi_mapper.loaded_forward(instance) for instance in preloaded_instance_list]
+        return torch.cat(mapped, dim=0)
+
+    def preload(self, records):
+        preloaded = LoadedList([self.sbi_mapper.preload(instance) for instance in records])
+        return preloaded
+
+    def loaded_forward(self, preloaded_records):
+        return preloaded_records.tensor()
+
+
 
 def configure_mappers(ploidy, extra_genotypes, num_samples, device, sample_dim=64, count_dim=64):
     """Return a tuple with two elements:
@@ -434,7 +478,7 @@ def configure_mappers(ploidy, extra_genotypes, num_samples, device, sample_dim=6
     map_SampleInfo = MapSampleInfo(count_mapper=map_CountInfo, num_counts=num_counts, count_dim=count_dim,
                                    sample_dim=sample_dim, device=device)
     map_SbiRecords = MapBaseInformation(sample_mapper=map_SampleInfo, num_samples=num_samples, sample_dim=sample_dim,
-                                        sequence_output_dim=count_dim, ploidy=ploidy, extra_genotypes=extra_genotypes,
+                                        ploidy=ploidy, extra_genotypes=extra_genotypes,
                                         device=device)
 
     sbi_mappers = {"BaseInformation": map_SbiRecords,
