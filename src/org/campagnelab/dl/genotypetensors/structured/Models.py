@@ -79,7 +79,6 @@ class map_Boolean(StructuredEmbedding):
         return LoadedBoolean(tensor=torch.FloatTensor([[1, 0]]) if predicate else torch.FloatTensor([[0, 1]]))
 
 
-
 class IntegerModel(StructuredEmbedding):
     def __init__(self, distinct_numbers, embedding_size, device):
         super().__init__(embedding_size, device)
@@ -118,6 +117,11 @@ class IntegerModel(StructuredEmbedding):
         """Accepts a preloaded tensor of dimension batch x 1 x length and produces a batch of batch x embedded-value x length. """
         tensor = preloaded.tensor().type(dtype=torch.long)
         return self.embedding(tensor)
+
+    def simple_forward(self, tensor):
+        """Accepts a preloaded tensor of dimension batch x 1 x length and produces a batch of batch x embedded-value x length. """
+
+        return self.embedding(tensor.type(dtype=torch.long))
 
 
 class MeanOfList(Module):

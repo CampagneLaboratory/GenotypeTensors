@@ -6,3 +6,4 @@ intel-openmp
 numpy
 ujson
 git+https://github.com/pytorch/tnt.git@master
+torchfold

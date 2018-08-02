@@ -19,7 +19,7 @@ def get_indices_in_message(mapper, message):
     return message['indices'][id(mapper)]
 
 
-use_mean_to_map_nwf = True
+use_mean_to_map_nwf = False
 
 
 class LoadedSequence(LoadedTensor):
@@ -59,15 +59,20 @@ class MapSequence(StructuredEmbedding):
         return self.map_sequence.forward(
             self.map_bases.loaded_forward(preloaded))
 
+    def simple_forward(self, tensor):
+        return self.map_sequence.forward(
+            self.map_bases.simple_forward(tensor))
+
 
 class LoadedMapBaseInformation(LoadedTensor):
-    def __init__(self, referenceBase, genomicSequenceContext, sequenceFrom, samples, base_to_index,num_samples, mapper):
+    def __init__(self, referenceBase, genomicSequenceContext, sequenceFrom, samples, base_to_index, num_samples,
+                 mapper):
         super(LoadedMapBaseInformation, self).__init__(tensor=None, mapper=mapper)
         self.referenceBase = LoadedSequence(referenceBase, base_to_index=base_to_index)
         self.fromSequence = LoadedSequence(sequenceFrom, base_to_index=base_to_index)
         self.genomicSequenceContext = LoadedSequence(genomicSequenceContext, base_to_index=base_to_index)
         self.samples = [mapper.sample_mapper.preload(sample) for sample in samples]
-        assert len(self.samples)==num_samples,"num_samples must match at this time. Sample padding not implemented."
+        assert len(self.samples) == num_samples, "num_samples must match at this time. Sample padding not implemented."
 
         self.sample_from = LoadedSequence(sequenceFrom, base_to_index=base_to_index)
 
@@ -91,9 +96,9 @@ class MapBaseInformation(StructuredEmbedding):
 
         # We reuse the same sequence mapper as the one used in MapCountInfo:
         self.map_sequence = sample_mapper.count_mapper.map_sequence
-        sequence_output_dim =self.map_sequence.embedding_size
+        sequence_output_dim = self.map_sequence.embedding_size
         self.reduce_samples = Reduce(
-            [sequence_output_dim] + [sequence_output_dim] + [sequence_output_dim]+[sample_dim ] * num_samples,
+            [sequence_output_dim] + [sequence_output_dim] + [sequence_output_dim] + [sample_dim] * num_samples,
             encoding_output_dim=sample_dim, device=device)
 
         self.num_samples = num_samples
@@ -320,6 +325,34 @@ class MapCountInfo(StructuredEmbedding):
 
         return self.reduce_count(mapped)
 
+    def fold(self, fold, prefix, preloaded):
+        prefix += "_count"
+        mapped_gobyGenotypeIndex = fold.add(prefix + "_map_gobyGenotypeIndex",
+                                            preloaded.leaf_tensors['gobyGenotypeIndex'].tensor())
+        # Do not map isCalled, it is a field that contains the truth and is used to calculate the label.
+
+        mapped_isIndel =  preloaded.leaf_tensors['isIndel'].tensor()
+        mapped_matchesReference = preloaded.leaf_tensors['matchesReference'].tensor()
+
+        # NB: fromSequence was mapped at the level of BaseInformation.
+        mapped_to = fold.add(prefix + "_map_sequence", preloaded.leaf_tensors['toSequence'].tensor())
+
+        mapped_genotypeCountForwardStrand = fold.add(prefix + "_map_count",
+                                                     preloaded.leaf_tensors['genotypeCountForwardStrand'].tensor())
+        mapped_genotypeCountReverseStrand = fold.add(prefix + "_map_count",
+                                                     preloaded.leaf_tensors['genotypeCountReverseStrand'].tensor())
+        mapped = [mapped_gobyGenotypeIndex,
+                  mapped_isIndel,
+                  mapped_matchesReference,
+                  mapped_to,
+                  mapped_genotypeCountForwardStrand,
+                  mapped_genotypeCountReverseStrand]
+
+        for nf_name, mapper in self.nf_names_mappers:
+            mapped += [mapper.fold(fold, prefix+"_"+nf_name, preloaded.leaf_tensors[nf_name])]
+
+        return fold.add(prefix + '_reduce_count', *mapped)
+
 
 class FrequencyMapper(StructuredEmbedding):
     def __init__(self, device=None):
@@ -352,6 +385,15 @@ class FrequencyMapper(StructuredEmbedding):
     def preload(self, x):
         return LoadedTensor(self.forward(x, ignore_device=True))
 
+    def simple_forward(self, x):
+
+        x = x.view(-1, 1)
+        if hasattr(self, 'epsilon'):
+            x = x + self.epsilon
+
+        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=1)
+
+        return x
 
 class LoadedNumberWithFrequency(LoadedTensor):
     def __init__(self, numbers, frequencies, mapper):
@@ -425,6 +467,16 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
         else:
             return preloaded.tensor()
 
+    def fold(self, fold, prefix, preloaded):
+        #prefix += "_nwf"
+        if hasattr(preloaded, 'numbers'):
+
+           return fold.add(prefix + "_map_nwl", preloaded.numbers.tensor(),preloaded.numbers.tensor().type(torch.float32))
+
+        else:
+            return preloaded.tensor()
+
+
 class LoadedList(LoadedTensor):
     def __init__(self, loaded_tensors):
         self.loaded_tensors = loaded_tensors
@@ -440,6 +492,7 @@ class LoadedList(LoadedTensor):
     def __getitem__(self, item):
         return self.loaded_tensors[item]
 
+
 class BatchOfRecords(Module):
     """Takes a list of structure instances and produce a tensor of size batch x embedding dim of each instance."""
 
@@ -450,7 +503,7 @@ class BatchOfRecords(Module):
         """
         super().__init__()
 
-        self.sbi_mapper=sbi_mapper
+        self.sbi_mapper = sbi_mapper
         self.to(device)
 
     def forward(self, preloaded_instance_list):
@@ -463,7 +516,6 @@ class BatchOfRecords(Module):
 
     def loaded_forward(self, preloaded_records):
         return preloaded_records.tensor()
-
 
 
 def configure_mappers(ploidy, extra_genotypes, num_samples, device, sample_dim=64, count_dim=64):
