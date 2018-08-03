@@ -1,7 +1,6 @@
 from math import log2, log10, log
 
 import torch
-from torch.autograd import Variable
 from torch.nn import Module
 
 from org.campagnelab.dl.genotypetensors.structured.Models import Reduce, IntegerModel, map_Boolean, RNNOfList, \
@@ -146,7 +145,7 @@ class LoadedSample(LoadedTensor):
 
 class MapSampleInfo(StructuredEmbedding):
     def __init__(self, count_mapper, count_dim, sample_dim, num_counts, device=None):
-        super(MapSampleInfo, self).__init__(sample_dim)
+        super(MapSampleInfo, self).__init__(sample_dim,device=device)
 
         self.count_mapper = count_mapper
         self.num_counts = num_counts
@@ -166,8 +165,10 @@ class MapSampleInfo(StructuredEmbedding):
     def preload(self, input):
         observed_counts = self.get_observed_counts(input)
 
+        loaded_counts = [self.count_mapper.preload(count) for count in observed_counts[0:self.num_counts]]
+
         return LoadedSample(
-            loaded_counts=[self.count_mapper.preload(count) for count in observed_counts[0:self.num_counts]],
+            loaded_counts=loaded_counts,
             mapper=self)
 
     def loaded_forward(self, preloaded):
@@ -175,6 +176,14 @@ class MapSampleInfo(StructuredEmbedding):
                                    preloaded.counts],
                                   pad_missing=True)
 
+    def fold(self, fold, prefix, preloaded):
+        reduced_counts=[self.count_mapper.fold(fold,prefix,count) for count in
+                                   preloaded.counts]
+        # emulate pad_missing:
+        while len(reduced_counts)<len(self.reduce_counts.input_dims):
+            zeros = torch.zeros(1, self.count_dim).to(device=self.device)
+            reduced_counts.append(zeros)
+        return fold.add(prefix+"_sample_reduce_count",*reduced_counts)
 
 class LoadedZeros(LoadedTensor):
     def __init__(self, shape):
