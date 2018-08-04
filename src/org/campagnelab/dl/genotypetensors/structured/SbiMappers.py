@@ -358,7 +358,9 @@ class MapCountInfo(StructuredEmbedding):
                   mapped_genotypeCountReverseStrand]
 
         for nf_name, mapper in self.nf_names_mappers:
-            mapped += [mapper.fold(fold, prefix+"_"+nf_name, preloaded.leaf_tensors[nf_name])]
+            values = preloaded.leaf_tensors[nf_name]
+
+            mapped += [mapper.fold(fold, prefix +"_" + nf_name, values)]
 
         return fold.add(prefix + '_reduce_count', *mapped)
 
@@ -392,15 +394,15 @@ class FrequencyMapper(StructuredEmbedding):
         return x
 
     def preload(self, x):
-        return LoadedTensor(self.forward(x, ignore_device=True))
+        return LoadedTensor(torch.Tensor(x))
 
     def simple_forward(self, x):
 
-        x = x.view(-1, 1)
+
         if hasattr(self, 'epsilon'):
             x = x + self.epsilon
-
-        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=1)
+        last_dim=len(x.size())-1
+        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=last_dim)
 
         return x
 
@@ -478,9 +480,10 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
 
     def fold(self, fold, prefix, preloaded):
         #prefix += "_nwf"
-        if hasattr(preloaded, 'numbers'):
+        if hasattr(preloaded, 'numbers') and preloaded.numbers.tensor().size(0)>0:
 
-           return fold.add(prefix + "_map_nwl", preloaded.numbers.tensor(),preloaded.numbers.tensor().type(torch.float32))
+           return fold.add(prefix + "_map_nwl", preloaded.numbers.tensor().type(torch.float32).view(1,-1,1),
+                           preloaded.frequencies.tensor().view(1,-1,1))
 
         else:
             return preloaded.tensor()

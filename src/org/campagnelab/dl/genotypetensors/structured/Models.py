@@ -161,6 +161,24 @@ class RNNOfList(StructuredEmbedding):
         else:
             return all_outputs.view(1, -1)
 
+    def simple_forward(self, list_of_embeddings, ):
+
+        batch_size = list_of_embeddings.size(0)
+        num_layers = self.num_layers
+        hidden_size = self.hidden_size
+        hidden = torch.zeros(num_layers, batch_size, hidden_size).to(self.device)
+        memory = torch.zeros(num_layers, batch_size, hidden_size).to(self.device)
+        states = (hidden, memory)
+        inputs = list_of_embeddings
+        out, states = self.lstm(inputs, states)
+        # return the last output:
+        #all_outputs = out.squeeze()
+        if (out.dim() > 1):
+            # return the last output:
+            return out[:,-1,].view(1,-1)
+        else:
+            return out.view(1,-1)
+
 
 class Reduce(StructuredEmbedding):
     """ Reduce a list of embedded fields or messages using a feed forward. Requires list to be a constant size """

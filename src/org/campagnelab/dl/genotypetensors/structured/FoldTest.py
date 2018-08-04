@@ -4,7 +4,8 @@ import unittest
 from torchfold import torchfold
 
 from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised_trainer import sbi_json_string
-from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo, MapSampleInfo, MapBaseInformation
+from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo, MapSampleInfo, MapBaseInformation, \
+    MapNumberWithFrequencyList
 
 cuda = torch.device('cuda')
 cpu = torch.device('cpu')
@@ -34,11 +35,16 @@ class FoldExecutor:
         return self.count_mapper.map_sequence.simple_forward(value)
 
     def nwl_map_nwl(self, mapper, numbers, frequencies):
-        mapped_frequencies = torch.cat([
-            mapper.map_number.simple_forward(numbers),
-            mapper.map_frequency.simple_forward(frequencies)], dim=1)
-
-        return mapper.map_sequence(mapped_frequencies)
+        batch_size=numbers.size(0)
+        mapped_numbers = mapper.map_number.simple_forward(numbers).squeeze()
+        mapped_frequencies = mapper.map_frequency.simple_forward(frequencies).squeeze()
+        last_dim=len(mapped_numbers.size())-1
+        concatenated = torch.cat([
+            mapped_numbers,
+            mapped_frequencies], dim=last_dim)
+        embedding_size=mapper.map_number.embedding_size+mapper.map_frequency.embedding_size
+        mapped= mapper.map_sequence.simple_forward(concatenated.view(batch_size,-1,embedding_size))
+        return mapped.view(batch_size,embedding_size)
 
     def root_count_qualityScoresForwardStrand_map_nwl(self, numbers, frequencies):
         return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_base_qual, numbers, frequencies)
@@ -76,6 +82,58 @@ class FoldExecutor:
 
 device = cpu
 class PreloadTestCase(unittest.TestCase):
+
+
+    def test_fold_nwl(self):
+
+        nwl_mapper=MapNumberWithFrequencyList(distinct_numbers=1000, device=device)
+        import ujson
+        count_mapper = MapCountInfo(device=device)
+
+        fold = torchfold.Fold()
+        mapped_nodes = []
+
+        record = ujson.loads(sbi_json_string)
+        count = record['samples'][0]['counts'][0]
+        nwl=count['distanceToStartOfRead']
+        loaded = nwl_mapper.preload(nwl)
+        # move preloaded tensors to cuda:
+        loaded.to(device)
+        mapped_nodes.append(loaded.mapper.fold(fold, "root_count_distanceToStartOfRead", loaded))
+        mapped_nodes.append(loaded.mapper.fold(fold, "root_count_distanceToStartOfRead", loaded))
+        mapped_nodes.append(loaded.mapper.fold(fold, "root_count_distanceToStartOfRead", loaded))
+        excutor = FoldExecutor(count_mapper=count_mapper,sample_mapper=None)
+        print(fold)
+        mapped = fold.apply(excutor, [mapped_nodes])
+        self.assertIsNotNone(mapped)
+        loaded.to(torch.device(cpu))
+        print(mapped)
+
+    def test_fold_nwl2(self):
+
+        nwl_mapper=MapNumberWithFrequencyList(distinct_numbers=1000, device=device)
+        import ujson
+        count_mapper = MapCountInfo(device=device)
+
+        fold = torchfold.Fold()
+        mapped_nodes = []
+
+        record = ujson.loads(sbi_json_string)
+        count = record['samples'][0]['counts'][0]
+        nwl=count['distanceToStartOfRead']
+        loaded = nwl_mapper.preload(nwl)
+        # move preloaded tensors to cuda:
+        loaded.to(device)
+        mapped_nodes.append(loaded.mapper.fold(fold, "root_count_numVariationsInReads", loaded))
+        mapped_nodes.append(loaded.mapper.fold(fold, "root_count_numVariationsInReads", loaded))
+        mapped_nodes.append(loaded.mapper.fold(fold, "root_count_numVariationsInReads", loaded))
+        excutor = FoldExecutor(count_mapper=count_mapper,sample_mapper=None)
+        print(fold)
+        mapped = fold.apply(excutor, [mapped_nodes])
+        self.assertIsNotNone(mapped)
+        loaded.to(torch.device(cpu))
+        print(mapped)
+
     def test_fold_count(self):
 
         count_mapper = MapCountInfo(device=device)
@@ -91,7 +149,7 @@ class PreloadTestCase(unittest.TestCase):
         # move preloaded tensors to cuda:
         loaded.to(device)
         mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
-        excutor = FoldExecutor(count_mapper)
+        excutor = FoldExecutor(count_mapper,sample_mapper=None)
         print(fold)
         mapped = fold.apply(excutor, [mapped_nodes])
         self.assertIsNotNone(mapped)
@@ -105,7 +163,8 @@ class PreloadTestCase(unittest.TestCase):
         import ujson
         executor = FoldExecutor(count_mapper=count_mapper, sample_mapper=sample_mapper)
 
-        fold = torchfold.Unfold(executor)
+
+        fold = torchfold.Fold(executor)
         mapped_nodes = []
 
         record = ujson.loads(sbi_json_string)
