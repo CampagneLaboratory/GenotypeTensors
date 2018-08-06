@@ -96,7 +96,7 @@ class PreloadTestCase(unittest.TestCase):
         record = ujson.loads(sbi_json_string)
         count = record['samples'][0]['counts'][0]
         nwl=count['distanceToStartOfRead']
-        loaded = nwl_mapper.preload(nwl)
+        loaded = nwl_mapper.preload(nwl,10)
         # move preloaded tensors to cuda:
         loaded.to(device)
         mapped_nodes.append(loaded.mapper.fold(fold, "root_count_distanceToStartOfRead", loaded))
@@ -121,7 +121,7 @@ class PreloadTestCase(unittest.TestCase):
         record = ujson.loads(sbi_json_string)
         count = record['samples'][0]['counts'][0]
         nwl=count['distanceToStartOfRead']
-        loaded = nwl_mapper.preload(nwl)
+        loaded = nwl_mapper.preload(nwl,10)
         # move preloaded tensors to cuda:
         loaded.to(device)
         mapped_nodes.append(loaded.mapper.fold(fold, "root_count_numVariationsInReads", loaded))

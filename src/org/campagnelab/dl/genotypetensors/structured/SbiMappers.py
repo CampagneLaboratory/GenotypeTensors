@@ -26,7 +26,7 @@ class LoadedSequence(LoadedTensor):
         # we cache a tensor of dimension 1 x seq_length, with one byte per base:
 
         super(LoadedSequence, self).__init__(
-            torch.Tensor(list([base_to_index[b] for b in sequence])).type(dtype=torch.int8))
+            torch.Tensor(list([base_to_index[b] for b in sequence])).type(dtype=torch.int8).view(1,-1))
 
 
 class MapSequence(StructuredEmbedding):
@@ -59,7 +59,7 @@ class MapSequence(StructuredEmbedding):
             self.map_bases.loaded_forward(preloaded))
 
     def simple_forward(self, tensor):
-        return self.map_sequence.forward(
+        return self.map_sequence.simple_forward(
             self.map_bases.simple_forward(tensor))
 
 
@@ -145,7 +145,7 @@ class LoadedSample(LoadedTensor):
 
 class MapSampleInfo(StructuredEmbedding):
     def __init__(self, count_mapper, count_dim, sample_dim, num_counts, device=None):
-        super(MapSampleInfo, self).__init__(sample_dim,device=device)
+        super(MapSampleInfo, self).__init__(sample_dim, device=device)
 
         self.count_mapper = count_mapper
         self.num_counts = num_counts
@@ -177,13 +177,14 @@ class MapSampleInfo(StructuredEmbedding):
                                   pad_missing=True)
 
     def fold(self, fold, prefix, preloaded):
-        reduced_counts=[self.count_mapper.fold(fold,prefix,count) for count in
-                                   preloaded.counts]
+        reduced_counts = [self.count_mapper.fold(fold, prefix, count) for count in
+                          preloaded.counts]
         # emulate pad_missing:
-        while len(reduced_counts)<len(self.reduce_counts.input_dims):
+        while len(reduced_counts) < len(self.reduce_counts.input_dims):
             zeros = torch.zeros(1, self.count_dim).to(device=self.device)
             reduced_counts.append(zeros)
-        return fold.add(prefix+"_sample_reduce_count",*reduced_counts)
+        return fold.add(prefix + "_sample_reduce_count", *reduced_counts)
+
 
 class LoadedZeros(LoadedTensor):
     def __init__(self, shape):
@@ -293,7 +294,7 @@ class MapCountInfo(StructuredEmbedding):
         mapped = {}
         for nf_name, mapper in self.nf_names_mappers:
             if nf_name in c.keys():
-                mapped[nf_name] = mapper.preload(c[nf_name])
+                mapped[nf_name] = mapper.preload(c[nf_name],10)
             else:
                 mapped[nf_name] = LoadedZeros(shape=(1, mapper.embedding_size))
 
@@ -340,7 +341,7 @@ class MapCountInfo(StructuredEmbedding):
                                             preloaded.leaf_tensors['gobyGenotypeIndex'].tensor())
         # Do not map isCalled, it is a field that contains the truth and is used to calculate the label.
 
-        mapped_isIndel =  preloaded.leaf_tensors['isIndel'].tensor()
+        mapped_isIndel = preloaded.leaf_tensors['isIndel'].tensor()
         mapped_matchesReference = preloaded.leaf_tensors['matchesReference'].tensor()
 
         # NB: fromSequence was mapped at the level of BaseInformation.
@@ -360,7 +361,7 @@ class MapCountInfo(StructuredEmbedding):
         for nf_name, mapper in self.nf_names_mappers:
             values = preloaded.leaf_tensors[nf_name]
 
-            mapped += [mapper.fold(fold, prefix +"_" + nf_name, values)]
+            mapped += [mapper.fold(fold, prefix + "_" + nf_name, values)]
 
         return fold.add(prefix + '_reduce_count', *mapped)
 
@@ -398,13 +399,13 @@ class FrequencyMapper(StructuredEmbedding):
 
     def simple_forward(self, x):
 
-
         if hasattr(self, 'epsilon'):
             x = x + self.epsilon
-        last_dim=len(x.size())-1
+        last_dim = len(x.size()) - 1
         x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=last_dim)
 
         return x
+
 
 class LoadedNumberWithFrequency(LoadedTensor):
     def __init__(self, numbers, frequencies, mapper):
@@ -456,8 +457,17 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
             variable = torch.zeros(1, self.embedding_size, requires_grad=True).to(self.device)
             return variable
 
-    def preload(self, nwf_list):
+    def reorder_and_pad(self, nwf_list, list_size=10):
+
+        sorted_list=sorted(nwf_list,key=lambda nwf: nwf['frequency'],reverse=True)
+        while len(sorted_list)<list_size:
+            sorted_list.append({'number':0,'frequency':0})
+        return sorted_list[0:list_size]
+
+    def preload(self, nwf_list, list_size):
+        nwf_list = self.reorder_and_pad(nwf_list, list_size)
         if len(nwf_list) > 0:
+
             return LoadedNumberWithFrequency(numbers=self.map_number.preload([nwf['number'] for nwf in nwf_list]),
                                              frequencies=self.map_frequency.preload(
                                                  [nwf['frequency'] for nwf in nwf_list]),
@@ -479,11 +489,11 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
             return preloaded.tensor()
 
     def fold(self, fold, prefix, preloaded):
-        #prefix += "_nwf"
-        if hasattr(preloaded, 'numbers') and preloaded.numbers.tensor().size(0)>0:
+        # prefix += "_nwf"
+        if hasattr(preloaded, 'numbers') and preloaded.numbers.tensor().size(0) > 0:
 
-           return fold.add(prefix + "_map_nwl", preloaded.numbers.tensor().type(torch.float32).view(1,-1,1),
-                           preloaded.frequencies.tensor().view(1,-1,1))
+            return fold.add(prefix + "_map_nwl", preloaded.numbers.tensor().type(torch.float32).view(1, -1, 1),
+                            preloaded.frequencies.tensor().view(1, -1, 1))
 
         else:
             return preloaded.tensor()

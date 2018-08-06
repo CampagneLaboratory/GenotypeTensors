@@ -175,9 +175,9 @@ class RNNOfList(StructuredEmbedding):
         #all_outputs = out.squeeze()
         if (out.dim() > 1):
             # return the last output:
-            return out[:,-1,].view(1,-1)
+            return out[:,-1,].view(batch_size,-1)
         else:
-            return out.view(1,-1)
+            return out.view(batch_size,-1)
 
 
 class Reduce(StructuredEmbedding):
