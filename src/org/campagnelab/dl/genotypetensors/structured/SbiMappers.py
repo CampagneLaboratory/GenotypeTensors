@@ -142,7 +142,7 @@ class MapBaseInformation(StructuredEmbedding):
             for count in counts:
                 max_seq_length=max(count.leaf_tensors['toSequence'].seq_length,max_seq_length)
 
-        print("max_seq_length: {} ".format(max_seq_length))
+        #print("max_seq_length: {} ".format(max_seq_length))
         mapped = ([self.map_sequence.fold(fold, prefix + "_ref_base", preloaded.referenceBase)] +
                   [self.map_sequence.fold(fold, prefix + "_genomic_context", preloaded.genomicSequenceContext)] +
                   # each sample has a unique from (same across all counts), which gets mapped and concatenated
