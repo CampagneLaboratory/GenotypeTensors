@@ -92,7 +92,7 @@ class PreloadTestCase(unittest.TestCase):
 
         sample_mapper = MapSampleInfo(count_mapper=count_mapper, count_dim=32, sample_dim=64, num_counts=3, device=device)
         import ujson
-        executor = FoldExecutor(count_mapper=count_mapper, sample_mapper=sample_mapper)
+        executor = FoldExecutor(count_mapper=count_mapper, sample_mapper=sample_mapper, record_mapper=None)
 
 
         fold = torchfold.Fold(executor)

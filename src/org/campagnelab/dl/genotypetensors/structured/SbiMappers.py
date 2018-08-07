@@ -26,7 +26,8 @@ class LoadedSequence(LoadedTensor):
         # we cache a tensor of dimension 1 x seq_length, with one byte per base:
 
         super(LoadedSequence, self).__init__(
-            torch.Tensor(list([base_to_index[b] for b in sequence])).type(dtype=torch.int8).view(1,-1))
+            torch.Tensor(list([base_to_index[b] for b in sequence])).type(dtype=torch.int8).view(1, -1))
+        self.seq_length=len(sequence)
 
 
 class MapSequence(StructuredEmbedding):
@@ -59,7 +60,7 @@ class MapSequence(StructuredEmbedding):
             self.map_bases.loaded_forward(preloaded))
 
     def fold(self, fold, prefix, preloaded):
-        return fold.add(prefix+"_sequence",preloaded.tensor())
+        return fold.add(prefix + "_sequence", preloaded.tensor())
 
     def simple_forward(self, tensor):
         return self.map_sequence.simple_forward(
@@ -136,13 +137,19 @@ class MapBaseInformation(StructuredEmbedding):
             [self.sample_mapper.loaded_forward(sample) for sample in preloaded.samples])
 
     def fold(self, fold, prefix, preloaded):
-        mapped=([self.map_sequence.fold(fold,prefix+"_ref_base", preloaded.referenceBase)] +
-            [self.map_sequence.fold(fold,prefix+"_genomic_context",preloaded.genomicSequenceContext)] +
-            # each sample has a unique from (same across all counts), which gets mapped and concatenated
-            # only once here:
-            [self.map_sequence.fold(fold,prefix+"_from_sequence",preloaded.fromSequence)] +
-            # the sample mapper will not map fromSequence:
-            [self.sample_mapper.fold(fold, prefix,sample) for sample in preloaded.samples])
+        max_seq_length=-1
+        for counts in [sample.counts for sample in preloaded.samples]:
+            for count in counts:
+                max_seq_length=max(count.leaf_tensors['toSequence'].seq_length,max_seq_length)
+
+        print("max_seq_length: {} ".format(max_seq_length))
+        mapped = ([self.map_sequence.fold(fold, prefix + "_ref_base", preloaded.referenceBase)] +
+                  [self.map_sequence.fold(fold, prefix + "_genomic_context", preloaded.genomicSequenceContext)] +
+                  # each sample has a unique from (same across all counts), which gets mapped and concatenated
+                  # only once here:
+                  [self.map_sequence.fold(fold, prefix + "_from_sequence", preloaded.fromSequence)] +
+                  # the sample mapper will not map fromSequence:
+                  [self.sample_mapper.fold(fold, prefix, sample,max_seq_length) for sample in preloaded.samples])
         return fold.add(prefix + "_record_reduce_count", *mapped)
 
 
@@ -189,8 +196,8 @@ class MapSampleInfo(StructuredEmbedding):
                                    preloaded.counts],
                                   pad_missing=True)
 
-    def fold(self, fold, prefix, preloaded):
-        reduced_counts = [self.count_mapper.fold(fold, prefix, count) for count in
+    def fold(self, fold, prefix, preloaded,max_seq_length=None):
+        reduced_counts = [self.count_mapper.fold(fold, prefix, count,max_seq_length) for count in
                           preloaded.counts]
         # emulate pad_missing:
         while len(reduced_counts) < len(self.reduce_counts.input_dims):
@@ -307,7 +314,7 @@ class MapCountInfo(StructuredEmbedding):
         mapped = {}
         for nf_name, mapper in self.nf_names_mappers:
             if nf_name in c.keys():
-                mapped[nf_name] = mapper.preload(c[nf_name],10)
+                mapped[nf_name] = mapper.preload(c[nf_name], 10)
             else:
                 mapped[nf_name] = LoadedZeros(shape=(1, mapper.embedding_size))
 
@@ -348,7 +355,7 @@ class MapCountInfo(StructuredEmbedding):
 
         return self.reduce_count(mapped)
 
-    def fold(self, fold, prefix, preloaded):
+    def fold(self, fold, prefix, preloaded, max_seq_length=None):
         prefix += "_count"
         mapped_gobyGenotypeIndex = fold.add(prefix + "_map_gobyGenotypeIndex",
                                             preloaded.leaf_tensors['gobyGenotypeIndex'].tensor())
@@ -358,7 +365,10 @@ class MapCountInfo(StructuredEmbedding):
         mapped_matchesReference = preloaded.leaf_tensors['matchesReference'].tensor()
 
         # NB: fromSequence was mapped at the level of BaseInformation.
-        mapped_to = fold.add(prefix + "_map_sequence", preloaded.leaf_tensors['toSequence'].tensor())
+        to_sequence_tensor = preloaded.leaf_tensors['toSequence'].tensor()
+        if max_seq_length is not None and to_sequence_tensor.size(1) != max_seq_length:
+            to_sequence_tensor = self.pad_trim(to_sequence_tensor,max_seq_length)
+        mapped_to = fold.add(prefix + "_map_sequence", to_sequence_tensor)
 
         mapped_genotypeCountForwardStrand = fold.add(prefix + "_map_count",
                                                      preloaded.leaf_tensors['genotypeCountForwardStrand'].tensor())
@@ -378,6 +388,13 @@ class MapCountInfo(StructuredEmbedding):
 
         return fold.add(prefix + '_reduce_count', *mapped)
 
+    def pad_trim(self, seq_tensor, seq_length):
+        if seq_tensor.size(1)<seq_length:
+            larger=torch.zeros(seq_tensor.size(0),seq_length).type(seq_tensor.dtype)
+            larger[:,0:seq_tensor.size(1)]=seq_tensor
+            return larger
+        else:
+            return seq_tensor[:,0:seq_length]
 
 class FrequencyMapper(StructuredEmbedding):
     def __init__(self, device=None):
@@ -414,14 +431,15 @@ class FrequencyMapper(StructuredEmbedding):
         return self.simple_forward(preloaded.tensor())
 
     def simple_forward(self, x):
-        batch_size=x.size(0)
-        len=x.size(1)
+        batch_size = x.size(0)
+        len = x.size(1)
         if hasattr(self, 'epsilon'):
             x = x + self.epsilon
 
-        x=x.view(len,batch_size)
+        x = x.view(len, batch_size)
         last_dim = x.dim() - 1
-        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=last_dim).view(batch_size,len,3)
+        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=last_dim).view(batch_size,
+                                                                                                          len, 3)
 
         return x
 
@@ -478,9 +496,9 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
 
     def reorder_and_pad(self, nwf_list, list_size=10):
 
-        sorted_list=sorted(nwf_list,key=lambda nwf: nwf['frequency'],reverse=True)
-        while len(sorted_list)<list_size:
-            sorted_list.append({'number':0,'frequency':0})
+        sorted_list = sorted(nwf_list, key=lambda nwf: nwf['frequency'], reverse=True)
+        while len(sorted_list) < list_size:
+            sorted_list.append({'number': 0, 'frequency': 0})
         return sorted_list[0:list_size]
 
     def preload(self, nwf_list, list_size):
@@ -499,7 +517,7 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
             numbers = self.map_number.loaded_forward(preloaded.numbers)
 
             frequencies = self.map_frequency.loaded_forward(preloaded.frequencies)
-            numbers=numbers.view(frequencies.size(0), frequencies.size(1), -1)
+            numbers = numbers.view(frequencies.size(0), frequencies.size(1), -1)
             mapped_frequencies = torch.cat([
                 numbers,
                 frequencies], dim=2)
@@ -523,9 +541,8 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
 
 
 class LoadedList(LoadedTensor):
-    def __init__(self, loaded_tensors,mapper):
-
-        self.mapper=mapper
+    def __init__(self, loaded_tensors, mapper):
+        self.mapper = mapper
         self.loaded_tensors = loaded_tensors
 
     def to(self, device, non_blocking=True):
@@ -558,21 +575,23 @@ class BatchOfRecords(Module):
         return torch.cat(mapped, dim=0)
 
     def preload(self, records):
-        preloaded = LoadedList([self.sbi_mapper.preload(instance) for instance in records],mapper=self)
+        preloaded = LoadedList([self.sbi_mapper.preload(instance) for instance in records], mapper=self)
         return preloaded
 
     def loaded_forward(self, preloaded_records):
         return preloaded_records.tensor()
 
-    def fold(self,fold, prefix, preloaded):
-        result=[]
+    def fold(self, fold, prefix, preloaded):
+        result = []
         for loaded_tensor in preloaded.loaded_tensors:
-            result.append(loaded_tensor.mapper.fold(fold,prefix, loaded_tensor))
+            result.append(loaded_tensor.mapper.fold(fold, prefix, loaded_tensor))
         return result
 
     def simple_forward(self, preloaded_instance_list):
         mapped = [self.sbi_mapper.simple_forward(instance) for instance in preloaded_instance_list]
         return torch.cat(mapped, dim=0)
+
+
 def configure_mappers(ploidy, extra_genotypes, num_samples, device, sample_dim=64, count_dim=64):
     """Return a tuple with two elements:
     mapper-dictionary: key is name of message type. value is function to map the message.
@@ -592,4 +611,4 @@ def configure_mappers(ploidy, extra_genotypes, num_samples, device, sample_dim=6
                    "SampleInfo": map_SampleInfo,
                    "CountInfo": map_CountInfo
                    }
-    return sbi_mappers, [map_SbiRecords, map_SampleInfo, map_CountInfo ]
+    return sbi_mappers, [map_SbiRecords, map_SampleInfo, map_CountInfo]
