@@ -390,7 +390,7 @@ class MapCountInfo(StructuredEmbedding):
 
     def pad_trim(self, seq_tensor, seq_length):
         if seq_tensor.size(1)<seq_length:
-            larger=torch.zeros(seq_tensor.size(0),seq_length).type(seq_tensor.dtype)
+            larger=torch.zeros(seq_tensor.size(0),seq_length).type(seq_tensor.dtype).to(seq_tensor)
             larger[:,0:seq_tensor.size(1)]=seq_tensor
             return larger
         else:
