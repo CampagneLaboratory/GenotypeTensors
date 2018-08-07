@@ -171,9 +171,12 @@ class Fold(object):
             return self._batch_args(nodes, values)
         except Exception:
             print("Retrieving %s" % nodes)
-            for lst in nodes:
-                if isinstance(lst[0], Fold.Node):
-                    print(', '.join([str(x.get(values).size()) for x in lst]))
+            if isinstance(nodes, Fold.Node):
+                print(str(nodes.get(values).size()))
+            else:
+                for lst in nodes:
+                    if isinstance(lst[0], Fold.Node):
+                        print(', '.join([str(x.get(values).size()) for x in lst]))
             raise
 
     def __str__(self):

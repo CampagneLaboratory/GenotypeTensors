@@ -523,7 +523,9 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
 
 
 class LoadedList(LoadedTensor):
-    def __init__(self, loaded_tensors):
+    def __init__(self, loaded_tensors,mapper):
+
+        self.mapper=mapper
         self.loaded_tensors = loaded_tensors
 
     def to(self, device, non_blocking=True):
@@ -556,13 +558,21 @@ class BatchOfRecords(Module):
         return torch.cat(mapped, dim=0)
 
     def preload(self, records):
-        preloaded = LoadedList([self.sbi_mapper.preload(instance) for instance in records])
+        preloaded = LoadedList([self.sbi_mapper.preload(instance) for instance in records],mapper=self)
         return preloaded
 
     def loaded_forward(self, preloaded_records):
         return preloaded_records.tensor()
 
+    def fold(self,fold, prefix, preloaded):
+        result=[]
+        for loaded_tensor in preloaded.loaded_tensors:
+            result.append(loaded_tensor.mapper.fold(fold,prefix, loaded_tensor))
+        return result
 
+    def simple_forward(self, preloaded_instance_list):
+        mapped = [self.sbi_mapper.simple_forward(instance) for instance in preloaded_instance_list]
+        return torch.cat(mapped, dim=0)
 def configure_mappers(ploidy, extra_genotypes, num_samples, device, sample_dim=64, count_dim=64):
     """Return a tuple with two elements:
     mapper-dictionary: key is name of message type. value is function to map the message.
@@ -582,4 +592,4 @@ def configure_mappers(ploidy, extra_genotypes, num_samples, device, sample_dim=6
                    "SampleInfo": map_SampleInfo,
                    "CountInfo": map_CountInfo
                    }
-    return sbi_mappers, [map_SbiRecords, map_SampleInfo, map_CountInfo]
+    return sbi_mappers, [map_SbiRecords, map_SampleInfo, map_CountInfo ]

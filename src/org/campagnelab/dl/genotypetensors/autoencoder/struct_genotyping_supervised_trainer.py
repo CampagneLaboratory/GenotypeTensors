@@ -16,7 +16,7 @@ from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
 from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
-
+from torchfold import torchfold
 
 
 class FoldExecutor:
@@ -136,6 +136,7 @@ class StructGenotypingModel(Module):
         return self.classifier(self.sbi_mapper.loaded_forward(sbi_records))
 
 
+
 class StructGenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using structured supervised training."""
 
@@ -146,6 +147,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             else None
         self.is_preloaded = {"training": False, "validation": False}
         self.cache_loaded_records = {"training": [], "validation": []}
+        self.fold=None
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -178,6 +180,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             preloaded_sbi.to(self.device)
             target_s.to(self.device)
             metadata.to(self.device)
+            self.fold=torchfold.Fold(self.fold_executor)
             self.train_one_batch(performance_estimators, batch_idx, preloaded_sbi, target_s.tensor(), metadata.tensor())
             preloaded_sbi.to(cpu_device)
             target_s.to(cpu_device)
@@ -196,8 +199,10 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         snp_weight = 1.0
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
+        mapped=sbi.mapper.fold(self.fold, "root", sbi)
 
-        output_s = self.net(sbi)
+        features = self.fold.apply(self.fold_executor,[[mapped]])[0]#self.net(sbi)
+        output_s=self.net.classifier(features.view(-1)).view(1,-1)
         output_s_p = self.get_p(output_s)
         _, target_index = torch.max(target_s, dim=1)
         supervised_loss = self.criterion_classifier(output_s, target_s)
@@ -317,7 +322,10 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                                                       extra_genotypes=args.struct_extra_genotypes,
                                                       num_samples=1, count_dim=args.struct_count_dim,
                                                       sample_dim=args.struct_sample_dim, device=device)
-        sbi_mapper = BatchOfRecords(sbi_mappers_configuration[0]['BaseInformation'], device)
+        mappers = sbi_mappers_configuration[0]
+        sbi_mapper = BatchOfRecords(mappers['BaseInformation'], device)
+        self.fold_executor = FoldExecutor(count_mapper=mappers['CountInfo'], sample_mapper=mappers['SampleInfo'], record_mapper=mappers['BaseInformation'])
+
         # determine feature size:
         import ujson
         record = ujson.loads(sbi_json_string)
