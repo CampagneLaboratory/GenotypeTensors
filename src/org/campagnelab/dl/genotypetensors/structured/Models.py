@@ -115,7 +115,7 @@ class IntegerModel(StructuredEmbedding):
 
     def loaded_forward(self, preloaded):
         """Accepts a preloaded tensor of dimension batch x 1 x length and produces a batch of batch x embedded-value x length. """
-        tensor = preloaded.tensor().type(dtype=torch.long)
+        tensor = preloaded.type(dtype=torch.long)
         return self.embedding(tensor)
 
     def simple_forward(self, tensor):

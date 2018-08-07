@@ -12,18 +12,31 @@ cpu = torch.device('cpu')
 
 
 class FoldExecutor:
-    def __init__(self, count_mapper, sample_mapper):
+    def __init__(self, count_mapper, sample_mapper, record_mapper):
         self.count_mapper = count_mapper
         self.sample_mapper = sample_mapper
+        self.record_mapper=record_mapper
 
     def root_count_map_count(self, count_value):
         return self.count_mapper.map_count.simple_forward(count_value)
+
+    def root_genomic_context_sequence(self, preloaded):
+        return self.count_mapper.map_sequence.simple_forward(preloaded)
+
+    def root_from_sequence_sequence(self, preloaded):
+        return self.count_mapper.map_sequence.simple_forward(preloaded)
+
+    def root_ref_base_sequence(self, preloaded):
+        return self.count_mapper.map_sequence.simple_forward(preloaded)
 
     def root_count_reduce_count(self, *tensors):
         return self.count_mapper.reduce_count.forward_flat_inputs(torch.cat(tensors, dim=1))
 
     def root_sample_reduce_count(self, *tensors):
         return self.sample_mapper.reduce_counts.forward_flat_inputs(torch.cat(tensors, dim=1))
+
+    def root_record_reduce_count(self, *tensors):
+        return self.record_mapper.reduce_samples.forward_flat_inputs(torch.cat(tensors, dim=1))
 
     def root_count_map_gobyGenotypeIndex(self, value):
         return self.count_mapper.map_gobyGenotypeIndex.simple_forward(value)
@@ -170,6 +183,34 @@ class PreloadTestCase(unittest.TestCase):
         record = ujson.loads(sbi_json_string)
         sample = record['samples'][0]
         loaded = sample_mapper.preload(sample)
+        # move preloaded tensors to cuda:
+        loaded.to(device)
+        mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
+        print(fold)
+        mapped = fold.apply(executor, [mapped_nodes])
+        self.assertIsNotNone(mapped)
+        loaded.to(torch.device(cpu))
+        print(mapped)
+
+
+    def test_fold_sample(self):
+        count_mapper = MapCountInfo(device=device,count_dim=32)
+
+        sample_mapper = MapSampleInfo(count_mapper=count_mapper, count_dim=32, sample_dim=64, num_counts=3, device=device)
+        record_mapper = MapBaseInformation(sample_mapper=sample_mapper, sample_dim=64, num_samples=1, ploidy=2,
+                                           extra_genotypes=2, device = device)
+
+        import ujson
+        executor = FoldExecutor(count_mapper=count_mapper, sample_mapper=sample_mapper,
+                                record_mapper=record_mapper)
+
+
+        fold = torchfold.Fold(executor)
+        mapped_nodes = []
+
+        record = ujson.loads(sbi_json_string)
+
+        loaded = record_mapper.preload(record)
         # move preloaded tensors to cuda:
         loaded.to(device)
         mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))

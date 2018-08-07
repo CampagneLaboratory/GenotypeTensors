@@ -55,8 +55,11 @@ class MapSequence(StructuredEmbedding):
     def loaded_forward(self, preloaded):
         """preloaded must have dimension batch x 1 x seq_length. We map each integer encoding of a base with map_bases to
         obtain dimension batch x encoding_dim x seq_length then map the sequence through the RNN. """
-        return self.map_sequence.forward(
+        return self.map_sequence.loaded_forward(
             self.map_bases.loaded_forward(preloaded))
+
+    def fold(self, fold, prefix, preloaded):
+        return fold.add(prefix+"_sequence",preloaded.tensor())
 
     def simple_forward(self, tensor):
         return self.map_sequence.simple_forward(
@@ -131,6 +134,16 @@ class MapBaseInformation(StructuredEmbedding):
             [self.map_sequence.loaded_forward(preloaded.fromSequence)] +
             # the sample mapper will not map fromSequence:
             [self.sample_mapper.loaded_forward(sample) for sample in preloaded.samples])
+
+    def fold(self, fold, prefix, preloaded):
+        mapped=([self.map_sequence.fold(fold,prefix+"_ref_base", preloaded.referenceBase)] +
+            [self.map_sequence.fold(fold,prefix+"_genomic_context",preloaded.genomicSequenceContext)] +
+            # each sample has a unique from (same across all counts), which gets mapped and concatenated
+            # only once here:
+            [self.map_sequence.fold(fold,prefix+"_from_sequence",preloaded.fromSequence)] +
+            # the sample mapper will not map fromSequence:
+            [self.sample_mapper.fold(fold, prefix,sample) for sample in preloaded.samples])
+        return fold.add(prefix + "_record_reduce_count", *mapped)
 
 
 class LoadedSample(LoadedTensor):
