@@ -268,7 +268,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             preloaded_sbi.to(self.device)
             target_s.to(self.device)
             metadata.to(self.device)
-
+            self.fold = torchfold.Fold(self.fold_executor)
             self.test_one_batch(performance_estimators, batch_idx, preloaded_sbi, target_s.tensor(), errors=None)
             preloaded_sbi.to(cpu_device)
             target_s.to(cpu_device)
@@ -301,7 +301,10 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 
-        output_s = self.net(sbi)
+        mapped = sbi.mapper.fold(self.fold, "root", sbi)
+
+        features = self.fold.apply(self.fold_executor, [[mapped]])[0]  # self.net(sbi)
+        output_s = self.net.classifier(features.view(-1)).view(1, -1)
         output_s_p = self.get_p(output_s)
 
         supervised_loss = self.criterion_classifier(output_s, target_s)
