@@ -13,8 +13,8 @@ class Fold(object):
             self.args = args
             self.split_idx = -1
             self.batch = True
-            print("Appending Node for op {} step {} index {} args {}".format(op,
-                                                                     step, index,args))
+            #print("Appending Node for op {} step {} index {} args {}".format(op,
+            #                                                         step, index,args))
 
         def split(self, num):
             """Split resulting node, if function returns multiple values."""
@@ -43,7 +43,7 @@ class Fold(object):
             if isinstance(self.result, tuple):
                 self.result = list(self.result)
 
-            print("ComputedResult batch_size {} result {}".format(batch_size, batched_result))
+            #print("ComputedResult batch_size {} result {}".format(batch_size, batched_result))
 
         def try_get_batched(self, nodes):
             all_are_nodes = all(isinstance(n, Fold.Node) for n in nodes)

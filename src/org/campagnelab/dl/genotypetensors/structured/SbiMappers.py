@@ -55,7 +55,7 @@ class MapSequence(StructuredEmbedding):
     def loaded_forward(self, preloaded):
         """preloaded must have dimension batch x 1 x seq_length. We map each integer encoding of a base with map_bases to
         obtain dimension batch x encoding_dim x seq_length then map the sequence through the RNN. """
-        return self.map_sequence.loaded_forward(
+        return self.map_sequence.simple_forward(
             self.map_bases.loaded_forward(preloaded))
 
     def fold(self, fold, prefix, preloaded):
@@ -408,14 +408,20 @@ class FrequencyMapper(StructuredEmbedding):
         return x
 
     def preload(self, x):
-        return LoadedTensor(torch.Tensor(x))
+        return LoadedTensor(torch.Tensor([x]))
+
+    def loaded_forward(self, preloaded):
+        return self.simple_forward(preloaded.tensor())
 
     def simple_forward(self, x):
-
+        batch_size=x.size(0)
+        len=x.size(1)
         if hasattr(self, 'epsilon'):
             x = x + self.epsilon
-        last_dim = len(x.size()) - 1
-        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=last_dim)
+
+        x=x.view(len,batch_size)
+        last_dim = x.dim() - 1
+        x = torch.cat([torch.log(x) / self.LOG10, torch.log(x) / self.LOG2, x / 10.0], dim=last_dim).view(batch_size,len,3)
 
         return x
 
@@ -490,14 +496,18 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
 
     def loaded_forward(self, preloaded):
         if hasattr(preloaded, 'numbers'):
+            numbers = self.map_number.loaded_forward(preloaded.numbers)
+
+            frequencies = self.map_frequency.loaded_forward(preloaded.frequencies)
+            numbers=numbers.view(frequencies.size(0), frequencies.size(1), -1)
             mapped_frequencies = torch.cat([
-                self.map_number.loaded_forward(preloaded.numbers),
-                self.map_frequency.loaded_forward(preloaded.frequencies)], dim=1)
+                numbers,
+                frequencies], dim=2)
 
             if use_mean_to_map_nwf:
                 return self.mean_sequence(mapped_frequencies)
             else:
-                return self.map_sequence(mapped_frequencies)
+                return self.map_sequence.simple_forward(mapped_frequencies)
         else:
             return preloaded.tensor()
 

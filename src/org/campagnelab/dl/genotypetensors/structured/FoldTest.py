@@ -3,95 +3,13 @@ import unittest
 
 from torchfold import torchfold
 
-from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised_trainer import sbi_json_string
+from org.campagnelab.dl.genotypetensors.autoencoder.struct_genotyping_supervised_trainer import sbi_json_string, \
+    FoldExecutor
 from org.campagnelab.dl.genotypetensors.structured.SbiMappers import MapCountInfo, MapSampleInfo, MapBaseInformation, \
     MapNumberWithFrequencyList
 
 cuda = torch.device('cuda')
 cpu = torch.device('cpu')
-
-
-class FoldExecutor:
-    def __init__(self, count_mapper, sample_mapper, record_mapper):
-        self.count_mapper = count_mapper
-        self.sample_mapper = sample_mapper
-        self.record_mapper=record_mapper
-
-    def root_count_map_count(self, count_value):
-        return self.count_mapper.map_count.simple_forward(count_value)
-
-    def root_genomic_context_sequence(self, preloaded):
-        return self.count_mapper.map_sequence.simple_forward(preloaded)
-
-    def root_from_sequence_sequence(self, preloaded):
-        return self.count_mapper.map_sequence.simple_forward(preloaded)
-
-    def root_ref_base_sequence(self, preloaded):
-        return self.count_mapper.map_sequence.simple_forward(preloaded)
-
-    def root_count_reduce_count(self, *tensors):
-        return self.count_mapper.reduce_count.forward_flat_inputs(torch.cat(tensors, dim=1))
-
-    def root_sample_reduce_count(self, *tensors):
-        return self.sample_mapper.reduce_counts.forward_flat_inputs(torch.cat(tensors, dim=1))
-
-    def root_record_reduce_count(self, *tensors):
-        return self.record_mapper.reduce_samples.forward_flat_inputs(torch.cat(tensors, dim=1))
-
-    def root_count_map_gobyGenotypeIndex(self, value):
-        return self.count_mapper.map_gobyGenotypeIndex.simple_forward(value)
-
-    def root_count_map_boolean(self, value):
-        return self.count_mapper.map_boolean.loaded_forward(value)
-
-    def root_count_map_sequence(self, value):
-        return self.count_mapper.map_sequence.simple_forward(value)
-
-    def nwl_map_nwl(self, mapper, numbers, frequencies):
-        batch_size=numbers.size(0)
-        mapped_numbers = mapper.map_number.simple_forward(numbers).squeeze()
-        mapped_frequencies = mapper.map_frequency.simple_forward(frequencies).squeeze()
-        last_dim=len(mapped_numbers.size())-1
-        concatenated = torch.cat([
-            mapped_numbers,
-            mapped_frequencies], dim=last_dim)
-        embedding_size=mapper.map_number.embedding_size+mapper.map_frequency.embedding_size
-        mapped= mapper.map_sequence.simple_forward(concatenated.view(batch_size,-1,embedding_size))
-        return mapped.view(batch_size,embedding_size)
-
-    def root_count_qualityScoresForwardStrand_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_base_qual, numbers, frequencies)
-
-    def root_count_qualityScoresReverseStrand_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_base_qual, numbers, frequencies)
-
-    def root_count_distanceToStartOfRead_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_distance_to, numbers, frequencies)
-
-    def root_count_distanceToEndOfRead_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_distance_to, numbers, frequencies)
-
-    def root_count_readIndicesReverseStrand_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_read_indices, numbers, frequencies)
-
-    def root_count_readIndicesForwardStrand_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_read_indices, numbers, frequencies)
-
-
-    def root_count_targetAlignedLengths_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_aligned_lengths, numbers, frequencies)
-
-    def root_count_queryAlignedLengths_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_aligned_lengths, numbers, frequencies)
-
-    def root_count_numVariationsInReads_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_num_var, numbers, frequencies)
-
-    def root_count_readMappingQualityForwardStrand_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_mapping_qual, numbers, frequencies)
-
-    def root_count_readMappingQualityReverseStrand_map_nwl(self, numbers, frequencies):
-        return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_mapping_qual, numbers, frequencies)
 
 device = cpu
 class PreloadTestCase(unittest.TestCase):
@@ -115,7 +33,7 @@ class PreloadTestCase(unittest.TestCase):
         mapped_nodes.append(loaded.mapper.fold(fold, "root_count_distanceToStartOfRead", loaded))
         mapped_nodes.append(loaded.mapper.fold(fold, "root_count_distanceToStartOfRead", loaded))
         mapped_nodes.append(loaded.mapper.fold(fold, "root_count_distanceToStartOfRead", loaded))
-        excutor = FoldExecutor(count_mapper=count_mapper,sample_mapper=None)
+        excutor = FoldExecutor(count_mapper=count_mapper,sample_mapper=None, record_mapper=None)
         print(fold)
         mapped = fold.apply(excutor, [mapped_nodes])
         self.assertIsNotNone(mapped)
@@ -140,7 +58,7 @@ class PreloadTestCase(unittest.TestCase):
         mapped_nodes.append(loaded.mapper.fold(fold, "root_count_numVariationsInReads", loaded))
         mapped_nodes.append(loaded.mapper.fold(fold, "root_count_numVariationsInReads", loaded))
         mapped_nodes.append(loaded.mapper.fold(fold, "root_count_numVariationsInReads", loaded))
-        excutor = FoldExecutor(count_mapper=count_mapper,sample_mapper=None)
+        excutor = FoldExecutor(count_mapper=count_mapper,sample_mapper=None, record_mapper=None)
         print(fold)
         mapped = fold.apply(excutor, [mapped_nodes])
         self.assertIsNotNone(mapped)
@@ -162,7 +80,7 @@ class PreloadTestCase(unittest.TestCase):
         # move preloaded tensors to cuda:
         loaded.to(device)
         mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
-        excutor = FoldExecutor(count_mapper,sample_mapper=None)
+        excutor = FoldExecutor(count_mapper,sample_mapper=None, record_mapper=None)
         print(fold)
         mapped = fold.apply(excutor, [mapped_nodes])
         self.assertIsNotNone(mapped)
