@@ -218,7 +218,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
-            if batch_idx % 10 ==1:
+
                 progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
                          performance_estimators.progress_message(
@@ -273,7 +273,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             preloaded_sbi.to(cpu_device)
             target_s.to(cpu_device)
             metadata.to(cpu_device)
-
+            batch_idx+=1
+            if (batch_idx + 1) * self.mini_batch_size > self.max_validation_examples:
+                break
 
         # Apply learning rate schedule:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
