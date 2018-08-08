@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import torch
 from torch.backends import cudnn
-from torch.nn import MultiLabelSoftMarginLoss, Module
+from torch.nn import MultiLabelSoftMarginLoss, Module, ModuleList
 
 from org.campagnelab.dl.genotypetensors.autoencoder.common_trainer import CommonTrainer, recode_for_label_smoothing
 from org.campagnelab.dl.genotypetensors.autoencoder.genotype_softmax_classifier import GenotypeSoftmaxClassifer
@@ -17,7 +17,7 @@ from org.campagnelab.dl.performance.AccuracyHelper import AccuracyHelper
 from org.campagnelab.dl.performance.FloatHelper import FloatHelper
 from org.campagnelab.dl.performance.LossHelper import LossHelper
 from org.campagnelab.dl.performance.PerformanceList import PerformanceList
-from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std
+from org.campagnelab.dl.utils.utils import progress_bar, normalize_mean_std, init_params
 from torchfold import torchfold
 
 
@@ -25,7 +25,7 @@ class FoldExecutor:
     def __init__(self, count_mapper, sample_mapper, record_mapper):
         self.count_mapper = count_mapper
         self.sample_mapper = sample_mapper
-        self.record_mapper=record_mapper
+        self.record_mapper = record_mapper
 
     def root_count_map_count(self, count_value):
         return self.count_mapper.map_count.simple_forward(count_value)
@@ -66,9 +66,9 @@ class FoldExecutor:
             numbers,
             frequencies], dim=2)
 
-        embedding_size=mapper.map_number.embedding_size+mapper.map_frequency.embedding_size
-        mapped= mapper.map_sequence.simple_forward(concatenated.view(batch_size,-1,embedding_size))
-        return mapped.view(batch_size,embedding_size)
+        embedding_size = mapper.map_number.embedding_size + mapper.map_frequency.embedding_size
+        mapped = mapper.map_sequence.simple_forward(concatenated.view(batch_size, -1, embedding_size))
+        return mapped.view(batch_size, embedding_size)
 
     def root_count_qualityScoresForwardStrand_map_nwl(self, numbers, frequencies):
         return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_base_qual, numbers, frequencies)
@@ -88,7 +88,6 @@ class FoldExecutor:
     def root_count_readIndicesForwardStrand_map_nwl(self, numbers, frequencies):
         return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_read_indices, numbers, frequencies)
 
-
     def root_count_targetAlignedLengths_map_nwl(self, numbers, frequencies):
         return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_aligned_lengths, numbers, frequencies)
 
@@ -103,6 +102,7 @@ class FoldExecutor:
 
     def root_count_readMappingQualityReverseStrand_map_nwl(self, numbers, frequencies):
         return self.nwl_map_nwl(self.count_mapper.frequency_list_mapper_mapping_qual, numbers, frequencies)
+
 
 def chunks(l, n):
     """Yield successive n-sized chunks from list l.
@@ -122,9 +122,13 @@ enable_recode = False
 
 
 class StructGenotypingModel(Module):
-    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, device, use_batching=True):
+    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, device, mappers, use_batching=True):
         super().__init__()
         self.sbi_mapper = sbi_mapper
+        # store mappers as a list because we need to initialize their params as part of this model:
+        self.mappers = ModuleList(mappers.values())
+        for mapper in mappers.values():
+            mapper.apply(init_params)
         self.device = device
         self.use_batching = use_batching
         self.classifier = GenotypeSoftmaxClassifer(num_inputs=mapped_features_size, target_size=output_size[0],
@@ -138,7 +142,6 @@ class StructGenotypingModel(Module):
         return self.classifier(self.sbi_mapper.loaded_forward(sbi_records))
 
 
-
 class StructGenotypingSupervisedTrainer(CommonTrainer):
     """Train a genotyping model using structured supervised training."""
 
@@ -149,7 +152,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             else None
         self.is_preloaded = {"training": False, "validation": False}
         self.cache_loaded_records = {"training": [], "validation": []}
-        self.fold=None
+        self.fold = None
 
     def rebuild_criterions(self, output_name, weights=None):
         if output_name == "softmaxGenotype":
@@ -178,23 +181,23 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
         batch_idx = 0
         cpu_device = torch.device('cpu')
-        self.batch=[]
-        self.shuffle_cache('training')
+        self.batch = []
+
+        # self.mini_batch_size=min(max(epoch+1,self.mini_batch_size),3)
         for preloaded_sbi, target_s, metadata in self.cache_loaded_records['training']:
-            if len(self.batch)<self.mini_batch_size:
+            if len(self.batch) < self.mini_batch_size:
                 preloaded_sbi.to(self.device)
                 target_s.to(self.device)
                 metadata.to(self.device)
-                self.batch.append((preloaded_sbi,target_s,metadata))
-            elif len(self.batch)==self.mini_batch_size:
+                self.batch.append((preloaded_sbi, target_s, metadata))
+            elif len(self.batch) == self.mini_batch_size:
 
-                self.fold=torchfold.Fold(self.fold_executor)
-                self.train_one_batch(performance_estimators, batch_idx, None,None, None)
-                for (preloaded_sbi,target_s,metadata) in self.batch:
+                self.train_one_batch(performance_estimators, batch_idx, None, None, None)
+                for (preloaded_sbi, target_s, metadata) in self.batch:
                     preloaded_sbi.to(cpu_device)
                     target_s.to(cpu_device)
                     metadata.to(cpu_device)
-                self.batch=[]
+                self.batch = []
             batch_idx += 1
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -209,11 +212,11 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         snp_weight = 1.0
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
-
+        self.fold = torchfold.Fold(self.fold_executor)
         mapped, metadata, target_s = self.fold_batch()
 
-        features = self.fold.apply(self.fold_executor,[mapped])[0]#self.net(sbi)
-        output_s=self.net.classifier(features.view(self.mini_batch_size,-1)).view(self.mini_batch_size,-1)
+        features = self.fold.apply(self.fold_executor, [mapped])[0]  # self.net(sbi)
+        output_s = self.net.classifier(features.view(self.mini_batch_size, -1)).view(self.mini_batch_size, -1)
         output_s_p = self.get_p(output_s)
 
         _, target_index = torch.max(target_s, dim=1)
@@ -230,8 +233,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators.set_metric_with_outputs(batch_idx, "train_accuracy", supervised_loss.item(),
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
-
-                progress_bar(batch_idx * self.mini_batch_size,
+            progress_bar(batch_idx * self.mini_batch_size,
                          self.max_training_examples,
                          performance_estimators.progress_message(
                              ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
@@ -240,7 +242,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         sbi = []
         target_s = []
         metadata = []
-        max_to_sequence_length = -1
+
         for batch in self.batch:
             sbi.append(batch[0])
             target_s.append(batch[1])
@@ -294,25 +296,25 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         batch_idx = 0
         cpu_device = torch.device('cpu')
         self.net.eval()
-        self.batch=[]
-
+        self.batch = []
+        #self.shuffle_cache('validation')
         for preloaded_sbi, target_s, metadata in self.cache_loaded_records['validation']:
-            if len(self.batch)<self.mini_batch_size:
+            if len(self.batch) < self.mini_batch_size:
                 preloaded_sbi.to(self.device)
                 target_s.to(self.device)
                 metadata.to(self.device)
-                self.batch.append((preloaded_sbi,target_s,metadata))
-            elif len(self.batch)==self.mini_batch_size:
+                self.batch.append((preloaded_sbi, target_s, metadata))
+            elif len(self.batch) == self.mini_batch_size:
 
-                self.fold=torchfold.Fold(self.fold_executor)
+                self.fold = torchfold.Fold(self.fold_executor)
                 self.test_one_batch(performance_estimators, batch_idx, sbi=None, target_s=None, errors=None)
-                for (preloaded_sbi,target_s,metadata) in self.batch:
+                for (preloaded_sbi, target_s, metadata) in self.batch:
                     preloaded_sbi.to(cpu_device)
                     target_s.to(cpu_device)
                     metadata.to(cpu_device)
-                self.batch=[]
+                self.batch = []
 
-            batch_idx+=1
+            batch_idx += 1
             if (batch_idx + 1) * self.mini_batch_size > self.max_validation_examples:
                 break
 
@@ -340,7 +342,6 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
     def test_one_batch(self, performance_estimators, batch_idx, sbi, target_s, metadata=None, errors=None):
 
-
         mapped, metadata, target_s = self.fold_batch()
         if errors is None:
             errors = torch.zeros(target_s[0].size())
@@ -359,7 +360,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                                                        output_s_p, targets=target_index)
         if not self.args.no_progress:
             progress_bar(batch_idx * self.mini_batch_size, self.max_validation_examples,
-                         performance_estimators.progress_message(["test_supervised_loss", "test_reconstruction_loss",
+                         performance_estimators.progress_message(["test_supervised_loss",
                                                                   "test_accuracy"]))
 
     def create_struct_model(self, problem, args, device=torch.device('cpu')):
@@ -370,7 +371,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                                                       sample_dim=args.struct_sample_dim, device=device)
         mappers = sbi_mappers_configuration[0]
         sbi_mapper = BatchOfRecords(mappers['BaseInformation'], device)
-        self.fold_executor = FoldExecutor(count_mapper=mappers['CountInfo'], sample_mapper=mappers['SampleInfo'], record_mapper=mappers['BaseInformation'])
+        self.fold_executor = FoldExecutor(count_mapper=mappers['CountInfo'], sample_mapper=mappers['SampleInfo'],
+                                          record_mapper=mappers['BaseInformation'])
 
         # determine feature size:
         import ujson
@@ -381,8 +383,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         mapped_features_size = mapped.size(1)
 
         output_size = problem.output_size("softmaxGenotype")
-        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.device,
-                                      args.use_batching)
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.device, mappers=mappers,
+                                      use_batching=args.use_batching)
         print(model)
         return model
 
@@ -390,7 +392,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         if not self.is_preloaded[dataset]:
             # Load all records into memory:
             print("Caching {} records into memory..".format(dataset))
-            self.cache_loaded_records[dataset]=[]
+            self.cache_loaded_records[dataset] = []
             data_provider = MultiThreadedCpuGpuDataProvider(
                 iterator=zip(dataset_loader_subset),
                 device=torch.device('cpu'),
@@ -414,10 +416,10 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                                                                    LoadedTensor(target_s[example_index].view(1, -1)),
                                                                    LoadedTensor(metadata[example_index].view(1, -1))))
                     if not self.args.no_progress:
-                        progress_bar(batch_idx * self.mini_batch_size, length, )
+                        progress_bar(batch_idx * self.mini_batch_size, length, msg="Caching " + dataset)
             finally:
                 data_provider.close()
-            self.is_preloaded[dataset]=True
+            self.is_preloaded[dataset] = True
             print("Done caching {}.".format(dataset))
 
     def shuffle_cache(self, dataset):
