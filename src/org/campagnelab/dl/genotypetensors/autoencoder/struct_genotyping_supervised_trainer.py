@@ -176,15 +176,22 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
         batch_idx = 0
         cpu_device = torch.device('cpu')
+        self.batch=[]
         for preloaded_sbi, target_s, metadata in self.cache_loaded_records['training']:
-            preloaded_sbi.to(self.device)
-            target_s.to(self.device)
-            metadata.to(self.device)
-            self.fold=torchfold.Fold(self.fold_executor)
-            self.train_one_batch(performance_estimators, batch_idx, preloaded_sbi, target_s.tensor(), metadata.tensor())
-            preloaded_sbi.to(cpu_device)
-            target_s.to(cpu_device)
-            metadata.to(cpu_device)
+            if len(self.batch)<self.mini_batch_size:
+                preloaded_sbi.to(self.device)
+                target_s.to(self.device)
+                metadata.to(self.device)
+                self.batch.append((preloaded_sbi,target_s,metadata))
+            elif len(self.batch)==self.mini_batch_size:
+
+                self.fold=torchfold.Fold(self.fold_executor)
+                self.train_one_batch(performance_estimators, batch_idx, None,None, None)
+                for (preloaded_sbi,target_s,metadata) in self.batch:
+                    preloaded_sbi.to(cpu_device)
+                    target_s.to(cpu_device)
+                    metadata.to(cpu_device)
+                self.batch=[]
             batch_idx += 1
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
@@ -199,11 +206,29 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         snp_weight = 1.0
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
-        mapped=sbi.mapper.fold(self.fold, "root", sbi)
 
-        features = self.fold.apply(self.fold_executor,[[mapped]])[0]#self.net(sbi)
-        output_s=self.net.classifier(features.view(-1)).view(1,-1)
+        sbi=[]
+        target_s=[]
+        metadata=[]
+        max_to_sequence_length=-1
+        for batch in self.batch:
+            sbi.append(batch[0])
+            target_s.append(batch[1])
+            metadata.append(batch[2])
+        mapped=[]
+        lengths={'toSequence':-1,'fromSequence':-1}
+        for s in sbi:
+            lengths=s.mapper.max_lengths(s,lengths)
+
+        target_s=torch.cat([t.tensor() for t in target_s], dim=0)
+        metadata=torch.cat([t.tensor() for t in metadata], dim=0)
+        for s in sbi: mapped.append(s.mapper.fold(self.fold, "root", s,lengths=lengths))
+
+
+        features = self.fold.apply(self.fold_executor,[mapped])[0]#self.net(sbi)
+        output_s=self.net.classifier(features.view(self.mini_batch_size,-1)).view(self.mini_batch_size,-1)
         output_s_p = self.get_p(output_s)
+
         _, target_index = torch.max(target_s, dim=1)
         supervised_loss = self.criterion_classifier(output_s, target_s)
 

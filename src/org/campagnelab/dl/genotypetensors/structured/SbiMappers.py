@@ -21,6 +21,14 @@ def get_indices_in_message(mapper, message):
 use_mean_to_map_nwf = False
 
 
+def pad_trim( seq_tensor, seq_length):
+    if seq_tensor.size(1) < seq_length:
+        larger = torch.zeros(seq_tensor.size(0), seq_length).type(seq_tensor.dtype).to(seq_tensor)
+        larger[:, 0:seq_tensor.size(1)] = seq_tensor
+        return larger
+    else:
+        return seq_tensor[:, 0:seq_length]
+
 class LoadedSequence(LoadedTensor):
     def __init__(self, sequence, base_to_index):
         # we cache a tensor of dimension 1 x seq_length, with one byte per base:
@@ -59,8 +67,11 @@ class MapSequence(StructuredEmbedding):
         return self.map_sequence.simple_forward(
             self.map_bases.loaded_forward(preloaded))
 
-    def fold(self, fold, prefix, preloaded):
-        return fold.add(prefix + "_sequence", preloaded.tensor())
+    def fold(self, fold, prefix, preloaded, max_sequence_length=-1):
+        tensor = preloaded.tensor()
+        if max_sequence_length!=-1:
+            tensor=pad_trim(tensor,max_sequence_length)
+        return fold.add(prefix + "_sequence", tensor)
 
     def simple_forward(self, tensor):
         return self.map_sequence.simple_forward(
@@ -136,22 +147,34 @@ class MapBaseInformation(StructuredEmbedding):
             # the sample mapper will not map fromSequence:
             [self.sample_mapper.loaded_forward(sample) for sample in preloaded.samples])
 
-    def fold(self, fold, prefix, preloaded):
-        max_seq_length=-1
-        for counts in [sample.counts for sample in preloaded.samples]:
-            for count in counts:
-                max_seq_length=max(count.leaf_tensors['toSequence'].seq_length,max_seq_length)
+    def fold(self, fold, prefix, preloaded,lengths=None):
+
+        lengths=self.max_lengths(preloaded,lengths)
 
         #print("max_seq_length: {} ".format(max_seq_length))
         mapped = ([self.map_sequence.fold(fold, prefix + "_ref_base", preloaded.referenceBase)] +
                   [self.map_sequence.fold(fold, prefix + "_genomic_context", preloaded.genomicSequenceContext)] +
                   # each sample has a unique from (same across all counts), which gets mapped and concatenated
                   # only once here:
-                  [self.map_sequence.fold(fold, prefix + "_from_sequence", preloaded.fromSequence)] +
+                  [self.map_sequence.fold(fold, prefix + "_from_sequence", preloaded.fromSequence, lengths['fromSequence'])] +
                   # the sample mapper will not map fromSequence:
-                  [self.sample_mapper.fold(fold, prefix, sample,max_seq_length) for sample in preloaded.samples])
+                  [self.sample_mapper.fold(fold, prefix, sample,lengths) for sample in preloaded.samples])
         return fold.add(prefix + "_record_reduce_count", *mapped)
 
+    def max_lengths(self,preloaded,lengths):
+        # Look for sequences under count leaf_tensors:
+        for counts in [sample.counts for sample in preloaded.samples]:
+            for count in counts:
+                for key in lengths :
+                    if key in count.leaf_tensors.keys():
+                        max_seq_length=lengths[key]
+                        lengths[key]=max(count.leaf_tensors[key].seq_length,max_seq_length)
+        # check if sequence is a field of preloaded:
+        for key in lengths.keys():
+            if hasattr(preloaded,key):
+                length=getattr(preloaded,key).seq_length
+                lengths[key] = max(length, lengths[key] )
+        return lengths
 
 class LoadedSample(LoadedTensor):
     def __init__(self, loaded_counts, mapper):
@@ -355,7 +378,7 @@ class MapCountInfo(StructuredEmbedding):
 
         return self.reduce_count(mapped)
 
-    def fold(self, fold, prefix, preloaded, max_seq_length=None):
+    def fold(self, fold, prefix, preloaded, lengths=None):
         prefix += "_count"
         mapped_gobyGenotypeIndex = fold.add(prefix + "_map_gobyGenotypeIndex",
                                             preloaded.leaf_tensors['gobyGenotypeIndex'].tensor())
@@ -366,8 +389,9 @@ class MapCountInfo(StructuredEmbedding):
 
         # NB: fromSequence was mapped at the level of BaseInformation.
         to_sequence_tensor = preloaded.leaf_tensors['toSequence'].tensor()
-        if max_seq_length is not None and to_sequence_tensor.size(1) != max_seq_length:
-            to_sequence_tensor = self.pad_trim(to_sequence_tensor,max_seq_length)
+        if lengths is not None and to_sequence_tensor.size(1) != lengths['toSequence']:
+            to_sequence_tensor = pad_trim(to_sequence_tensor,lengths['toSequence'])
+
         mapped_to = fold.add(prefix + "_map_sequence", to_sequence_tensor)
 
         mapped_genotypeCountForwardStrand = fold.add(prefix + "_map_count",
@@ -388,13 +412,7 @@ class MapCountInfo(StructuredEmbedding):
 
         return fold.add(prefix + '_reduce_count', *mapped)
 
-    def pad_trim(self, seq_tensor, seq_length):
-        if seq_tensor.size(1)<seq_length:
-            larger=torch.zeros(seq_tensor.size(0),seq_length).type(seq_tensor.dtype).to(seq_tensor)
-            larger[:,0:seq_tensor.size(1)]=seq_tensor
-            return larger
-        else:
-            return seq_tensor[:,0:seq_length]
+
 
 class FrequencyMapper(StructuredEmbedding):
     def __init__(self, device=None):

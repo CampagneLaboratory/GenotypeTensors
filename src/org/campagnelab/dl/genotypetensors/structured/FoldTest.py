@@ -155,7 +155,7 @@ class PreloadTestCase(unittest.TestCase):
 
         record = ujson.loads(sbi_json_string)
 
-        loaded = batch_of_records.preload([record])
+        loaded = batch_of_records.preload([record,record])
         # move preloaded tensors to cuda:
         loaded.to(device)
         mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
