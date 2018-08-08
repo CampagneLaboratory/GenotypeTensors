@@ -1,4 +1,6 @@
+import collections
 import concurrent
+import random
 from concurrent.futures import ThreadPoolExecutor
 
 import torch
@@ -177,6 +179,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         batch_idx = 0
         cpu_device = torch.device('cpu')
         self.batch=[]
+        self.shuffle_cache('training')
         for preloaded_sbi, target_s, metadata in self.cache_loaded_records['training']:
             if len(self.batch)<self.mini_batch_size:
                 preloaded_sbi.to(self.device)
@@ -207,23 +210,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
 
-        sbi=[]
-        target_s=[]
-        metadata=[]
-        max_to_sequence_length=-1
-        for batch in self.batch:
-            sbi.append(batch[0])
-            target_s.append(batch[1])
-            metadata.append(batch[2])
-        mapped=[]
-        lengths={'toSequence':-1,'fromSequence':-1}
-        for s in sbi:
-            lengths=s.mapper.max_lengths(s,lengths)
-
-        target_s=torch.cat([t.tensor() for t in target_s], dim=0)
-        metadata=torch.cat([t.tensor() for t in metadata], dim=0)
-        for s in sbi: mapped.append(s.mapper.fold(self.fold, "root", s,lengths=lengths))
-
+        mapped, metadata, target_s = self.fold_batch()
 
         features = self.fold.apply(self.fold_executor,[mapped])[0]#self.net(sbi)
         output_s=self.net.classifier(features.view(self.mini_batch_size,-1)).view(self.mini_batch_size,-1)
@@ -248,6 +235,24 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                          self.max_training_examples,
                          performance_estimators.progress_message(
                              ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
+
+    def fold_batch(self):
+        sbi = []
+        target_s = []
+        metadata = []
+        max_to_sequence_length = -1
+        for batch in self.batch:
+            sbi.append(batch[0])
+            target_s.append(batch[1])
+            metadata.append(batch[2])
+        mapped = []
+        lengths = {'toSequence': -1, 'fromSequence': -1}
+        for s in sbi:
+            lengths = s.mapper.max_lengths(s, lengths)
+        target_s = torch.cat([t.tensor() for t in target_s], dim=0)
+        metadata = torch.cat([t.tensor() for t in metadata], dim=0)
+        for s in sbi: mapped.append(s.mapper.fold(self.fold, "root", s, lengths=lengths))
+        return mapped, metadata, target_s
 
     def map_sbi(self, sbi):
         # process mapping of sbi messages in parallel:
@@ -289,15 +294,24 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         batch_idx = 0
         cpu_device = torch.device('cpu')
         self.net.eval()
+        self.batch=[]
+
         for preloaded_sbi, target_s, metadata in self.cache_loaded_records['validation']:
-            preloaded_sbi.to(self.device)
-            target_s.to(self.device)
-            metadata.to(self.device)
-            self.fold = torchfold.Fold(self.fold_executor)
-            self.test_one_batch(performance_estimators, batch_idx, preloaded_sbi, target_s.tensor(), errors=None)
-            preloaded_sbi.to(cpu_device)
-            target_s.to(cpu_device)
-            metadata.to(cpu_device)
+            if len(self.batch)<self.mini_batch_size:
+                preloaded_sbi.to(self.device)
+                target_s.to(self.device)
+                metadata.to(self.device)
+                self.batch.append((preloaded_sbi,target_s,metadata))
+            elif len(self.batch)==self.mini_batch_size:
+
+                self.fold=torchfold.Fold(self.fold_executor)
+                self.test_one_batch(performance_estimators, batch_idx, sbi=None, target_s=None, errors=None)
+                for (preloaded_sbi,target_s,metadata) in self.batch:
+                    preloaded_sbi.to(cpu_device)
+                    target_s.to(cpu_device)
+                    metadata.to(cpu_device)
+                self.batch=[]
+
             batch_idx+=1
             if (batch_idx + 1) * self.mini_batch_size > self.max_validation_examples:
                 break
@@ -325,13 +339,15 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         return performance_estimators
 
     def test_one_batch(self, performance_estimators, batch_idx, sbi, target_s, metadata=None, errors=None):
+
+
+        mapped, metadata, target_s = self.fold_batch()
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 
-        mapped = sbi.mapper.fold(self.fold, "root", sbi)
+        features = self.fold.apply(self.fold_executor, [mapped])[0]  # self.net(sbi)
+        output_s = self.net.classifier(features.view(self.mini_batch_size, -1)).view(self.mini_batch_size, -1)
 
-        features = self.fold.apply(self.fold_executor, [[mapped]])[0]  # self.net(sbi)
-        output_s = self.net.classifier(features.view(-1)).view(1, -1)
         output_s_p = self.get_p(output_s)
 
         supervised_loss = self.criterion_classifier(output_s, target_s)
@@ -403,6 +419,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                 data_provider.close()
             self.is_preloaded[dataset]=True
             print("Done caching {}.".format(dataset))
+
+    def shuffle_cache(self, dataset):
+        random.shuffle(self.cache_loaded_records[dataset])
 
 
 sbi_json_string = '{"type":"BaseInformation","referenceBase":"A","genomicSequenceContext":"GCAGATATACTTCACAGCCCACGCTGACTCTGCCAAGCACA","samples":[{"type":"SampleInfo","counts":[{"type":"CountInfo","matchesReference":true,"isCalled":true,"isIndel":false,"fromSequence":"A","toSequence":"A","genotypeCountForwardStrand":7,"genotypeCountReverseStrand":32,"gobyGenotypeIndex":0,"qualityScoresForwardStrand":[{"type":"NumberWithFrequency","frequency":7,"number":40}],"qualityScoresReverseStrand":[{"type":"NumberWithFrequency","frequency":32,"number":40}],"readIndicesForwardStrand":[{"type":"NumberWithFrequency","frequency":1,"number":23},{"type":"NumberWithFrequency","frequency":1,"number":30},{"type":"NumberWithFrequency","frequency":5,"number":34}],"readIndicesReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":6},{"type":"NumberWithFrequency","frequency":1,"number":22},{"type":"NumberWithFrequency","frequency":1,"number":28},{"type":"NumberWithFrequency","frequency":1,"number":31},{"type":"NumberWithFrequency","frequency":1,"number":34},{"type":"NumberWithFrequency","frequency":1,"number":35},{"type":"NumberWithFrequency","frequency":1,"number":44},{"type":"NumberWithFrequency","frequency":1,"number":50},{"type":"NumberWithFrequency","frequency":1,"number":62},{"type":"NumberWithFrequency","frequency":1,"number":63},{"type":"NumberWithFrequency","frequency":1,"number":68},{"type":"NumberWithFrequency","frequency":2,"number":75},{"type":"NumberWithFrequency","frequency":2,"number":76},{"type":"NumberWithFrequency","frequency":1,"number":81},{"type":"NumberWithFrequency","frequency":1,"number":83},{"type":"NumberWithFrequency","frequency":1,"number":88},{"type":"NumberWithFrequency","frequency":1,"number":89},{"type":"NumberWithFrequency","frequency":1,"number":100},{"type":"NumberWithFrequency","frequency":1,"number":104},{"type":"NumberWithFrequency","frequency":1,"number":109},{"type":"NumberWithFrequency","frequency":1,"number":117},{"type":"NumberWithFrequency","frequency":1,"number":118},{"type":"NumberWithFrequency","frequency":1,"number":125},{"type":"NumberWithFrequency","frequency":1,"number":133},{"type":"NumberWithFrequency","frequency":2,"number":138},{"type":"NumberWithFrequency","frequency":4,"number":139}],"readMappingQualityForwardStrand":[{"type":"NumberWithFrequency","frequency":7,"number":60}],"readMappingQualityReverseStrand":[{"type":"NumberWithFrequency","frequency":32,"number":60}],"numVariationsInReads":[{"type":"NumberWithFrequency","frequency":15,"number":0},{"type":"NumberWithFrequency","frequency":12,"number":1},{"type":"NumberWithFrequency","frequency":8,"number":2},{"type":"NumberWithFrequency","frequency":4,"number":3}],"insertSizes":[{"type":"NumberWithFrequency","frequency":1,"number":-520},{"type":"NumberWithFrequency","frequency":1,"number":-488},{"type":"NumberWithFrequency","frequency":1,"number":-481},{"type":"NumberWithFrequency","frequency":1,"number":-469},{"type":"NumberWithFrequency","frequency":1,"number":-467},{"type":"NumberWithFrequency","frequency":1,"number":-450},{"type":"NumberWithFrequency","frequency":1,"number":-441},{"type":"NumberWithFrequency","frequency":1,"number":-429},{"type":"NumberWithFrequency","frequency":1,"number":-427},{"type":"NumberWithFrequency","frequency":1,"number":-412},{"type":"NumberWithFrequency","frequency":1,"number":-411},{"type":"NumberWithFrequency","frequency":1,"number":-382},{"type":"NumberWithFrequency","frequency":1,"number":-375},{"type":"NumberWithFrequency","frequency":1,"number":-367},{"type":"NumberWithFrequency","frequency":1,"number":-361},{"type":"NumberWithFrequency","frequency":1,"number":-356},{"type":"NumberWithFrequency","frequency":1,"number":-349},{"type":"NumberWithFrequency","frequency":1,"number":-342},{"type":"NumberWithFrequency","frequency":1,"number":-339},{"type":"NumberWithFrequency","frequency":2,"number":-337},{"type":"NumberWithFrequency","frequency":1,"number":-310},{"type":"NumberWithFrequency","frequency":1,"number":-301},{"type":"NumberWithFrequency","frequency":1,"number":-294},{"type":"NumberWithFrequency","frequency":1,"number":-292},{"type":"NumberWithFrequency","frequency":1,"number":-274},{"type":"NumberWithFrequency","frequency":6,"number":0},{"type":"NumberWithFrequency","frequency":1,"number":318},{"type":"NumberWithFrequency","frequency":1,"number":339},{"type":"NumberWithFrequency","frequency":1,"number":397},{"type":"NumberWithFrequency","frequency":1,"number":398},{"type":"NumberWithFrequency","frequency":1,"number":410},{"type":"NumberWithFrequency","frequency":1,"number":426},{"type":"NumberWithFrequency","frequency":1,"number":511}],"targetAlignedLengths":[{"type":"NumberWithFrequency","frequency":2,"number":39},{"type":"NumberWithFrequency","frequency":2,"number":55},{"type":"NumberWithFrequency","frequency":2,"number":61},{"type":"NumberWithFrequency","frequency":2,"number":64},{"type":"NumberWithFrequency","frequency":2,"number":67},{"type":"NumberWithFrequency","frequency":2,"number":68},{"type":"NumberWithFrequency","frequency":2,"number":69},{"type":"NumberWithFrequency","frequency":2,"number":77},{"type":"NumberWithFrequency","frequency":2,"number":82},{"type":"NumberWithFrequency","frequency":4,"number":83},{"type":"NumberWithFrequency","frequency":2,"number":86},{"type":"NumberWithFrequency","frequency":2,"number":95},{"type":"NumberWithFrequency","frequency":2,"number":96},{"type":"NumberWithFrequency","frequency":2,"number":101},{"type":"NumberWithFrequency","frequency":4,"number":108},{"type":"NumberWithFrequency","frequency":4,"number":109},{"type":"NumberWithFrequency","frequency":2,"number":114},{"type":"NumberWithFrequency","frequency":2,"number":116},{"type":"NumberWithFrequency","frequency":4,"number":121},{"type":"NumberWithFrequency","frequency":2,"number":132},{"type":"NumberWithFrequency","frequency":2,"number":136},{"type":"NumberWithFrequency","frequency":2,"number":142},{"type":"NumberWithFrequency","frequency":2,"number":144},{"type":"NumberWithFrequency","frequency":8,"number":150},{"type":"NumberWithFrequency","frequency":4,"number":151},{"type":"NumberWithFrequency","frequency":12,"number":171}],"queryAlignedLengths":[{"type":"NumberWithFrequency","frequency":1,"number":39},{"type":"NumberWithFrequency","frequency":1,"number":55},{"type":"NumberWithFrequency","frequency":1,"number":61},{"type":"NumberWithFrequency","frequency":1,"number":64},{"type":"NumberWithFrequency","frequency":1,"number":67},{"type":"NumberWithFrequency","frequency":1,"number":68},{"type":"NumberWithFrequency","frequency":1,"number":69},{"type":"NumberWithFrequency","frequency":1,"number":77},{"type":"NumberWithFrequency","frequency":1,"number":82},{"type":"NumberWithFrequency","frequency":2,"number":83},{"type":"NumberWithFrequency","frequency":1,"number":86},{"type":"NumberWithFrequency","frequency":1,"number":95},{"type":"NumberWithFrequency","frequency":1,"number":96},{"type":"NumberWithFrequency","frequency":1,"number":101},{"type":"NumberWithFrequency","frequency":2,"number":108},{"type":"NumberWithFrequency","frequency":2,"number":109},{"type":"NumberWithFrequency","frequency":1,"number":114},{"type":"NumberWithFrequency","frequency":1,"number":116},{"type":"NumberWithFrequency","frequency":1,"number":121},{"type":"NumberWithFrequency","frequency":1,"number":122},{"type":"NumberWithFrequency","frequency":1,"number":133},{"type":"NumberWithFrequency","frequency":1,"number":137},{"type":"NumberWithFrequency","frequency":1,"number":142},{"type":"NumberWithFrequency","frequency":1,"number":145},{"type":"NumberWithFrequency","frequency":1,"number":150},{"type":"NumberWithFrequency","frequency":5,"number":151},{"type":"NumberWithFrequency","frequency":2,"number":171},{"type":"NumberWithFrequency","frequency":4,"number":172}],"queryPositions":[{"type":"NumberWithFrequency","frequency":39,"number":0}],"pairFlags":[{"type":"NumberWithFrequency","frequency":6,"number":16},{"type":"NumberWithFrequency","frequency":14,"number":83},{"type":"NumberWithFrequency","frequency":6,"number":99},{"type":"NumberWithFrequency","frequency":12,"number":147},{"type":"NumberWithFrequency","frequency":1,"number":163}],"distancesToReadVariationsForwardStrand":[{"type":"NumberWithFrequency","frequency":2,"number":-70},{"type":"NumberWithFrequency","frequency":4,"number":-29}],"distancesToReadVariationsReverseStrand":[{"type":"NumberWithFrequency","frequency":2,"number":-24},{"type":"NumberWithFrequency","frequency":1,"number":-15},{"type":"NumberWithFrequency","frequency":1,"number":-2},{"type":"NumberWithFrequency","frequency":1,"number":12},{"type":"NumberWithFrequency","frequency":1,"number":13},{"type":"NumberWithFrequency","frequency":1,"number":15},{"type":"NumberWithFrequency","frequency":13,"number":29},{"type":"NumberWithFrequency","frequency":1,"number":49},{"type":"NumberWithFrequency","frequency":3,"number":62},{"type":"NumberWithFrequency","frequency":9,"number":70},{"type":"NumberWithFrequency","frequency":1,"number":73}],"distanceToStartOfRead":[{"type":"NumberWithFrequency","frequency":1,"number":18},{"type":"NumberWithFrequency","frequency":1,"number":23},{"type":"NumberWithFrequency","frequency":1,"number":26},{"type":"NumberWithFrequency","frequency":1,"number":30},{"type":"NumberWithFrequency","frequency":30,"number":33},{"type":"NumberWithFrequency","frequency":5,"number":34}],"distanceToEndOfRead":[{"type":"NumberWithFrequency","frequency":1,"number":6},{"type":"NumberWithFrequency","frequency":1,"number":22},{"type":"NumberWithFrequency","frequency":1,"number":28},{"type":"NumberWithFrequency","frequency":1,"number":31},{"type":"NumberWithFrequency","frequency":1,"number":34},{"type":"NumberWithFrequency","frequency":2,"number":35},{"type":"NumberWithFrequency","frequency":1,"number":44},{"type":"NumberWithFrequency","frequency":1,"number":48},{"type":"NumberWithFrequency","frequency":1,"number":49},{"type":"NumberWithFrequency","frequency":1,"number":50},{"type":"NumberWithFrequency","frequency":1,"number":52},{"type":"NumberWithFrequency","frequency":1,"number":62},{"type":"NumberWithFrequency","frequency":1,"number":63},{"type":"NumberWithFrequency","frequency":1,"number":68},{"type":"NumberWithFrequency","frequency":2,"number":75},{"type":"NumberWithFrequency","frequency":2,"number":76},{"type":"NumberWithFrequency","frequency":1,"number":81},{"type":"NumberWithFrequency","frequency":1,"number":83},{"type":"NumberWithFrequency","frequency":1,"number":88},{"type":"NumberWithFrequency","frequency":1,"number":89},{"type":"NumberWithFrequency","frequency":1,"number":100},{"type":"NumberWithFrequency","frequency":1,"number":104},{"type":"NumberWithFrequency","frequency":1,"number":109},{"type":"NumberWithFrequency","frequency":1,"number":111},{"type":"NumberWithFrequency","frequency":1,"number":117},{"type":"NumberWithFrequency","frequency":1,"number":118},{"type":"NumberWithFrequency","frequency":1,"number":121},{"type":"NumberWithFrequency","frequency":1,"number":125},{"type":"NumberWithFrequency","frequency":1,"number":128},{"type":"NumberWithFrequency","frequency":1,"number":133},{"type":"NumberWithFrequency","frequency":2,"number":138},{"type":"NumberWithFrequency","frequency":4,"number":139}]},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"C","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":1,"gobyGenotypeIndex":2,"qualityScoresForwardStrand":[],"qualityScoresReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":7}],"readIndicesForwardStrand":[],"readIndicesReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":115}],"readMappingQualityForwardStrand":[],"readMappingQualityReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":60}],"numVariationsInReads":[{"type":"NumberWithFrequency","frequency":1,"number":2}],"insertSizes":[{"type":"NumberWithFrequency","frequency":1,"number":-301}],"targetAlignedLengths":[{"type":"NumberWithFrequency","frequency":2,"number":148}],"queryAlignedLengths":[{"type":"NumberWithFrequency","frequency":1,"number":148}],"queryPositions":[{"type":"NumberWithFrequency","frequency":1,"number":0}],"pairFlags":[{"type":"NumberWithFrequency","frequency":1,"number":147}],"distancesToReadVariationsForwardStrand":[],"distancesToReadVariationsReverseStrand":[{"type":"NumberWithFrequency","frequency":1,"number":-29},{"type":"NumberWithFrequency","frequency":1,"number":0}],"distanceToStartOfRead":[{"type":"NumberWithFrequency","frequency":1,"number":33}],"distanceToEndOfRead":[{"type":"NumberWithFrequency","frequency":1,"number":115}]},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"T","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":1,"qualityScoresForwardStrand":[],"qualityScoresReverseStrand":[],"readIndicesForwardStrand":[],"readIndicesReverseStrand":[],"readMappingQualityForwardStrand":[],"readMappingQualityReverseStrand":[],"numVariationsInReads":[],"insertSizes":[],"targetAlignedLengths":[],"queryAlignedLengths":[],"queryPositions":[],"pairFlags":[],"distancesToReadVariationsForwardStrand":[],"distancesToReadVariationsReverseStrand":[],"distanceToStartOfRead":[],"distanceToEndOfRead":[]},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"G","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":3,"qualityScoresForwardStrand":[],"qualityScoresReverseStrand":[],"readIndicesForwardStrand":[],"readIndicesReverseStrand":[],"readMappingQualityForwardStrand":[],"readMappingQualityReverseStrand":[],"numVariationsInReads":[],"insertSizes":[],"targetAlignedLengths":[],"queryAlignedLengths":[],"queryPositions":[],"pairFlags":[],"distancesToReadVariationsForwardStrand":[],"distancesToReadVariationsReverseStrand":[],"distanceToStartOfRead":[],"distanceToEndOfRead":[]},{"type":"CountInfo","matchesReference":false,"isCalled":false,"isIndel":false,"fromSequence":"A","toSequence":"N","genotypeCountForwardStrand":0,"genotypeCountReverseStrand":0,"gobyGenotypeIndex":4,"qualityScoresForwardStrand":[],"qualityScoresReverseStrand":[],"readIndicesForwardStrand":[],"readIndicesReverseStrand":[],"readMappingQualityForwardStrand":[],"readMappingQualityReverseStrand":[],"numVariationsInReads":[],"insertSizes":[],"targetAlignedLengths":[],"queryAlignedLengths":[],"queryPositions":[],"pairFlags":[],"distancesToReadVariationsForwardStrand":[],"distancesToReadVariationsReverseStrand":[],"distanceToStartOfRead":[],"distanceToEndOfRead":[]}]}]}'
