@@ -60,7 +60,6 @@ if __name__ == '__main__':
     parser.add_argument('--num-validation', '-v','-x', type=int, help='Maximum number of validation examples to use.',
                         default=sys.maxsize)
     parser.add_argument("--num-workers", type=int, default=0, help='Number of workers to feed data to the GPUs.')
-    parser.add_argument("--num-trainers", type=int, default=0, help='Number of model trainer concurrently used.')
     parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=32)
     parser.add_argument('--max-epochs', type=int, help='Maximum number of epochs to train for.', default=10)
     parser.add_argument('--max-models', type=int, help='Maximum number of models to train in one shot.',
@@ -93,9 +92,9 @@ if __name__ == '__main__':
     with open(args.commands, "r") as command_file:
 
         trainer_arguments = command_file.readlines()
-        if len(trainer_arguments)>args.num_trainers:
-            trainer_arguments=trainer_arguments[0:args.num_trainers]
-        count = len(trainer_arguments)
+        if len(trainer_arguments)>args.max_models:
+            trainer_arguments=trainer_arguments[0:args.max_models]
+        count =len(trainer_arguments)
         i = 0
 
     if args.num_models_per_gpu == 0:
