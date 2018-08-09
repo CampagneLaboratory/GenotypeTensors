@@ -197,8 +197,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                     preloaded_sbi.to(cpu_device)
                     target_s.to(cpu_device)
                     metadata.to(cpu_device)
+                batch_idx += 1
                 self.batch = []
-            batch_idx += 1
+
             if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                 break
 
@@ -312,9 +313,10 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                     preloaded_sbi.to(cpu_device)
                     target_s.to(cpu_device)
                     metadata.to(cpu_device)
+                batch_idx += 1
                 self.batch = []
 
-            batch_idx += 1
+
             if (batch_idx + 1) * self.mini_batch_size > self.max_validation_examples:
                 break
 
