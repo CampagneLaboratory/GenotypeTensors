@@ -43,6 +43,12 @@ class LoadedTensor:
         self.tensor_ = self.tensor_.to(device)
         return self
 
+
+    def clone(self, device, non_blocking=True):
+        """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """""
+        copy=LoadedTensor(torch.zeros(size=self.tensor_.size(),device=device).copy_(self.tensor_,non_blocking=non_blocking),self.mapper)
+        return copy
+
     def tensor(self):
         """Return the tensor. """
         return self.tensor_

@@ -21,7 +21,7 @@ def get_indices_in_message(mapper, message):
 use_mean_to_map_nwf = False
 
 
-def pad_trim( seq_tensor, seq_length):
+def pad_trim(seq_tensor, seq_length):
     if seq_tensor.size(1) < seq_length:
         larger = torch.zeros(seq_tensor.size(0), seq_length).type(seq_tensor.dtype).to(seq_tensor)
         larger[:, 0:seq_tensor.size(1)] = seq_tensor
@@ -29,13 +29,24 @@ def pad_trim( seq_tensor, seq_length):
     else:
         return seq_tensor[:, 0:seq_length]
 
-class LoadedSequence(LoadedTensor):
-    def __init__(self, sequence, base_to_index):
-        # we cache a tensor of dimension 1 x seq_length, with one byte per base:
 
-        super(LoadedSequence, self).__init__(
-            torch.Tensor(list([base_to_index[b] for b in sequence])).type(dtype=torch.int8).view(1, -1))
-        self.seq_length=len(sequence)
+class LoadedSequence(LoadedTensor):
+    def __init__(self, sequence=None, base_to_index=None):
+        if isinstance(sequence, torch.Tensor):
+            tensor = sequence
+        else:
+            tensor = None
+        # we cache a tensor of dimension 1 x seq_length, with one byte per base:
+        if tensor is not None:
+            t = tensor
+        else:
+            t = torch.Tensor(list([base_to_index[b] for b in sequence])).type(dtype=torch.int8).view(1, -1)
+        super(LoadedSequence, self).__init__(tensor=t)
+        self.seq_length = len(sequence) if tensor is None else tensor.size(1)
+
+    def clone(self, device, non_blocking=True):
+        copy = LoadedSequence(super().clone(device, non_blocking).tensor_)
+        return copy
 
 
 class MapSequence(StructuredEmbedding):
@@ -69,8 +80,8 @@ class MapSequence(StructuredEmbedding):
 
     def fold(self, fold, prefix, preloaded, max_sequence_length=-1):
         tensor = preloaded.tensor()
-        if max_sequence_length!=-1:
-            tensor=pad_trim(tensor,max_sequence_length)
+        if max_sequence_length != -1:
+            tensor = pad_trim(tensor, max_sequence_length)
         return fold.add(prefix + "_sequence", tensor)
 
     def simple_forward(self, tensor):
@@ -79,16 +90,15 @@ class MapSequence(StructuredEmbedding):
 
 
 class LoadedMapBaseInformation(LoadedTensor):
-    def __init__(self, referenceBase, genomicSequenceContext, sequenceFrom, samples, base_to_index, num_samples,
+    def __init__(self, referenceBase, genomicSequenceContext, sequenceFrom, samples, num_samples,
                  mapper):
         super(LoadedMapBaseInformation, self).__init__(tensor=None, mapper=mapper)
-        self.referenceBase = LoadedSequence(referenceBase, base_to_index=base_to_index)
-        self.fromSequence = LoadedSequence(sequenceFrom, base_to_index=base_to_index)
-        self.genomicSequenceContext = LoadedSequence(genomicSequenceContext, base_to_index=base_to_index)
-        self.samples = [mapper.sample_mapper.preload(sample) for sample in samples]
+        self.referenceBase = referenceBase
+        self.fromSequence = sequenceFrom
+        self.genomicSequenceContext = genomicSequenceContext
+        self.samples = samples
         assert len(self.samples) == num_samples, "num_samples must match at this time. Sample padding not implemented."
-
-        self.sample_from = LoadedSequence(sequenceFrom, base_to_index=base_to_index)
+        self.sample_from = sequenceFrom
 
     def to(self, device, non_blocking=True):
         self.referenceBase = self.referenceBase.to(device, non_blocking=True)
@@ -97,6 +107,18 @@ class LoadedMapBaseInformation(LoadedTensor):
         self.fromSequence = self.fromSequence.to(device=device, non_blocking=True)
         return self
 
+    def clone(self, device, non_blocking=True):
+        """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """
+        copy = LoadedMapBaseInformation(referenceBase=self.referenceBase.clone(device, non_blocking=True),
+                                        genomicSequenceContext=self.genomicSequenceContext.clone(device,
+                                                                                                 non_blocking=True),
+                                        sequenceFrom=self.fromSequence.clone(device=device, non_blocking=True),
+                                        samples=[sample.clone(device, non_blocking=True) for sample in self.samples],
+                                        num_samples=len(self.samples),
+                                        mapper=self.mapper)
+
+        return copy
+
     def tensor(self):
         """Return the tensor. """
         return self.mapper.loaded_forward(self)
@@ -104,7 +126,7 @@ class LoadedMapBaseInformation(LoadedTensor):
 
 class MapBaseInformation(StructuredEmbedding):
     def __init__(self, sample_mapper, sample_dim, num_samples, ploidy=2, extra_genotypes=2,
-                 device=torch.device('cpu')):
+                 device=torch.device('cpu'), bases=('A', 'C', 'T', 'G', '-', 'N')):
         super().__init__(sample_dim, device)
         self.sample_mapper = sample_mapper
 
@@ -119,13 +141,21 @@ class MapBaseInformation(StructuredEmbedding):
         self.ploidy = ploidy
         self.extra_genotypes = extra_genotypes
 
+        self.base_to_index = {}
+        for base_index, base in enumerate(bases):
+            self.base_to_index[base[0]] = base_index
+
     def preload(self, input):
-        return LoadedMapBaseInformation(input['referenceBase'], input['genomicSequenceContext'],
-                                        input['samples'][0]['counts'][0]['fromSequence'],
-                                        samples=[sample for sample in input['samples'][0:self.num_samples]],
-                                        base_to_index=self.map_sequence.base_to_index,
-                                        num_samples=self.num_samples,
-                                        mapper=self)
+        referenceBase = LoadedSequence(input['referenceBase'], base_to_index=self.base_to_index)
+        fromSequence = LoadedSequence(input['samples'][0]['counts'][0]['fromSequence'],
+                                      base_to_index=self.base_to_index)
+        genomicSequenceContext = LoadedSequence(input['genomicSequenceContext'], base_to_index=self.base_to_index)
+        samples = [self.sample_mapper.preload(sample) for sample in input['samples'][0:self.num_samples]]
+
+
+        return LoadedMapBaseInformation(referenceBase=referenceBase,
+                                        genomicSequenceContext=genomicSequenceContext, sequenceFrom=fromSequence,
+                                        samples=samples, num_samples=len(samples), mapper=self)
 
     def forward(self, input):
         mapped_from = self.map_sequence(input['samples'][0]['counts'][0]['fromSequence'])
@@ -147,34 +177,37 @@ class MapBaseInformation(StructuredEmbedding):
             # the sample mapper will not map fromSequence:
             [self.sample_mapper.loaded_forward(sample) for sample in preloaded.samples])
 
-    def fold(self, fold, prefix, preloaded,lengths=None):
+    def fold(self, fold, prefix, preloaded, lengths=None):
+        if lengths is None:
+            lengths = {'toSequence': -1, 'fromSequence': -1}
+        lengths = self.max_lengths(preloaded, lengths)
 
-        lengths=self.max_lengths(preloaded,lengths)
-
-        #print("max_seq_length: {} ".format(max_seq_length))
+        # print("max_seq_length: {} ".format(max_seq_length))
         mapped = ([self.map_sequence.fold(fold, prefix + "_ref_base", preloaded.referenceBase)] +
                   [self.map_sequence.fold(fold, prefix + "_genomic_context", preloaded.genomicSequenceContext)] +
                   # each sample has a unique from (same across all counts), which gets mapped and concatenated
                   # only once here:
-                  [self.map_sequence.fold(fold, prefix + "_from_sequence", preloaded.fromSequence, lengths['fromSequence'])] +
+                  [self.map_sequence.fold(fold, prefix + "_from_sequence", preloaded.fromSequence,
+                                          lengths['fromSequence'])] +
                   # the sample mapper will not map fromSequence:
-                  [self.sample_mapper.fold(fold, prefix, sample,lengths) for sample in preloaded.samples])
+                  [self.sample_mapper.fold(fold, prefix, sample, lengths) for sample in preloaded.samples])
         return fold.add(prefix + "_record_reduce_count", *mapped)
 
-    def max_lengths(self,preloaded,lengths):
+    def max_lengths(self, preloaded, lengths):
         # Look for sequences under count leaf_tensors:
         for counts in [sample.counts for sample in preloaded.samples]:
             for count in counts:
-                for key in lengths :
+                for key in lengths:
                     if key in count.leaf_tensors.keys():
-                        max_seq_length=lengths[key]
-                        lengths[key]=max(count.leaf_tensors[key].seq_length,max_seq_length)
+                        max_seq_length = lengths[key]
+                        lengths[key] = max(count.leaf_tensors[key].seq_length, max_seq_length)
         # check if sequence is a field of preloaded:
         for key in lengths.keys():
-            if hasattr(preloaded,key):
-                length=getattr(preloaded,key).seq_length
-                lengths[key] = max(length, lengths[key] )
+            if hasattr(preloaded, key):
+                length = getattr(preloaded, key).seq_length
+                lengths[key] = max(length, lengths[key])
         return lengths
+
 
 class LoadedSample(LoadedTensor):
     def __init__(self, loaded_counts, mapper):
@@ -184,6 +217,12 @@ class LoadedSample(LoadedTensor):
     def to(self, device, non_blocking=True):
         self.counts = [count.to(device, non_blocking=True) for count in self.counts]
         return self
+
+    def clone(self, device, non_blocking=True):
+        """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """
+        copy = LoadedSample([count.clone(device, non_blocking=True) for count in self.counts], self.mapper)
+
+        return copy
 
 
 class MapSampleInfo(StructuredEmbedding):
@@ -219,8 +258,8 @@ class MapSampleInfo(StructuredEmbedding):
                                    preloaded.counts],
                                   pad_missing=True)
 
-    def fold(self, fold, prefix, preloaded,max_seq_length=None):
-        reduced_counts = [self.count_mapper.fold(fold, prefix, count,max_seq_length) for count in
+    def fold(self, fold, prefix, preloaded, max_seq_length=None):
+        reduced_counts = [self.count_mapper.fold(fold, prefix, count, max_seq_length) for count in
                           preloaded.counts]
         # emulate pad_missing:
         while len(reduced_counts) < len(self.reduce_counts.input_dims):
@@ -247,6 +286,17 @@ class LoadedCount(LoadedTensor):
             except Exception as e:
                 print("Error moving key {} to device {}: {}".format(key, device, e))
         return self
+
+    def clone(self, device, non_blocking=True):
+        """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """""
+        copy = LoadedCount(self.mapper)
+        for key in self.leaf_tensors.keys():
+            try:
+                source = self.leaf_tensors[key]
+                copy.leaf_tensors[key] = source.clone(device, non_blocking=non_blocking)
+            except Exception as e:
+                print("Error moving key {} to device {}: {}".format(key, device, e))
+        return copy
 
     def evaluate(self):
         self.mapper.loaded_forward()
@@ -390,7 +440,7 @@ class MapCountInfo(StructuredEmbedding):
         # NB: fromSequence was mapped at the level of BaseInformation.
         to_sequence_tensor = preloaded.leaf_tensors['toSequence'].tensor()
         if lengths is not None and to_sequence_tensor.size(1) != lengths['toSequence']:
-            to_sequence_tensor = pad_trim(to_sequence_tensor,lengths['toSequence'])
+            to_sequence_tensor = pad_trim(to_sequence_tensor, lengths['toSequence'])
 
         mapped_to = fold.add(prefix + "_map_sequence", to_sequence_tensor)
 
@@ -411,7 +461,6 @@ class MapCountInfo(StructuredEmbedding):
             mapped += [mapper.fold(fold, prefix + "_" + nf_name, values)]
 
         return fold.add(prefix + '_reduce_count', *mapped)
-
 
 
 class FrequencyMapper(StructuredEmbedding):
@@ -472,6 +521,14 @@ class LoadedNumberWithFrequency(LoadedTensor):
         self.numbers = self.numbers.to(device, non_blocking=non_blocking)
         self.frequencies = self.frequencies.to(device, non_blocking=non_blocking)
         return self
+
+    def clone(self, device, non_blocking=True):
+        """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """""
+        copy = LoadedNumberWithFrequency(
+            numbers=self.numbers.clone(device, non_blocking=non_blocking),
+            frequencies=self.frequencies.clone(device, non_blocking=non_blocking),
+            mapper=self.mapper)
+        return copy
 
     def tensor(self):
         assert False, "tensor() called on LoadedNumberWithFrequency"
@@ -567,6 +624,12 @@ class LoadedList(LoadedTensor):
         for tensor in self.loaded_tensors:
             tensor.to(device, non_blocking=non_blocking)
         return self
+
+    def clone(self, device, non_blocking=True):
+        """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """""
+        copy = LoadedList(loaded_tensors=[tensor.clone(device, non_blocking) for tensor in self.loaded_tensors],
+                          mapper=self.mapper)
+        return copy
 
     def tensor(self):
         return torch.cat([t.tensor() for t in self.loaded_tensors], dim=1)

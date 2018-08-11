@@ -60,6 +60,24 @@ class PreloadTestCase(unittest.TestCase):
         loaded.to(torch.device(cpu))
         print(mapped)
 
+    def test_preload_clone(self):
+        map_container = MapCountInfo(device=device)
+        import ujson
+        record = ujson.loads(sbi_json_string)
+        count = record['samples'][0]['counts'][0]
+        loaded=map_container.preload(count)
+        self.assertIsNotNone(loaded.clone(torch.device('cpu')))
+
+    def test_clone_record(self):
+        count_mapper = MapCountInfo(device=device,count_dim=32)
+        map_sample = MapSampleInfo(count_mapper=count_mapper, count_dim=32, sample_dim=64, num_counts=3, device=device)
+        map_container=MapBaseInformation(sample_mapper=map_sample, sample_dim=64, num_samples=1, device=device)
+        import ujson
+        record = ujson.loads(sbi_json_string)
+
+        loaded=map_container.preload(record)
+        self.assertIsNotNone(loaded.clone(torch.device('cpu')))
+
 
 if __name__ == '__main__':
     unittest.main()

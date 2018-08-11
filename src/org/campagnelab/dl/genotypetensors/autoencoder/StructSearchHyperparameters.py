@@ -269,12 +269,12 @@ if __name__ == '__main__':
         model_trainer.batch = []
         model_trainer.fold = torchfold.Fold(model_trainer.fold_executor)
         preloaded_sbi_tensors = model_trainer.net.sbi_mapper.preload(sbi)
-        target_s=target_s.clone()
-        metadata=metadata.clone()
+        #target_s=target_s.clone()
+        #metadata=metadata.clone()
         for example_index in range(target_s.size(0)):
-            model_trainer.batch.append((preloaded_sbi_tensors[example_index].to(device=cuda),
-                                                       LoadedTensor(target_s[example_index].view(1, -1)).to(device=cuda),
-                                                       LoadedTensor(metadata[example_index].view(1, -1)).to(device=cuda)))
+            model_trainer.batch.append((preloaded_sbi_tensors[example_index].clone(device=cuda),
+                                                       LoadedTensor(target_s[example_index].view(1, -1)).clone(device=cuda),
+                                                       LoadedTensor(metadata[example_index].view(1, -1)).clone(device=cuda)))
 
 
 
