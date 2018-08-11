@@ -141,7 +141,8 @@ if __name__ == '__main__':
             trainer_args.max_examples_per_epoch = trainer_args.num_training
         trainer_args.num_training = args.num_training
         trainer_args.num_validation = args.num_validation
-
+        trainer_args.no_progress = True
+        trainer_args.epoch_min_accuracy=-1
         print("Executing " + trainer_args.checkpoint_key)
 
         with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
@@ -187,6 +188,7 @@ if __name__ == '__main__':
                 num_classes = problem.output_size("softmaxGenotype")[0]
                 model_trainer.num_classes = num_classes
                 model_trainer.epsilon_label_smoothing = 0.1
+
                 return model_trainer.dreamup_target_for(category_prior=None,
                                                         num_classes=num_classes, input=None)
 
@@ -233,28 +235,33 @@ if __name__ == '__main__':
 
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 if args.mode == "supervised_direct":
-                    input_s = data_dict["training"]["sbi"]
+                    sbi = data_dict["training"]["sbi"]
                     target_s = data_dict["training"]["softmaxGenotype"]
                     metadata = data_dict["training"]["metaData"]
-                    todo_arguments = [input_s, target_s, metadata]
+                    # preload the sbi, assumes that all mappers yield the same preloaded tensors:
+                    preloaded_sbi_tensors = trainers[0].net.sbi_mapper.preload(sbi)
+                    todo_arguments = [preloaded_sbi_tensors, target_s, metadata]
 
-                batch_size = len(todo_arguments[0])
+                batch_size = len(todo_arguments[1])
                 num_batches += 1
                 futures = []
                 for model_trainer in trainers:
                     def to_do(model_trainer, batch_idx, todo_arguments):
                         if args.mode == "supervised_direct":
-                            sbi, target_s, metadata = todo_arguments
+                            preloaded_sbi_tensors, target_s, metadata = todo_arguments
 
-                            prepare_batch(model_trainer, sbi, target_s, metadata)
+                            prepare_batch(model_trainer, preloaded_sbi_tensors, target_s, metadata)
                             model_trainer.net.train()
                             model_trainer.train_one_batch(model_trainer.training_performance_estimators,
                                                           batch_idx, None,None,None)
-
+                            del model_trainer.batch
 
                     futures += [thread_executor.submit(to_do, model_trainer, batch_idx, todo_arguments)]
 
                 concurrent.futures.wait(futures)
+                progress_bar(batch_idx * args.mini_batch_size,
+                             args.num_training,
+                             msg="Training phase")
                 # Report any exceptions encountered in to_do:
                 raise_to_do_exceptions(futures)
                 if (batch_idx + 1) * batch_size > args.num_training:
@@ -265,12 +272,12 @@ if __name__ == '__main__':
                 del train_loader
 
 
-    def prepare_batch(model_trainer, sbi, target_s, metadata):
+    def prepare_batch(model_trainer, preloaded_sbi_tensors, target_s, metadata):
         model_trainer.batch = []
         model_trainer.fold = torchfold.Fold(model_trainer.fold_executor)
-        preloaded_sbi_tensors = model_trainer.net.sbi_mapper.preload(sbi)
-        #target_s=target_s.clone()
-        #metadata=metadata.clone()
+        #preloaded_sbi_tensors = model_trainer.net.sbi_mapper.preload(sbi)
+
+
         for example_index in range(target_s.size(0)):
             model_trainer.batch.append((preloaded_sbi_tensors[example_index].clone(device=cuda),
                                                        LoadedTensor(target_s[example_index].view(1, -1)).clone(device=cuda),
@@ -295,21 +302,26 @@ if __name__ == '__main__':
 
         try:
             for batch_idx, (_, data_dict) in enumerate(data_provider):
-                input_s = data_dict["validation"]["sbi"]
+                sbi = data_dict["validation"]["sbi"]
                 target_s = data_dict["validation"]["softmaxGenotype"]
                 metadata = data_dict["validation"]["metaData"]
+                preloaded_sbi_tensors = trainers[0].net.sbi_mapper.preload(sbi)
                 futures = []
                 for model_trainer in trainers:
-                    def to_do(model_trainer, sbi, target_s, metadata, errors):
-                        prepare_batch(model_trainer,sbi,target_s,metadata)
+                    def to_do(model_trainer, preloaded_sbi_tensors, target_s, metadata, errors):
+                        prepare_batch(model_trainer,preloaded_sbi_tensors,target_s,metadata)
                         model_trainer.net.eval()
 
                         model_trainer.test_one_batch(model_trainer.test_performance_estimators,
                                                      batch_idx,None, None, None,
                                                      errors=errors)
+                        del model_trainer.batch
 
-                    futures += [thread_executor.submit(to_do, model_trainer, input_s, target_s, metadata, None)]
+                    futures += [thread_executor.submit(to_do, model_trainer, preloaded_sbi_tensors, target_s, metadata, None)]
                 concurrent.futures.wait(futures)
+                progress_bar(batch_idx * args.mini_batch_size,
+                             args.num_validation,
+                             msg="Validation phase")
                 # Report any exceptions encountered in to_do:
                 raise_to_do_exceptions(futures)
         finally:
