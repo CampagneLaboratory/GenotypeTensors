@@ -159,10 +159,10 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             self.criterion_classifier = MultiLabelSoftMarginLoss(weight=weights)
 
     def get_test_metric_name(self):
-        return "test_accuracy"
+        return "test_supervised_loss"
 
     def is_better(self, metric, previous_metric):
-        return metric > previous_metric
+        return metric < previous_metric
 
     def train_supervised(self, epoch):
         performance_estimators = PerformanceList()
