@@ -79,7 +79,7 @@ class PreloadTestCase(unittest.TestCase):
         loaded = count_mapper.preload(count)
         # move preloaded tensors to cuda:
         loaded.to(device)
-        mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
+        mapped_nodes.append(count_mapper.fold(fold, "root", loaded))
         excutor = FoldExecutor(count_mapper,sample_mapper=None, record_mapper=None)
         print(fold)
         mapped = fold.apply(excutor, [mapped_nodes])
@@ -103,7 +103,7 @@ class PreloadTestCase(unittest.TestCase):
         loaded = sample_mapper.preload(sample)
         # move preloaded tensors to cuda:
         loaded.to(device)
-        mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
+        mapped_nodes.append(sample_mapper.fold(fold, "root", loaded))
         print(fold)
         mapped = fold.apply(executor, [mapped_nodes])
         self.assertIsNotNone(mapped)
@@ -131,7 +131,7 @@ class PreloadTestCase(unittest.TestCase):
         loaded = record_mapper.preload(record)
         # move preloaded tensors to cuda:
         loaded.to(device)
-        mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
+        mapped_nodes.append(record_mapper.fold(fold, "root", loaded))
         print(fold)
         mapped = fold.apply(executor, [mapped_nodes])
         self.assertIsNotNone(mapped)
@@ -158,7 +158,7 @@ class PreloadTestCase(unittest.TestCase):
         loaded = batch_of_records.preload([record,record])
         # move preloaded tensors to cuda:
         loaded.to(device)
-        mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
+        mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded,record_mapper))
         print(fold)
         mapped = fold.apply(executor, mapped_nodes)
         self.assertIsNotNone(mapped)
@@ -185,7 +185,7 @@ class PreloadTestCase(unittest.TestCase):
         loaded = batch_of_records.preload([record])
         # move preloaded tensors to cuda:
         loaded.to(device)
-        mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded))
+        mapped_nodes.append(loaded.mapper.fold(fold, "root", loaded,record_mapper))
         print(fold)
         mapped = fold.apply(executor, mapped_nodes)
         self.assertIsNotNone(mapped)

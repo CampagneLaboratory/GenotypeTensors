@@ -64,6 +64,21 @@ uniform
 0.0085
 0.105
 
+--struct-sample-dim
+int
+96
+128
+
+--struct-count-dim
+int
+16
+96
+
+--indel-weight-factor
+uniform
+2
+10
+
 --seed
 categorical
 3453641268241957507

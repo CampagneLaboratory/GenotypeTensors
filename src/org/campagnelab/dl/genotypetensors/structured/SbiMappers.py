@@ -90,9 +90,8 @@ class MapSequence(StructuredEmbedding):
 
 
 class LoadedMapBaseInformation(LoadedTensor):
-    def __init__(self, referenceBase, genomicSequenceContext, sequenceFrom, samples, num_samples,
-                 mapper):
-        super(LoadedMapBaseInformation, self).__init__(tensor=None, mapper=mapper)
+    def __init__(self, referenceBase, genomicSequenceContext, sequenceFrom, samples, num_samples):
+        super(LoadedMapBaseInformation, self).__init__(tensor=None)
         self.referenceBase = referenceBase
         self.fromSequence = sequenceFrom
         self.genomicSequenceContext = genomicSequenceContext
@@ -114,14 +113,13 @@ class LoadedMapBaseInformation(LoadedTensor):
                                                                                                  non_blocking=True),
                                         sequenceFrom=self.fromSequence.clone(device=device, non_blocking=True),
                                         samples=[sample.clone(device, non_blocking=True) for sample in self.samples],
-                                        num_samples=len(self.samples),
-                                        mapper=self.mapper)
+                                        num_samples=len(self.samples))
 
         return copy
 
     def tensor(self):
         """Return the tensor. """
-        return self.mapper.loaded_forward(self)
+        assert False
 
 
 class MapBaseInformation(StructuredEmbedding):
@@ -152,10 +150,9 @@ class MapBaseInformation(StructuredEmbedding):
         genomicSequenceContext = LoadedSequence(input['genomicSequenceContext'], base_to_index=self.base_to_index)
         samples = [self.sample_mapper.preload(sample) for sample in input['samples'][0:self.num_samples]]
 
-
         return LoadedMapBaseInformation(referenceBase=referenceBase,
                                         genomicSequenceContext=genomicSequenceContext, sequenceFrom=fromSequence,
-                                        samples=samples, num_samples=len(samples), mapper=self)
+                                        samples=samples, num_samples=len(samples))
 
     def forward(self, input):
         mapped_from = self.map_sequence(input['samples'][0]['counts'][0]['fromSequence'])
@@ -210,8 +207,8 @@ class MapBaseInformation(StructuredEmbedding):
 
 
 class LoadedSample(LoadedTensor):
-    def __init__(self, loaded_counts, mapper):
-        super(LoadedSample, self).__init__(tensor=None, mapper=mapper)
+    def __init__(self, loaded_counts):
+        super(LoadedSample, self).__init__(tensor=None)
         self.counts = loaded_counts
 
     def to(self, device, non_blocking=True):
@@ -220,7 +217,7 @@ class LoadedSample(LoadedTensor):
 
     def clone(self, device, non_blocking=True):
         """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """
-        copy = LoadedSample([count.clone(device, non_blocking=True) for count in self.counts], self.mapper)
+        copy = LoadedSample([count.clone(device, non_blocking=True) for count in self.counts])
 
         return copy
 
@@ -249,9 +246,7 @@ class MapSampleInfo(StructuredEmbedding):
 
         loaded_counts = [self.count_mapper.preload(count) for count in observed_counts[0:self.num_counts]]
 
-        return LoadedSample(
-            loaded_counts=loaded_counts,
-            mapper=self)
+        return LoadedSample(loaded_counts=loaded_counts)
 
     def loaded_forward(self, preloaded):
         return self.reduce_counts([self.count_mapper.loaded_forward(count) for count in
@@ -274,8 +269,8 @@ class LoadedZeros(LoadedTensor):
 
 
 class LoadedCount(LoadedTensor):
-    def __init__(self, mapper, **args):
-        self.mapper = mapper
+    def __init__(self, **args):
+
         self.leaf_tensors = args
 
     def to(self, device, non_blocking=True):
@@ -289,7 +284,7 @@ class LoadedCount(LoadedTensor):
 
     def clone(self, device, non_blocking=True):
         """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """""
-        copy = LoadedCount(self.mapper)
+        copy = LoadedCount()
         for key in self.leaf_tensors.keys():
             try:
                 source = self.leaf_tensors[key]
@@ -297,9 +292,6 @@ class LoadedCount(LoadedTensor):
             except Exception as e:
                 print("Error moving key {} to device {}: {}".format(key, device, e))
         return copy
-
-    def evaluate(self):
-        self.mapper.loaded_forward()
 
 
 class MapCountInfo(StructuredEmbedding):
@@ -391,15 +383,13 @@ class MapCountInfo(StructuredEmbedding):
             else:
                 mapped[nf_name] = LoadedZeros(shape=(1, mapper.embedding_size))
 
-        return LoadedCount(mapper=self,
-                           gobyGenotypeIndex=self.map_gobyGenotypeIndex.preload([c['gobyGenotypeIndex']]),
+        return LoadedCount(gobyGenotypeIndex=self.map_gobyGenotypeIndex.preload([c['gobyGenotypeIndex']]),
                            isIndel=self.map_boolean.preload(c['isIndel']),
                            matchesReference=self.map_boolean.preload(c['matchesReference']),
                            toSequence=self.map_sequence.preload(c['toSequence']),
                            genotypeCountForwardStrand=self.map_count.preload([c['genotypeCountForwardStrand']]),
                            genotypeCountReverseStrand=self.map_count.preload([c['genotypeCountReverseStrand']]),
-                           **mapped
-                           )
+                           **mapped)
 
     def loaded_forward(self, preloaded):
         mapped_gobyGenotypeIndex = self.map_gobyGenotypeIndex.loaded_forward(
@@ -616,8 +606,7 @@ class MapNumberWithFrequencyList(StructuredEmbedding):
 
 
 class LoadedList(LoadedTensor):
-    def __init__(self, loaded_tensors, mapper):
-        self.mapper = mapper
+    def __init__(self, loaded_tensors):
         self.loaded_tensors = loaded_tensors
 
     def to(self, device, non_blocking=True):
@@ -627,8 +616,7 @@ class LoadedList(LoadedTensor):
 
     def clone(self, device, non_blocking=True):
         """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """""
-        copy = LoadedList(loaded_tensors=[tensor.clone(device, non_blocking) for tensor in self.loaded_tensors],
-                          mapper=self.mapper)
+        copy = LoadedList(loaded_tensors=[tensor.clone(device, non_blocking) for tensor in self.loaded_tensors])
         return copy
 
     def tensor(self):
@@ -656,11 +644,11 @@ class BatchOfRecords(Module):
         return torch.cat(mapped, dim=0)
 
     def preload(self, records):
-        preloaded = LoadedList([self.sbi_mapper.preload(instance) for instance in records], mapper=self)
+        preloaded = LoadedList([self.sbi_mapper.preload(instance) for instance in records])
         return preloaded
 
     def loaded_forward(self, preloaded_records):
-        return preloaded_records.tensor()
+        return self.simple_forward(preloaded_records)
 
     def fold(self, fold, prefix, preloaded):
         result = []
@@ -669,7 +657,7 @@ class BatchOfRecords(Module):
         return result
 
     def simple_forward(self, preloaded_instance_list):
-        mapped = [self.sbi_mapper.simple_forward(instance) for instance in preloaded_instance_list]
+        mapped = [self.sbi_mapper.loaded_forward(instance) for instance in preloaded_instance_list]
         return torch.cat(mapped, dim=0)
 
 

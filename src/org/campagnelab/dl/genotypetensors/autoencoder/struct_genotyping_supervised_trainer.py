@@ -214,7 +214,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
         self.fold = torchfold.Fold(self.fold_executor)
-        mapped, metadata, target_s = self.fold_batch()
+        mapped, metadata, target_s = self.fold_batch(self.net.sbi_mapper)
 
         features = self.fold.apply(self.fold_executor, [mapped])[0]  # self.net(sbi)
         output_s = self.net.classifier(features.view(self.mini_batch_size, -1)).view(self.mini_batch_size, -1)
@@ -239,7 +239,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                          performance_estimators.progress_message(
                              ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
 
-    def fold_batch(self):
+    def fold_batch(self,batch_mapper):
         sbi = []
         target_s = []
         metadata = []
@@ -251,10 +251,10 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         mapped = []
         lengths = {'toSequence': -1, 'fromSequence': -1}
         for s in sbi:
-            lengths = s.mapper.max_lengths(s, lengths)
+            lengths = batch_mapper.sbi_mapper.max_lengths(s, lengths)
         target_s = torch.cat([t.tensor() for t in target_s], dim=0)
         metadata = torch.cat([t.tensor() for t in metadata], dim=0)
-        for s in sbi: mapped.append(s.mapper.fold(self.fold, "root", s, lengths=lengths))
+        for s in sbi: mapped.append(batch_mapper.sbi_mapper.fold(self.fold, "root", s, lengths=lengths))
         return mapped, metadata, target_s
 
     def map_sbi(self, sbi):

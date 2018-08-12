@@ -35,7 +35,7 @@ class StructuredEmbedding(Module):
 class LoadedTensor:
     def __init__(self,tensor,mapper=None):
         self.tensor_=tensor
-        self.mapper = mapper
+        #self.mapper = mapper
 
     def to(self, device, non_blocking=True):
         """Move the tensor to the device. """
@@ -46,16 +46,17 @@ class LoadedTensor:
 
     def clone(self, device, non_blocking=True):
         """Copy tensors to another device and return a copy of this instance, which points to the moved tensors. """""
-        copy=LoadedTensor(torch.zeros(size=self.tensor_.size(),device=device).copy_(self.tensor_,non_blocking=non_blocking),self.mapper)
+        copy=LoadedTensor(torch.zeros(size=self.tensor_.size(),device=device).copy_(self.tensor_,non_blocking=non_blocking))
         return copy
 
     def tensor(self):
         """Return the tensor. """
         return self.tensor_
 
-    def forward(self):
-        """Call forward on the mapper with this pre-loaded tensor."""
-        return self.mapper.loaded_forward(self)
+    # def forward(self):
+    #     """Call forward on the mapper with this pre-loaded tensor."""
+    #     print("forward called on LoadedTensor")
+    #     return self.mapper.loaded_forward(self)
 
 
 class LoadedBoolean(LoadedTensor):
