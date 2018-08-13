@@ -4,11 +4,11 @@ struct_genotyping
 
 --L2
 log-uniform
-5.18E-6
-1.96E-4
+1E-15
+1E-2
 
 --dropout-probability
-categorical
+uniform
 0
 0.2
 
@@ -18,7 +18,7 @@ adagrad
 
 --lr
 categorical
-0.001
+0.01
 
 --reduction-rate
 uniform
@@ -26,8 +26,9 @@ uniform
 0.42
 
 --model-capacity
-categorical
+uniform
 1.0
+3.0
 
 --num-layers
 categorical
@@ -53,7 +54,7 @@ categorical
 
 --epoch-min-accuracy
 categorical
-80.0
+0
 
 --mini-batch-size
 categorical
@@ -61,8 +62,8 @@ categorical
 
 --epsilon-label-smoothing
 uniform
-0.0085
-0.105
+0
+0.3
 
 --struct-sample-dim
 int
