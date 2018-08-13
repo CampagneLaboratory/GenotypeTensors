@@ -148,7 +148,8 @@ class CommonTrainer:
                 model_built = False
 
         if not model_built:
-            print('==> Building model...')
+            if not args.no_progress:
+                print('==> Building model...')
 
             self.net = create_model_function(args.model, self.problem).to(self.device)
             self.net.apply(init_params)
@@ -252,7 +253,8 @@ class CommonTrainer:
     def save_checkpoint(self, epoch, test_loss ):
         # Save checkpoint.
         if self.is_better(test_loss , self.best_test_loss):
-            print('Saving..')
+            if not self.args.no_progress:
+                print('Saving..')
 
             if self.best_model is not None:
                 self.save_model(test_loss, epoch, self.best_model, "best")

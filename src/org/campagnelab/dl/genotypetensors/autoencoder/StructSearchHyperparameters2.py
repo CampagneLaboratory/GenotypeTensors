@@ -47,6 +47,36 @@ from org.campagnelab.dl.problems.StructuredSbiProblem import StructuredSbiGenoty
 from org.campagnelab.dl.utils.utils import progress_bar
 from torchfold import torchfold
 
+
+def create_new_trainer(trainer_command_line):
+
+    global trainers
+    trainer_parser = define_train_auto_encoder_parser()
+    trainer_args = trainer_parser.parse_args(trainer_command_line.split())
+    if trainer_args.max_examples_per_epoch is None:
+        trainer_args.max_examples_per_epoch = trainer_args.num_training
+    trainer_args.num_training = args.num_training
+    trainer_args.num_validation = args.num_validation
+    trainer_args.no_progress = True
+    trainer_args.epoch_min_accuracy = -1
+    #print("Executing " + trainer_args.checkpoint_key)
+    with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
+        args_file.write(trainer_command_line + "--seed " + str(trainer_args.seed))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    is_parallel = False
+    best_acc = 0  # best test accuracy
+    start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+    if trainer_args.max_examples_per_epoch is None:
+        trainer_args.max_examples_per_epoch = args.num_training
+    model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(trainer_args,
+                                                                                       problem,
+                                                                                       device,
+                                                                                       class_frequencies)
+    model_trainer.set_common_lock(global_lock)
+    model_trainer.args.max_epochs = args.max_epochs
+    trainers += [model_trainer]
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train an auto-encoder for .vec files.')
     parser.add_argument('--commands', type=str, required=True,
@@ -96,8 +126,6 @@ if __name__ == '__main__':
     with open(args.commands, "r") as command_file:
 
         trainer_arguments = command_file.readlines()
-        if len(trainer_arguments) > args.max_models:
-            trainer_arguments = trainer_arguments[0:args.max_models]
         count = len(trainer_arguments)
         i = 0
 
@@ -136,38 +164,12 @@ if __name__ == '__main__':
 
     # Initialize the trainers:
     global_lock = threading.Lock()
-    for trainer_command_line in trainer_arguments:
-        trainer_parser = define_train_auto_encoder_parser()
-        trainer_args = trainer_parser.parse_args(trainer_command_line.split())
+    for trainer_command_line in trainer_arguments[0:args.max_models]:
 
-        if trainer_args.max_examples_per_epoch is None:
-            trainer_args.max_examples_per_epoch = trainer_args.num_training
-        trainer_args.num_training = args.num_training
-        trainer_args.num_validation = args.num_validation
-        trainer_args.no_progress = True
-        trainer_args.epoch_min_accuracy = -1
-        print("Executing " + trainer_args.checkpoint_key)
-
-        with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
-            args_file.write(trainer_command_line + "--seed " + str(trainer_args.seed))
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        is_parallel = False
-        best_acc = 0  # best test accuracy
-        start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-
-        if trainer_args.max_examples_per_epoch is None:
-            trainer_args.max_examples_per_epoch = args.num_training
-        model_trainer, training_loop_method, testing_loop_method = configure_model_trainer(trainer_args,
-                                                                                           problem,
-                                                                                           device,
-                                                                                           class_frequencies)
-        model_trainer.set_common_lock(global_lock)
-        model_trainer.args.max_epochs = args.max_epochs
-        trainers += [model_trainer]
+        create_new_trainer(trainer_command_line)
         print("Configured {}/{} trainers".format(len(trainers), count))
         if (len(trainers) > args.max_models): break
-
+    model_trainer_arg_index=args.max_models
     print("Executing hyper-parameter search for {} models.".format(len(trainers)))
     for model_trainer in trainers:
         model_trainer.class_frequency(class_frequencies=class_frequencies)
@@ -269,13 +271,13 @@ if __name__ == '__main__':
         print('After {} iterations, best score: {} worse score: {}'.format(num_iterations,all_trainers[0]['test_loss'],
                                                                            all_trainers[-1]['test_loss']))
         trimed_length = (len(all_trainers) / 2)
-        if trimed_length>=4:
+        if trimed_length>=1:
             best_trainers= all_trainers[0:int(trimed_length)]
             trainers=[]
             for model_trainer in best_trainers:
                 trainers.append(model_trainer['trainer'])
         # log performance of best models seen so far:
-        for model_trainer in trainers:
+        for model_trainer in reversed(trainers):
             perfs = PerformanceList()
             perfs += model_trainer.training_performance_estimators
             perfs += model_trainer.test_performance_estimators
@@ -312,7 +314,9 @@ if __name__ == '__main__':
                 do_training_evaluate(thread_executor, step, data_provider, num_iterations)
                 gc.collect()
                 num_iterations*=2
-
+                while len(trainers)<args.max_models:
+                    create_new_trainer(trainer_arguments[model_trainer_arg_index])
+                    model_trainer_arg_index+=1
         finally:
             data_provider.close()
     # don't wait for threads to die, just exit:

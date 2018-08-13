@@ -387,7 +387,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         output_size = problem.output_size("softmaxGenotype")
         model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.device, mappers=mappers,
                                       use_batching=args.use_batching)
-        print(model)
+        #print(model)
         return model
 
     def cache_dataset(self, dataset, dataset_loader_subset, length):
