@@ -232,7 +232,8 @@ if __name__ == '__main__':
             if len(training_validation_batches) == 2:
                 training_batch = training_validation_batches[0]
                 validation_batch = training_validation_batches[1]
-                training_validation_batches = training_validation_batches[2:]
+                # move forward by one slot so that validation becomes training:
+                training_validation_batches = training_validation_batches[1:]
 
                 num_batches += 1
                 futures = []
@@ -309,11 +310,14 @@ if __name__ == '__main__':
         )
         try:
             num_iterations=1
-            for step in range(0, int(log2(len(train_loader_subset)))):
+            all_iterations=1
+            while num_iterations<len(train_loader_subset):
                 print("Training {} workers for {} iterations".format(len(trainers), num_iterations))
-                do_training_evaluate(thread_executor, step, data_provider, num_iterations)
+                do_training_evaluate(thread_executor, all_iterations, data_provider, num_iterations)
                 gc.collect()
+                all_iterations += num_iterations
                 num_iterations*=2
+
                 while len(trainers)<args.max_models:
                     create_new_trainer(trainer_arguments[model_trainer_arg_index])
                     model_trainer_arg_index+=1
