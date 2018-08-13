@@ -344,7 +344,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
     def test_one_batch(self, performance_estimators, batch_idx, sbi, target_s, metadata=None, errors=None):
 
-        mapped, metadata, target_s = self.fold_batch()
+        mapped, metadata, target_s = self.fold_batch(self.net.sbi_mapper)
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 
