@@ -97,6 +97,8 @@ if __name__ == '__main__':
     parser.add_argument('--min-iterations', type=int,
                         help='Minimum number of minibatches to use for training the first iteration.',
                         default=1)
+    parser.add_argument('--fixed-iterations', action='store_true', help='Never increment the number of iterations. Fixed at min-iterations.')
+
     parser.add_argument("--lr", type=float, default=None, help='Learning rate (overrides configurations)')
     parser.add_argument("--num-workers", type=int, default=0, help='Number of workers to feed data to the GPUs.')
     parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=32)
@@ -324,8 +326,8 @@ if __name__ == '__main__':
                 all_iterations += num_iterations
                 do_training_evaluate(thread_executor, all_iterations, data_provider, num_iterations)
                 gc.collect()
-
-                num_iterations += 1
+                if not args.fixed_iterations:
+                    num_iterations += 1
 
                 while len(trainers) < args.max_models:
                     create_new_trainer(trainer_arguments[model_trainer_arg_index])
