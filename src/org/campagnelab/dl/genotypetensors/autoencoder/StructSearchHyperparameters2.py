@@ -292,7 +292,7 @@ if __name__ == '__main__':
             perfs = PerformanceList()
             perfs += model_trainer.training_performance_estimators
             perfs += model_trainer.test_performance_estimators
-            if num_iterations == 1:
+            if all_iterations == 1:
                 model_trainer.log_performance_header(perfs)
 
             early_stop, perfs = model_trainer.log_performance_metrics(step, perfs)
