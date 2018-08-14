@@ -49,7 +49,6 @@ from torchfold import torchfold
 
 
 def create_new_trainer(trainer_command_line):
-
     global trainers
     trainer_parser = define_train_auto_encoder_parser()
     trainer_args = trainer_parser.parse_args(trainer_command_line.split())
@@ -59,7 +58,9 @@ def create_new_trainer(trainer_command_line):
     trainer_args.num_validation = args.num_validation
     trainer_args.no_progress = True
     trainer_args.epoch_min_accuracy = -1
-    #print("Executing " + trainer_args.checkpoint_key)
+    if args.lr is not None:
+        trainer_args.lr = args.lr
+    # print("Executing " + trainer_args.checkpoint_key)
     with open("args-{}".format(trainer_args.checkpoint_key), "w") as args_file:
         args_file.write(trainer_command_line + "--seed " + str(trainer_args.seed))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -93,6 +94,10 @@ if __name__ == '__main__':
                         default=sys.maxsize)
     parser.add_argument('--num-validation', '-v', '-x', type=int, help='Maximum number of validation examples to use.',
                         default=sys.maxsize)
+    parser.add_argument('--min-iterations', type=int,
+                        help='Minimum number of minibatches to use for training the first iteration.',
+                        default=1)
+    parser.add_argument("--lr", type=float, default=None, help='Learning rate (overrides configurations)')
     parser.add_argument("--num-workers", type=int, default=0, help='Number of workers to feed data to the GPUs.')
     parser.add_argument('--mini-batch-size', type=int, help='Size of the mini-batch.', default=32)
     parser.add_argument('--max-epochs', type=int, help='Maximum number of epochs to train for.', default=10)
@@ -169,7 +174,7 @@ if __name__ == '__main__':
         create_new_trainer(trainer_command_line)
         print("Configured {}/{} trainers".format(len(trainers), count))
         if (len(trainers) > args.max_models): break
-    model_trainer_arg_index=args.max_models
+    model_trainer_arg_index = args.max_models
     print("Executing hyper-parameter search for {} models.".format(len(trainers)))
     for model_trainer in trainers:
         model_trainer.class_frequency(class_frequencies=class_frequencies)
@@ -211,13 +216,12 @@ if __name__ == '__main__':
         exit(0)
 
 
-    def do_training_evaluate(thread_executor,step, data_provider, num_iterations):
+    def do_training_evaluate(thread_executor, step, data_provider, num_iterations):
 
         global trainers
         for model_trainer in trainers:
             model_trainer.training_performance_estimators.init_performance_metrics()
             model_trainer.test_performance_estimators.init_performance_metrics()
-            model_trainer.reset_before_test_epoch()
 
         todo_arguments = []
         num_batches = 0
@@ -256,29 +260,33 @@ if __name__ == '__main__':
                         thread_executor.submit(to_do, model_trainer, batch_idx, training_batch, validation_batch)]
 
                 concurrent.futures.wait(futures)
-                #progress_bar(batch_idx * args.mini_batch_size,
+                # progress_bar(batch_idx * args.mini_batch_size,
                 #             args.num_training,
                 #             msg="Training phase")
                 # Report any exceptions encountered in to_do:
                 raise_to_do_exceptions(futures)
                 if batch_idx > num_iterations:
                     break
-        performance=[]
+        performance = []
         for model_trainer in trainers:
             perfs = PerformanceList()
             perfs += model_trainer.test_performance_estimators
-            performance.append({'test_loss':perfs.get_metric("test_supervised_loss"), "trainer":model_trainer})
+            performance.append({'test_loss': perfs.get_metric("test_supervised_loss"), "trainer": model_trainer})
         all_trainers = sorted(performance, key=lambda x: x['test_loss'])
-        print('After {} iterations, best score: {} worse score: {}'.format(num_iterations,all_trainers[0]['test_loss'],
-                                                                           all_trainers[-1]['test_loss']))
+        print('After {} iterations, best score: {} worse score: {}, {} models created'.format(num_iterations,
+                                                                                              all_trainers[0][
+                                                                                                  'test_loss'],
+                                                                                              all_trainers[-1][
+                                                                                                  'test_loss'],
+                                                                                              model_trainer_arg_index))
         trimed_length = (len(all_trainers) / 2)
-        if trimed_length>=1:
-            best_trainers= all_trainers[0:int(trimed_length)]
-            trainers=[]
+        if trimed_length >= 1:
+            best_trainers = all_trainers[0:int(trimed_length)]
+            trainers = []
             for model_trainer in best_trainers:
                 trainers.append(model_trainer['trainer'])
         # log performance of best models seen so far:
-        for model_trainer in reversed(trainers):
+        for model_trainer in [t['trainer'] for t in reversed(all_trainers)]:
             perfs = PerformanceList()
             perfs += model_trainer.training_performance_estimators
             perfs += model_trainer.test_performance_estimators
@@ -309,18 +317,19 @@ if __name__ == '__main__':
             vectors_to_keep=["metaData", "softmaxGenotype"]
         )
         try:
-            num_iterations=1
-            all_iterations=1
-            while num_iterations<len(train_loader_subset):
-                print("Training {} workers for {} iterations".format(len(trainers), num_iterations))
+            num_iterations = args.min_iterations
+            all_iterations = 1
+            while all_iterations < len(train_loader_subset):
+                # print("Training {} workers for {} iterations".format(len(trainers), num_iterations))
+                all_iterations += num_iterations
                 do_training_evaluate(thread_executor, all_iterations, data_provider, num_iterations)
                 gc.collect()
-                all_iterations += num_iterations
-                num_iterations*=2
 
-                while len(trainers)<args.max_models:
+                num_iterations += 1
+
+                while len(trainers) < args.max_models:
                     create_new_trainer(trainer_arguments[model_trainer_arg_index])
-                    model_trainer_arg_index+=1
+                    model_trainer_arg_index += 1
         finally:
             data_provider.close()
     # don't wait for threads to die, just exit:
