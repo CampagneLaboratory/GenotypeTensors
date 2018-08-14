@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 . `dirname "${BASH_SOURCE[0]}"`/setup.sh
 set -x
-echo "usage: struct-search-hyperparameters [num-models] --mode supervised_direct --problem struct_genotyping:basename --num-training N ..."
+echo "usage: struct-search-hyperparameters2 [num-models] --mode supervised_direct --problem struct_genotyping:basename --num-training N ..."
 num_executions=$1
 shift
 if [ -z "${SBI_SEARCH_PARAM_CONFIG+set}" ]; then
@@ -14,4 +14,4 @@ else
 fi
 
 
-python "${GENOTYPE_TENSORS}/src/org/campagnelab/dl/genotypetensors/autoencoder/StructSearchHyperparameters.py" "$@" ${OPTION_COMMAND}
+python "${GENOTYPE_TENSORS}/src/org/campagnelab/dl/genotypetensors/autoencoder/StructSearchHyperparameters2.py" "$@" ${OPTION_COMMAND}
