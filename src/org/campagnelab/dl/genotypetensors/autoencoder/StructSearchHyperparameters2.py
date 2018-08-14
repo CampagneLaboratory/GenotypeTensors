@@ -218,7 +218,7 @@ if __name__ == '__main__':
         exit(0)
 
 
-    def do_training_evaluate(thread_executor, step, data_provider, num_iterations):
+    def do_training_evaluate(thread_executor, step, data_provider, num_iterations, all_iterations):
 
         global trainers
         for model_trainer in trainers:
@@ -275,7 +275,7 @@ if __name__ == '__main__':
             perfs += model_trainer.test_performance_estimators
             performance.append({'test_loss': perfs.get_metric("test_supervised_loss"), "trainer": model_trainer})
         all_trainers = sorted(performance, key=lambda x: x['test_loss'])
-        print('After {} iterations, best score: {} worse score: {}, {} models created'.format(num_iterations,
+        print('After {} iterations, best score: {} worse score: {}, {} models created'.format(all_iterations,
                                                                                               all_trainers[0][
                                                                                                   'test_loss'],
                                                                                               all_trainers[-1][
@@ -324,7 +324,7 @@ if __name__ == '__main__':
             while all_iterations < len(train_loader_subset):
                 # print("Training {} workers for {} iterations".format(len(trainers), num_iterations))
                 all_iterations += num_iterations
-                do_training_evaluate(thread_executor, all_iterations, data_provider, num_iterations)
+                do_training_evaluate(thread_executor, all_iterations, data_provider, num_iterations, all_iterations)
                 gc.collect()
                 if not args.fixed_iterations:
                     num_iterations += 1
