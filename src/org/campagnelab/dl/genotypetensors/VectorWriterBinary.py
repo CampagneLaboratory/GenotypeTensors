@@ -40,7 +40,8 @@ class VectorWriterBinary:
         self.using_structured_problem = isinstance(self.problem, StructuredSbiGenotypingProblem)
         if self.using_structured_problem:
             assert model is not None, "Need to have model present for use with structured problem"
-            base_info = model.sbi_mapper.mappers.mappers["BaseInformation"]
+            base_info = model.sbi_mapper.sbi_mapper
+
             softmax_genotype_dimension = (2 ** (base_info.ploidy + base_info.extra_genotypes)) + 1
             num_bytes_per_vector_elements = softmax_genotype_dimension * VectorWriterBinary.vector_element_size
             num_bytes_per_vector = num_bytes_per_vector_elements + VectorWriterBinary.header_size
