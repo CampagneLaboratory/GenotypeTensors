@@ -140,7 +140,9 @@ class StructGenotypingModel(Module):
 
     def forward(self, sbi_records):
 
-        return self.classifier(self.sbi_mapper.loaded_forward(self.sbi_mapper.preload(sbi_records)))
+        preloaded = self.sbi_mapper.preload(sbi_records)
+        preloaded.to(self.device)
+        return self.classifier(self.sbi_mapper.loaded_forward(preloaded))
 
 
 class StructGenotypingSupervisedTrainer(CommonTrainer):
