@@ -60,12 +60,14 @@ parser.add_argument('--dataset', default="validation", type=str,
                     help='the dataset to predict on. Filename used will be basename-dataset, where basename if given in the problem.')
 parser.add_argument('--num-workers', default=0, type=int, help="Number of workers to use when parallel or partitioned "
                                                                "dataset is used")
+parser.add_argument('--no-cuda', action='store_true', help='Predict with CPU. Useful when CUDA is available, but predict is faster on CPU.')
+
 parser.add_argument("--processing", choices=["multithreaded", "sequential", "parallel", "partitioned"], type=str,
                     default="multithreaded", help="Type of processing to use")
 
 args = parser.parse_args()
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
 
 print('==> Loading model from checkpoint..')
 model = None
