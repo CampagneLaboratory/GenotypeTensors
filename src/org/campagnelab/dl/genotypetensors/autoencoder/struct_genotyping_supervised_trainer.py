@@ -122,13 +122,14 @@ enable_recode = False
 
 
 class StructGenotypingModel(Module):
-    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, device, mappers, use_batching=True):
+    def __init__(self, args, sbi_mapper, mapped_features_size, output_size, device, mappers_dict, use_batching=True):
         super().__init__()
         self.sbi_mapper = sbi_mapper
         # store mappers as a list because we need to initialize their params as part of this model:
-        self.mappers = ModuleList(mappers.values())
-        for mapper in mappers.values():
+        self.mappers = ModuleList(mappers_dict.values())
+        for mapper in mappers_dict.values():
             mapper.apply(init_params)
+        self.mappers_dict=mappers_dict
         self.device = device
         self.use_batching = use_batching
         self.classifier = GenotypeSoftmaxClassifer(num_inputs=mapped_features_size, target_size=output_size[0],
@@ -142,7 +143,21 @@ class StructGenotypingModel(Module):
 
         preloaded = self.sbi_mapper.preload(sbi_records)
         preloaded.to(self.device)
-        return self.classifier(self.sbi_mapper.loaded_forward(preloaded))
+        records_mapper=self.sbi_mapper
+        sbi_mapper=records_mapper.sbi_mapper
+        sample_mapper = sbi_mapper.sample_mapper
+        fold_executor = FoldExecutor(count_mapper=sample_mapper.count_mapper, sample_mapper=sample_mapper,
+                                     record_mapper=sbi_mapper)
+        mapped = []
+        lengths = {'toSequence': -1, 'fromSequence': -1}
+        for s in preloaded:
+            lengths = sbi_mapper.max_lengths(s, lengths)
+        fold = torchfold.Fold(fold_executor)
+        for p in preloaded.loaded_tensors:
+            mapped.append(sbi_mapper.fold(fold, "root", p, lengths=lengths))
+
+        features=fold.apply(fold_executor, [mapped])[0]
+        return self.classifier(features)
 
 
 class StructGenotypingSupervisedTrainer(CommonTrainer):
