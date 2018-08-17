@@ -89,6 +89,8 @@ if checkpoint is not None:
              m.device=device
 
     model.apply(move_to_cpu)
+    model.to(device)
+
 problem = None
 if args.problem.startswith("genotyping:"):
     problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem, drop_last_batch=False,
