@@ -74,13 +74,19 @@ checkpoint = None
 try:
 
     checkpoint_filename='{}/models/pytorch_{}_{}.t7'.format(args.model_path,args.checkpoint_key, args.model_label)
-    checkpoint = torch.load(checkpoint_filename)
+    checkpoint = torch.load(checkpoint_filename, map_location='cpu')
 except                FileNotFoundError:
     print("Unable to load model {} from checkpoint".format(args.checkpoint_key))
     exit(1)
 
 if checkpoint is not None:
     model = checkpoint['model']
+
+    def move_to_cpu(m):
+         if hasattr(m,'device'):
+             m.device=device
+
+    model.apply(move_to_cpu)
 problem = None
 if args.problem.startswith("genotyping:"):
     problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem, drop_last_batch=False,

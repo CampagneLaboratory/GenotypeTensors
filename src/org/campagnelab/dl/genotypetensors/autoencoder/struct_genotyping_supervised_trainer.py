@@ -139,7 +139,8 @@ class StructGenotypingModel(Module):
                                                    skip_batch_norm=args.skip_batch_norm)
 
     def forward(self, sbi_records):
-        return self.classifier(self.sbi_mapper.loaded_forward(sbi_records))
+
+        return self.classifier(self.sbi_mapper.loaded_forward(self.sbi_mapper.preload(sbi_records)))
 
 
 class StructGenotypingSupervisedTrainer(CommonTrainer):

@@ -340,12 +340,6 @@ class MapCountInfo(StructuredEmbedding):
         # below, [2+2+2] is for the booleans mapped with a function:
         self.reduce_count = Reduce([mapper.embedding_size for mapper in count_mappers], encoding_output_dim=count_dim,
                                    device=device)
-        batched_count_mappers = []
-        self.reduce_batched = Reduce([self.map_gobyGenotypeIndex.embedding_size,
-                                      self.map_count.embedding_size * 2,
-                                      self.map_boolean.embedding_size * 2,
-                                      self.map_sequence.embedding_size * 2, ], encoding_output_dim=count_dim,
-                                     device=device)
 
     def forward(self, c):
         mapped_gobyGenotypeIndex = self.map_gobyGenotypeIndex([c['gobyGenotypeIndex']])
