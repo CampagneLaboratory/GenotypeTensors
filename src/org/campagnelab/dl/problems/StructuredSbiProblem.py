@@ -58,6 +58,10 @@ class StructSmallerDataset(Dataset):
 class StructuredSbiGenotypingProblem(SbiProblem):
     """An SBI problem where the tensors are generated from structured messages directly from an SBI, and
     labels are loaded from the vec file. """
+    def __init__(self, mini_batch_size, code, drop_last_batch=True, num_workers=0, ploidy=2, extra_genotypes=2):
+        super(StructuredSbiGenotypingProblem, self).__init__(mini_batch_size, code, drop_last_batch, num_workers)
+        self.ploidy=ploidy
+        self.extra_genotypes=extra_genotypes
 
     def name(self):
         return self.basename_prefix() + self.basename
@@ -114,6 +118,10 @@ class StructuredSbiGenotypingProblem(SbiProblem):
 
     def get_output_names(self):
         return ["softmaxGenotype"]
+
+    def output_size(self, output_name):
+
+        return 2**(self.ploidy+self.extra_genotypes)+1
 
     def load_metadata(self):
         if self.reader is not None:

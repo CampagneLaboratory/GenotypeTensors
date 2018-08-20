@@ -100,7 +100,8 @@ elif args.problem.startswith("somatic:"):
                                 num_workers=args.num_workers)
 elif args.problem.startswith("struct_genotyping:"):
     problem = StructuredSbiGenotypingProblem(args.mini_batch_size, code=args.problem, drop_last_batch=False,
-                                             num_workers=args.num_workers)
+                                             num_workers=args.num_workers, ploidy=model.sbi_mapper.sbi_mapper.ploidy,
+                                             extra_genotypes=model.sbi_mapper.sbi_mapper.extra_genotypes)
 else:
     print("Unsupported problem: " + args.problem)
     exit(1)

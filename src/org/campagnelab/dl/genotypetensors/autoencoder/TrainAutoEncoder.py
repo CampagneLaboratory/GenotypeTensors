@@ -55,7 +55,8 @@ if __name__ == '__main__':
         problem = SbiGenotypingProblem(args.mini_batch_size, code=args.problem, num_workers=args.num_workers)
     elif args.problem.startswith("struct_genotyping:"):
         # struct_genotyping does not support multiprocessing data loading:
-        problem = StructuredSbiGenotypingProblem(args.mini_batch_size, code=args.problem, num_workers=1)
+        problem = StructuredSbiGenotypingProblem(args.mini_batch_size, code=args.problem, num_workers=1,ploidy=args.ploidy,
+                                                 extra_genotypes=args.extra_genotypes)
     elif args.problem.startswith("somatic:"):
         problem = SbiSomaticProblem(args.mini_batch_size, code=args.problem, num_workers=args.num_workers)
     else:
