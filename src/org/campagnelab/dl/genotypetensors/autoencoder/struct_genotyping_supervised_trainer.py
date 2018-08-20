@@ -129,7 +129,7 @@ class StructGenotypingModel(Module):
         self.mappers = ModuleList(mappers_dict.values())
         for mapper in mappers_dict.values():
             mapper.apply(init_params)
-        self.mappers_dict=mappers_dict
+        self.mappers_dict = mappers_dict
         self.device = device
         self.use_batching = use_batching
         self.classifier = GenotypeSoftmaxClassifer(num_inputs=mapped_features_size, target_size=output_size[0],
@@ -143,8 +143,8 @@ class StructGenotypingModel(Module):
 
         preloaded = self.sbi_mapper.preload(sbi_records)
         preloaded.to(self.device)
-        records_mapper=self.sbi_mapper
-        sbi_mapper=records_mapper.sbi_mapper
+        records_mapper = self.sbi_mapper
+        sbi_mapper = records_mapper.sbi_mapper
         sample_mapper = sbi_mapper.sample_mapper
         fold_executor = FoldExecutor(count_mapper=sample_mapper.count_mapper, sample_mapper=sample_mapper,
                                      record_mapper=sbi_mapper)
@@ -156,7 +156,7 @@ class StructGenotypingModel(Module):
         for p in preloaded.loaded_tensors:
             mapped.append(sbi_mapper.fold(fold, "root", p, lengths=lengths))
 
-        features=fold.apply(fold_executor, [mapped])[0]
+        features = fold.apply(fold_executor, [mapped])[0]
         return self.classifier(features)
 
 
@@ -257,7 +257,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                          performance_estimators.progress_message(
                              ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
 
-    def fold_batch(self,batch_mapper):
+    def fold_batch(self, batch_mapper):
         sbi = []
         target_s = []
         metadata = []
@@ -316,7 +316,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         cpu_device = torch.device('cpu')
         self.net.eval()
         self.batch = []
-        #self.shuffle_cache('validation')
+        # self.shuffle_cache('validation')
         for preloaded_sbi, target_s, metadata in self.cache_loaded_records['validation']:
             if len(self.batch) < self.mini_batch_size:
                 preloaded_sbi.to(self.device)
@@ -333,7 +333,6 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                     metadata.to(cpu_device)
                 batch_idx += 1
                 self.batch = []
-
 
             if (batch_idx + 1) * self.mini_batch_size > self.max_validation_examples:
                 break
@@ -403,9 +402,9 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         mapped_features_size = mapped.size(1)
 
         output_size = problem.output_size("softmaxGenotype")
-        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.device, mappers=mappers,
-                                      use_batching=args.use_batching)
-        #print(model)
+        model = StructGenotypingModel(args, sbi_mapper, mapped_features_size, output_size, self.device,
+                                      mappers_dict=mappers, use_batching=args.use_batching)
+        # print(model)
         return model
 
     def cache_dataset(self, dataset, dataset_loader_subset, length):
@@ -430,6 +429,8 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                     sbi_batch = data_dict["dataset"]["sbi"]
                     target_s = data_dict["dataset"]["softmaxGenotype"]
                     metadata = data_dict["dataset"]["metaData"]
+                    assert target_s.size()[1]==2**(self.args.struct_ploidy+self.args.struct_extra_genotypes)+1, \
+                        "Arguments provided for ploidy and extra-genotypes must match the dimension of the softmaxGenotype tensor in the training or validation sets."
                     preloaded_sbi_tensors = self.net.sbi_mapper.preload(sbi_batch)
                     for example_index in range(target_s.size(0)):
                         self.cache_loaded_records[dataset].append((preloaded_sbi_tensors[example_index],
