@@ -121,7 +121,7 @@ class StructuredSbiGenotypingProblem(SbiProblem):
 
     def output_size(self, output_name):
 
-        return 2**(self.ploidy+self.extra_genotypes)+1
+        return (2**(self.ploidy+self.extra_genotypes)+1,)
 
     def load_metadata(self):
         if self.reader is not None:
