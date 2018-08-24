@@ -284,7 +284,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             target_s = torch.cat([t.tensor() for t in target_s], dim=0)
             metadata = torch.cat([t.tensor() for t in metadata], dim=0)
             for s in sbi: mapped.append(batch_mapper.sbi_mapper.fold(self.fold, "root", s, lengths=lengths))
-            return mapped, metadata, target_s
+            return mapped, target_s, metadata
 
     def map_sbi(self, sbi):
         # process mapping of sbi messages in parallel:
