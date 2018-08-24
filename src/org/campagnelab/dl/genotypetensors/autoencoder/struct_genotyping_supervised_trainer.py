@@ -193,33 +193,30 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
         unsupervised_loss_acc = 0
         num_batches = 0
-        self.cache_dataset('training',
-                           dataset_loader_subset=self.problem.train_loader_subset_range(0, self.args.num_training),
-                           length=self.max_training_examples)
+        train_loader_subset = self.problem.train_loader_subset_range(0, self.args.num_training)
+        data_provider = MultiThreadedCpuGpuDataProvider(
+            iterator=zip(train_loader_subset),
+            device=self.device,
+            batch_names=["training"],
+            requires_grad={"training": ["sbi"]},
+            recode_functions={
+                "softmaxGenotype": lambda x: recode_for_label_smoothing(x, self.epsilon),
+            },
+            vectors_to_keep=["metaData"]
+        )
+        cudnn.benchmark = False
+        try:
 
-        batch_idx = 0
-        cpu_device = torch.device('cpu')
-        self.batch = []
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                sbi = data_dict["training"]["sbi"]
+                target_s = data_dict["training"]["softmaxGenotype"]
+                metadata = data_dict["training"]["metaData"]
 
-        # self.mini_batch_size=min(max(epoch+1,self.mini_batch_size),3)
-        for preloaded_sbi, target_s, metadata in self.cache_loaded_records['training']:
-            if len(self.batch) < self.mini_batch_size:
-                preloaded_sbi.to(self.device)
-                target_s.to(self.device)
-                metadata.to(self.device)
-                self.batch.append((preloaded_sbi, target_s, metadata))
-            elif len(self.batch) == self.mini_batch_size:
-
-                self.train_one_batch(performance_estimators, batch_idx, None, None, None)
-                for (preloaded_sbi, target_s, metadata) in self.batch:
-                    preloaded_sbi.to(cpu_device)
-                    target_s.to(cpu_device)
-                    metadata.to(cpu_device)
-                batch_idx += 1
-                self.batch = []
-
-            if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
-                break
+                self.train_one_batch(performance_estimators, batch_idx, sbi, target_s, metadata)
+                if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
+                    break
+        finally:
+            data_provider.close()
 
         return performance_estimators
 
@@ -232,7 +229,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         self.optimizer_training.zero_grad()
         self.net.zero_grad()
         self.fold = torchfold.Fold(self.fold_executor)
-        mapped, metadata, target_s = self.fold_batch(self.net.sbi_mapper)
+        mapped,  target_s,metadata = self.fold_batch(self.net.sbi_mapper,sbi, target_s, metadata)
 
         features = self.fold.apply(self.fold_executor, [mapped])[0]  # self.net(sbi)
         output_s = self.net.classifier(features.view(self.mini_batch_size, -1)).view(self.mini_batch_size, -1)
@@ -257,23 +254,37 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
                          performance_estimators.progress_message(
                              ["supervised_loss", "reconstruction_loss", "train_accuracy"]))
 
-    def fold_batch(self, batch_mapper):
-        sbi = []
-        target_s = []
-        metadata = []
-
-        for batch in self.batch:
-            sbi.append(batch[0])
-            target_s.append(batch[1])
-            metadata.append(batch[2])
+    def fold_batch(self, batch_mapper,sbi, target_s, metadata):
         mapped = []
         lengths = {'toSequence': -1, 'fromSequence': -1}
+
+        preloaded = []
         for s in sbi:
-            lengths = batch_mapper.sbi_mapper.max_lengths(s, lengths)
-        target_s = torch.cat([t.tensor() for t in target_s], dim=0)
-        metadata = torch.cat([t.tensor() for t in metadata], dim=0)
-        for s in sbi: mapped.append(batch_mapper.sbi_mapper.fold(self.fold, "root", s, lengths=lengths))
-        return mapped, metadata, target_s
+           preloaded.append(self.net.sbi_mapper.sbi_mapper.preload(s).to(self.device))
+
+        for p in preloaded:
+
+             lengths = batch_mapper.sbi_mapper.max_lengths(p, lengths)
+
+        if sbi is not None:
+
+            for loaded_tensor in preloaded:
+                mapped.append(self.net.sbi_mapper.sbi_mapper.fold(self.fold, "root", loaded_tensor, lengths=lengths))
+            return mapped, target_s, metadata
+        else:
+            sbi = []
+            target_s = []
+            metadata = []
+
+            for batch in self.batch:
+                sbi.append(batch[0])
+                target_s.append(batch[1])
+                metadata.append(batch[2])
+
+            target_s = torch.cat([t.tensor() for t in target_s], dim=0)
+            metadata = torch.cat([t.tensor() for t in metadata], dim=0)
+            for s in sbi: mapped.append(batch_mapper.sbi_mapper.fold(self.fold, "root", s, lengths=lengths))
+            return mapped, metadata, target_s
 
     def map_sbi(self, sbi):
         # process mapping of sbi messages in parallel:
@@ -307,35 +318,30 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
         performance_estimators = self.create_test_performance_estimators()
         for performance_estimator in performance_estimators:
             performance_estimator.init_performance_metrics()
-
-        self.cache_dataset('validation',
-                           dataset_loader_subset=self.problem.validation_loader_subset_range(0,
-                                                                                             self.args.num_validation),
-                           length=self.max_validation_examples)
-        batch_idx = 0
-        cpu_device = torch.device('cpu')
-        self.net.eval()
-        self.batch = []
-        # self.shuffle_cache('validation')
-        for preloaded_sbi, target_s, metadata in self.cache_loaded_records['validation']:
-            if len(self.batch) < self.mini_batch_size:
-                preloaded_sbi.to(self.device)
-                target_s.to(self.device)
-                metadata.to(self.device)
-                self.batch.append((preloaded_sbi, target_s, metadata))
-            elif len(self.batch) == self.mini_batch_size:
+        validation_loader_subset = self.problem.validation_loader_range(0, self.args.num_validation)
+        data_provider = MultiThreadedCpuGpuDataProvider(
+            iterator=zip(validation_loader_subset),
+            device=self.device,
+            batch_names=["validation"],
+            requires_grad={"validation": []},
+            vectors_to_keep=["sbi","softmaxGenotype"]
+        )
+        try:
+            for batch_idx, (_, data_dict) in enumerate(data_provider):
+                sbi = data_dict["validation"]["sbi"]
+                target_s = data_dict["validation"]["softmaxGenotype"]
+                self.net.eval()
 
                 self.fold = torchfold.Fold(self.fold_executor)
-                self.test_one_batch(performance_estimators, batch_idx, sbi=None, target_s=None, errors=None)
-                for (preloaded_sbi, target_s, metadata) in self.batch:
-                    preloaded_sbi.to(cpu_device)
-                    target_s.to(cpu_device)
-                    metadata.to(cpu_device)
+                self.test_one_batch(performance_estimators, batch_idx, sbi, target_s, errors=None)
+
                 batch_idx += 1
                 self.batch = []
 
-            if (batch_idx + 1) * self.mini_batch_size > self.max_validation_examples:
-                break
+                if (batch_idx + 1) * self.mini_batch_size > self.max_validation_examples:
+                    break
+        finally:
+            data_provider.close()
 
         # Apply learning rate schedule:
         test_metric = performance_estimators.get_metric(self.get_test_metric_name())
@@ -361,7 +367,7 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
 
     def test_one_batch(self, performance_estimators, batch_idx, sbi, target_s, metadata=None, errors=None):
 
-        mapped, metadata, target_s = self.fold_batch(self.net.sbi_mapper)
+        mapped, target_s,metadata = self.fold_batch(self.net.sbi_mapper,sbi,target_s,metadata)
         if errors is None:
             errors = torch.zeros(target_s[0].size())
 
