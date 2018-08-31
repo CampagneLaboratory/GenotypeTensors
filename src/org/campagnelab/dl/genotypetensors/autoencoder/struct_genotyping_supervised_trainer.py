@@ -205,14 +205,15 @@ class StructGenotypingSupervisedTrainer(CommonTrainer):
             vectors_to_keep=["metaData"]
         )
         cudnn.benchmark = False
+        num_iterations=self.args.struct_num_iterations
         try:
 
             for batch_idx, (_, data_dict) in enumerate(data_provider):
                 sbi = data_dict["training"]["sbi"]
                 target_s = data_dict["training"]["softmaxGenotype"]
                 metadata = data_dict["training"]["metaData"]
-
-                self.train_one_batch(performance_estimators, batch_idx, sbi, target_s, metadata)
+                for _ in range(random.randint(1,num_iterations)):
+                    self.train_one_batch(performance_estimators, batch_idx, sbi, target_s, metadata)
                 if (batch_idx + 1) * self.mini_batch_size > self.max_training_examples:
                     break
         finally:
